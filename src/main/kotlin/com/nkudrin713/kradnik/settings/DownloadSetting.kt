@@ -10,8 +10,8 @@ import org.hibernate.annotations.UpdateTimestamp
 import java.time.Instant
 
 @Entity
-@Table(name = "chat_download_settings")
-class ChatDownloadSetting(
+@Table(name = "download_settings")
+class DownloadSetting(
 	@Id
 	@Column(name = "chat_id")
 	var chatId: Long = 0,

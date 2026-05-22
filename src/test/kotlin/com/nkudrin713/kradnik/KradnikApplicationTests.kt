@@ -1,7 +1,10 @@
 package com.nkudrin713.kradnik
 
+import com.nkudrin713.kradnik.download.DownloadTaskRepository
+import com.nkudrin713.kradnik.settings.DownloadSettingRepository
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 
 @SpringBootTest(
 	properties = [
@@ -9,6 +12,11 @@ import org.springframework.boot.test.context.SpringBootTest
 	]
 )
 class KradnikApplicationTests {
+	@MockitoBean
+	lateinit var downloadTaskRepository: DownloadTaskRepository
+
+	@MockitoBean
+	lateinit var downloadSettingRepository: DownloadSettingRepository
 
 	@Test
 	fun contextLoads() {

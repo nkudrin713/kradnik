@@ -45,7 +45,7 @@ CREATE INDEX idx_download_tasks_status_created_at
 CREATE INDEX idx_download_tasks_cache_lookup
     ON download_tasks (normalized_url, output_type);
 
-CREATE TABLE chat_download_settings (
+CREATE TABLE download_settings (
     chat_id BIGINT PRIMARY KEY,
 
     mode TEXT NOT NULL DEFAULT 'video'

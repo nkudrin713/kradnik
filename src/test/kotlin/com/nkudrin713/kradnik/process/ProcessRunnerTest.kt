@@ -12,7 +12,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class ProcessRunnerTest {
-    private val runner = ProcessRunner()
+    private val runner: ProcessRunner = DefaultProcessRunner()
 
     @Test
     fun `captures output`() = runTest {

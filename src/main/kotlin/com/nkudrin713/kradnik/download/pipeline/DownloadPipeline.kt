@@ -1,6 +1,10 @@
 package com.nkudrin713.kradnik.download.pipeline
 
+import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.service.DownloadTaskService
+import com.nkudrin713.kradnik.telegram.upload.TelegramFileUploader
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import org.springframework.stereotype.Service
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.Path
@@ -13,11 +17,10 @@ private const val DOWNLOAD_ROOT = "/tmp/kradnik"
 @Service
 class DownloadPipeline(
     private val downloadTaskService: DownloadTaskService,
-    private val metadataExtractor: MetadataExtractor,
-    private val downloaderRouter: DownloaderRouter,
+    private val ytDlpService: YtDlpService,
+    private val mediaSourceRouter: MediaSourceRouter,
+    private val telegramFileUploader: TelegramFileUploader,
 ) {
-
-
     @OptIn(ExperimentalPathApi::class)
     suspend fun processTask(taskId: Long) {
         val tempDir = Path(DOWNLOAD_ROOT)
@@ -27,9 +30,11 @@ class DownloadPipeline(
         val task = downloadTaskService.getTask(taskId)
 
         try {
-            val metadata = metadataExtractor.extract(task.normalizedUrl)
-            val downloader = downloaderRouter.findDownloader(metadata, task.outputType)
-            downloader.download(task.normalizedUrl, metadata, task.outputType, tempDir.toFile())
+            val metadata = ytDlpService.extractMetadata(task.normalizedUrl).toMediaMetadata()
+            val mediaSourceService = mediaSourceRouter.find(metadata)
+            val downloadedFile = mediaSourceService.download(task.normalizedUrl, metadata, task.outputType, tempDir.toFile())
+            val telegramFile = telegramFileUploader.upload(task.telegramChatId, task.outputType, downloadedFile)
+            downloadTaskService.markCompleted(taskId, telegramFile)
         } catch (e: RuntimeException) {
             downloadTaskService.markFailed(taskId, e.message ?: e::class.simpleName.orEmpty())
             throw e
@@ -38,3 +43,11 @@ class DownloadPipeline(
         }
     }
 }
+
+private fun YtDlpMetadataDto.toMediaMetadata(): MediaMetadata =
+    MediaMetadata(
+        title = title,
+        extractor = extractor,
+        durationSeconds = duration?.toLong(),
+        webpageUrl = webpageUrl,
+    )

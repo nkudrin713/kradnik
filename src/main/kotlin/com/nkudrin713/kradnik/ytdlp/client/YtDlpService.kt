@@ -24,7 +24,6 @@ private const val TITLE_EXT = "%(title)s.%(ext)s"
 private const val PRINT = "--print"
 private const val FINAL_FILEPATH = "after_move:filepath"
 private const val MP3 = "mp3"
-private const val AUDIO_QUALITY_128 = "128K"
 private const val BESTAUDIO_BEST = "bestaudio/best"
 
 @Service
@@ -49,7 +48,7 @@ class YtDlpService(
         return objectMapper.readValue<YtDlpMetadataDto>(result.output)
     }
 
-    suspend fun downloadAudio(url: String, outputDir: File): DownloadedFile {
+    suspend fun downloadAudio(url: String, outputDir: File, audioQuality: String): DownloadedFile {
         val args = listOf(
             NO_PLAYLIST,
             NO_WARNINGS,
@@ -59,7 +58,7 @@ class YtDlpService(
             AUDIO_FORMAT,
             MP3,
             AUDIO_QUALITY,
-            AUDIO_QUALITY_128,
+            audioQuality,
             OUTPUT,
             TITLE_EXT,
             RESTRICT_FILENAMES,

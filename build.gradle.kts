@@ -30,6 +30,7 @@ dependencies {
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
 	implementation("org.telegram:telegrambots-springboot-longpolling-starter:9.6.0")
+	implementation("org.telegram:telegrambots-client:9.6.0")
 	implementation("org.postgresql:postgresql")
 	testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
 	testImplementation("org.mockito.kotlin:mockito-kotlin:6.1.0")

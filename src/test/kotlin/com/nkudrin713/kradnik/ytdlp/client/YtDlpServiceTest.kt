@@ -132,7 +132,7 @@ class YtDlpServiceTest {
 
         whenever(processRunner.run(any())).thenReturn(expectedResult)
 
-        val actual = service.downloadAudio("https://example.com", tempDir)
+        val actual = downloadAudio(tempDir)
 
         assertEquals(file, actual.file)
         assertEquals("mp3", actual.ext)
@@ -152,7 +152,7 @@ class YtDlpServiceTest {
         whenever(processRunner.run(any())).thenReturn(expectedResult)
 
         val exception = assertFailsWith<YtDlpException> {
-            service.downloadAudio("https://example.com", tempDir)
+            downloadAudio(tempDir)
         }
 
         assertTrue(exception.message!!.contains("timed out"))
@@ -170,7 +170,7 @@ class YtDlpServiceTest {
         whenever(processRunner.run(any())).thenReturn(expectedResult)
 
         val exception = assertFailsWith<YtDlpException> {
-            service.downloadAudio("https://example.com", tempDir)
+            downloadAudio(tempDir)
         }
 
         assertTrue(exception.message!!.contains("failed"))
@@ -189,7 +189,7 @@ class YtDlpServiceTest {
         whenever(processRunner.run(any())).thenReturn(expectedResult)
 
         val exception = assertFailsWith<YtDlpException> {
-            service.downloadAudio("https://example.com", tempDir)
+            downloadAudio(tempDir)
         }
 
         assertTrue(exception.message!!.contains("did not print final filepath"))
@@ -208,7 +208,7 @@ class YtDlpServiceTest {
         whenever(processRunner.run(any())).thenReturn(expectedResult)
 
         val exception = assertFailsWith<YtDlpException> {
-            service.downloadAudio("https://example.com", tempDir)
+            downloadAudio(tempDir)
         }
 
         assertTrue(exception.message!!.contains("file not found"))
@@ -231,7 +231,7 @@ class YtDlpServiceTest {
 
         whenever(processRunner.run(any())).thenReturn(expectedResult)
 
-        val actual = service.downloadAudio("https://example.com", tempDir)
+        val actual = downloadAudio(tempDir)
 
         assertEquals(file, actual.file)
     }
@@ -249,7 +249,7 @@ class YtDlpServiceTest {
 
         whenever(processRunner.run(any())).thenReturn(expectedResult)
 
-        service.downloadAudio("https://example.com", tempDir)
+        downloadAudio(tempDir)
 
         val commandCaptor = argumentCaptor<Command>()
         verify(processRunner).run(commandCaptor.capture())
@@ -268,5 +268,8 @@ class YtDlpServiceTest {
         assertTrue(command.args.contains("after_move:filepath"))
         assertTrue(command.args.contains("https://example.com"))
     }
+
+    private suspend fun downloadAudio(tempDir: File) =
+        service.downloadAudio("https://example.com", tempDir, "128K")
 
 }

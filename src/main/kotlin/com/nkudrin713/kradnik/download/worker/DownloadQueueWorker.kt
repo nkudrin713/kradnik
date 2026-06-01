@@ -6,6 +6,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -29,7 +31,7 @@ class DownloadQueueWorker(
     private val downloadTaskService: DownloadTaskService,
     private val downloadPipeline: DownloadPipeline,
     private val listenerProvider: ObjectProvider<DownloadQueueListener>,
-    @Value("\${download.worker.concurrency:1}")
+    @Value("\${download.worker.concurrency:2}")
     concurrency: Int,
 ) : ApplicationRunner, DisposableBean {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -53,7 +55,7 @@ class DownloadQueueWorker(
 
     private suspend fun drainQueue() {
         drainMutex.withLock {
-            while (true) {
+            while (currentCoroutineContext().isActive) {
                 semaphore.acquire()
 
                 val task = downloadTaskService.claimNextQueuedTask()

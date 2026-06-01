@@ -9,7 +9,7 @@ class DownloadSettingService(
 ) {
 	@Transactional(readOnly = true)
 	fun getMode(chatId: Long): DownloadMode =
-		downloadSettingRepository.findByChatId(chatId)?.mode ?: DownloadMode.VIDEO
+		downloadSettingRepository.findByChatId(chatId)?.mode ?: DownloadMode.AUDIO
 
 	@Transactional
 	fun setMode(dto: DownloadSettingDto): DownloadSetting {

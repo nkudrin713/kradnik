@@ -16,18 +16,6 @@ CREATE TABLE download_tasks (
     source_title TEXT,
     source_extractor TEXT,
     source_duration_seconds INTEGER,
-    source_format_id TEXT,
-    source_ext TEXT,
-    source_width INTEGER,
-    source_height INTEGER,
-    source_fps NUMERIC(6,2),
-    source_filesize BIGINT,
-
-    output_ext TEXT,
-    output_audio_codec TEXT,
-    output_video_codec TEXT,
-    output_bitrate TEXT,
-    output_args JSONB,
 
     telegram_file_id TEXT,
     telegram_file_size BIGINT,

@@ -8,10 +8,7 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
-import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.annotations.UpdateTimestamp
-import org.hibernate.type.SqlTypes
-import java.math.BigDecimal
 import java.time.Instant
 
 @Entity
@@ -49,40 +46,6 @@ class DownloadTask(
 
 	@Column(name = "source_duration_seconds")
 	var sourceDurationSeconds: Int? = null,
-
-	@Column(name = "source_format_id")
-	var sourceFormatId: String? = null,
-
-	@Column(name = "source_ext")
-	var sourceExt: String? = null,
-
-	@Column(name = "source_width")
-	var sourceWidth: Int? = null,
-
-	@Column(name = "source_height")
-	var sourceHeight: Int? = null,
-
-	@Column(name = "source_fps", precision = 6, scale = 2)
-	var sourceFps: BigDecimal? = null,
-
-	@Column(name = "source_filesize")
-	var sourceFilesize: Long? = null,
-
-	@Column(name = "output_ext")
-	var outputExt: String? = null,
-
-	@Column(name = "output_audio_codec")
-	var outputAudioCodec: String? = null,
-
-	@Column(name = "output_video_codec")
-	var outputVideoCodec: String? = null,
-
-	@Column(name = "output_bitrate")
-	var outputBitrate: String? = null,
-
-	@JdbcTypeCode(SqlTypes.JSON)
-	@Column(name = "output_args", columnDefinition = "jsonb")
-	var outputArgs: Map<String, Any?>? = null,
 
 	@Column(name = "telegram_file_id")
 	var telegramFileId: String? = null,

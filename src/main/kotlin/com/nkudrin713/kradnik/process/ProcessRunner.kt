@@ -1,5 +1,5 @@
 package com.nkudrin713.kradnik.process
 
 interface ProcessRunner {
-    suspend fun run(command: ProcessCommand): ProcessExecutionResult
+    suspend fun run(command: Command): ProcessExecutionResult
 }

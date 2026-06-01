@@ -17,11 +17,11 @@ class ProcessRunnerTest {
     @Test
     fun `captures output`() = runTest {
         val result = runner.run(
-            ProcessCommand(
-                "echo",
-                listOf("hello"),
-                tempDir,
-                5.seconds
+            TestCommand(
+                executable = "echo",
+                args = listOf("hello"),
+                workingDir = tempDir,
+                timeout = 5.seconds,
             )
         )
 
@@ -33,11 +33,11 @@ class ProcessRunnerTest {
     @Test
     fun `times out`() = runTest {
         val result = runner.run(
-            ProcessCommand(
-                "sleep",
-                listOf("5"),
-                tempDir,
-                100.milliseconds
+            TestCommand(
+                executable = "sleep",
+                args = listOf("5"),
+                workingDir = tempDir,
+                timeout = 100.milliseconds,
             )
         )
 
@@ -48,7 +48,7 @@ class ProcessRunnerTest {
     @Test
     fun `stderr captured`() = runTest {
         val result = runner.run(
-            ProcessCommand(
+            TestCommand(
                 executable = "sh",
                 args = listOf("-c", "echo error-message >&2"),
                 workingDir = tempDir,
@@ -65,3 +65,10 @@ class ProcessRunnerTest {
     }
 
 }
+
+private data class TestCommand(
+    override val executable: String,
+    override val args: List<String>,
+    override val workingDir: File?,
+    override val timeout: kotlin.time.Duration,
+) : Command

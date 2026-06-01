@@ -1,7 +1,7 @@
-package com.nkudrin713.kradnik.ytdlp
+package com.nkudrin713.kradnik.ytdlp.client
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.nkudrin713.kradnik.process.ProcessCommand
+import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
 import kotlinx.coroutines.test.runTest
@@ -254,7 +254,7 @@ class YtDlpServiceTest {
 
         service.downloadAudio("https://example.com", tempDir)
 
-        val commandCaptor = argumentCaptor<ProcessCommand>()
+        val commandCaptor = argumentCaptor<Command>()
         verify(processRunner).run(commandCaptor.capture())
 
         val command = commandCaptor.firstValue
@@ -266,7 +266,7 @@ class YtDlpServiceTest {
         assertTrue(command.args.contains("--audio-format"))
         assertTrue(command.args.contains("mp3"))
         assertTrue(command.args.contains("--audio-quality"))
-        assertTrue(command.args.contains("0"))
+        assertTrue(command.args.contains("128K"))
         assertTrue(command.args.contains("--print"))
         assertTrue(command.args.contains("after_move:filepath"))
         assertTrue(command.args.contains("https://example.com"))

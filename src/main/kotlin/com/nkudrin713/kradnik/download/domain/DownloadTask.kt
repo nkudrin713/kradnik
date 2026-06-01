@@ -1,5 +1,7 @@
-package com.nkudrin713.kradnik.download
+package com.nkudrin713.kradnik.download.domain
 
+import com.nkudrin713.kradnik.download.repository.DownloadOutputTypeConverter
+import com.nkudrin713.kradnik.download.repository.DownloadTaskStatusConverter
 import jakarta.persistence.Column
 import jakarta.persistence.Convert
 import jakarta.persistence.Entity

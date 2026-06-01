@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik
 
-import com.nkudrin713.kradnik.download.DownloadTaskRepository
+import com.nkudrin713.kradnik.download.repository.DownloadTaskRepository
 import com.nkudrin713.kradnik.process.ProcessRunner
 import com.nkudrin713.kradnik.settings.DownloadSettingRepository
 import com.fasterxml.jackson.databind.ObjectMapper

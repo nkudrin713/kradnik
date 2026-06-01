@@ -1,5 +1,8 @@
-package com.nkudrin713.kradnik.download
+package com.nkudrin713.kradnik.download.repository
 
+import com.nkudrin713.kradnik.download.domain.DownloadOutputType
+import com.nkudrin713.kradnik.download.domain.DownloadTask
+import com.nkudrin713.kradnik.download.domain.DownloadTaskStatus
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 

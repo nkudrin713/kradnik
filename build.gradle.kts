@@ -30,7 +30,7 @@ dependencies {
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
 	implementation("org.telegram:telegrambots-springboot-longpolling-starter:9.6.0")
-	runtimeOnly("org.postgresql:postgresql")
+	implementation("org.postgresql:postgresql")
 	testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
 	testImplementation("org.mockito.kotlin:mockito-kotlin:6.1.0")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")

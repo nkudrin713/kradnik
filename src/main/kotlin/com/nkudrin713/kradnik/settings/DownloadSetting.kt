@@ -1,6 +1,5 @@
 package com.nkudrin713.kradnik.settings
 
-import com.nkudrin713.kradnik.download.DownloadModeConverter
 import jakarta.persistence.Column
 import jakarta.persistence.Convert
 import jakarta.persistence.Entity

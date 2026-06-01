@@ -1,6 +1,7 @@
-package com.nkudrin713.kradnik.download
+package com.nkudrin713.kradnik.download.repository
 
-import com.nkudrin713.kradnik.settings.DownloadMode
+import com.nkudrin713.kradnik.download.domain.DownloadOutputType
+import com.nkudrin713.kradnik.download.domain.DownloadTaskStatus
 import jakarta.persistence.AttributeConverter
 import jakarta.persistence.Converter
 
@@ -20,13 +21,4 @@ class DownloadTaskStatusConverter : AttributeConverter<DownloadTaskStatus, Strin
 
 	override fun convertToEntityAttribute(dbData: String?): DownloadTaskStatus? =
 		dbData?.let(DownloadTaskStatus::fromDb)
-}
-
-@Converter
-class DownloadModeConverter : AttributeConverter<DownloadMode, String> {
-	override fun convertToDatabaseColumn(attribute: DownloadMode?): String? =
-		attribute?.dbValue
-
-	override fun convertToEntityAttribute(dbData: String?): DownloadMode? =
-		dbData?.let(DownloadMode::fromDb)
 }

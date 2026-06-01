@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download
+package com.nkudrin713.kradnik.download.domain
 
 enum class DownloadTaskStatus(val dbValue: String) {
 	QUEUED("queued"),

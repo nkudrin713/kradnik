@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.ytdlp
+package com.nkudrin713.kradnik.download.domain
 
 import java.io.File
 

@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.ytdlp
+package com.nkudrin713.kradnik.ytdlp.client
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import java.math.BigDecimal

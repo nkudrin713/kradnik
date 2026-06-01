@@ -1,8 +1,8 @@
-package com.nkudrin713.kradnik.ytdlp
+package com.nkudrin713.kradnik.ytdlp.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import com.nkudrin713.kradnik.process.ProcessCommand
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
 import org.springframework.stereotype.Service
@@ -10,7 +10,6 @@ import java.io.File
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
-private const val YT_DLP = "yt-dlp"
 private const val DUMP_SINGLE_JSON = "--dump-single-json"
 private const val NO_PLAYLIST = "--no-playlist"
 private const val NO_WARNINGS = "--no-warnings"
@@ -24,7 +23,7 @@ private const val TITLE_EXT = "%(title)s.%(ext)s"
 private const val PRINT = "--print"
 private const val FINAL_FILEPATH = "after_move:filepath"
 private const val MP3 = "mp3"
-private const val DEFAULT_AUDIO_QUALITY_0 = "0"
+private const val AUDIO_QUALITY_128 = "128K"
 private const val BESTAUDIO_BEST = "bestaudio/best"
 
 @Service
@@ -35,8 +34,7 @@ class YtDlpService(
 
     suspend fun extractMetadata(url: String): YtDlpMetadataDto {
         val result = processRunner.run(
-            ProcessCommand(
-                executable = YT_DLP,
+            YtDlpCommand(
                 args = listOf(DUMP_SINGLE_JSON, NO_PLAYLIST, NO_WARNINGS, url),
                 workingDir = null,
                 timeout = 30.seconds,
@@ -60,7 +58,7 @@ class YtDlpService(
             AUDIO_FORMAT,
             MP3,
             AUDIO_QUALITY,
-            DEFAULT_AUDIO_QUALITY_0,
+            AUDIO_QUALITY_128,
             OUTPUT,
             TITLE_EXT,
             RESTRICT_FILENAMES,
@@ -69,8 +67,7 @@ class YtDlpService(
             url
         )
         val result = processRunner.run(
-            ProcessCommand(
-                executable = YT_DLP,
+            YtDlpCommand(
                 args = args,
                 workingDir = outputDir,
                 timeout = 10.minutes,

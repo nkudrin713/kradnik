@@ -13,7 +13,7 @@ import kotlin.time.TimeSource
 
 @Service
 class DefaultProcessRunner : ProcessRunner {
-    override suspend fun run(command: ProcessCommand): ProcessExecutionResult = coroutineScope {
+    override suspend fun run(command: Command): ProcessExecutionResult = coroutineScope {
         val start = TimeSource.Monotonic.markNow()
         val process = ProcessBuilder(command.executable, *command.args.toTypedArray())
             .directory(command.workingDir)

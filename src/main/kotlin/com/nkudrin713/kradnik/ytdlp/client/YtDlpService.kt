@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.ytdlp.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
@@ -29,8 +30,8 @@ private const val BESTAUDIO_BEST = "bestaudio/best"
 @Service
 class YtDlpService(
     private val processRunner: ProcessRunner,
-    private val objectMapper: ObjectMapper
 ) {
+    private val objectMapper: ObjectMapper = jacksonObjectMapper()
 
     suspend fun extractMetadata(url: String): YtDlpMetadataDto {
         val result = processRunner.run(

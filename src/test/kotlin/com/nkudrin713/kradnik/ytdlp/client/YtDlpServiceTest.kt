@@ -1,6 +1,5 @@
 package com.nkudrin713.kradnik.ytdlp.client
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -21,11 +20,9 @@ import kotlin.time.Duration.Companion.seconds
 
 class YtDlpServiceTest {
     private val processRunner: ProcessRunner = mock()
-    private val objectMapper = jacksonObjectMapper()
 
     private val service = YtDlpService(
         processRunner = processRunner,
-        objectMapper = objectMapper,
     )
 
     @Test

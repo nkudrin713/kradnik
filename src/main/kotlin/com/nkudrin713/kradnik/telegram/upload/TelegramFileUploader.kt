@@ -18,24 +18,31 @@ class TelegramFileUploader(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun upload(chatId: Long, taskId: Long, outputType: DownloadOutputType, downloadedFile: DownloadedFile): TelegramFileResult {
+    fun upload(
+        chatId: Long,
+        taskId: Long,
+        outputType: DownloadOutputType,
+        downloadedFile: DownloadedFile,
+        sourceTitle: String?,
+    ): TelegramFileResult {
         if (downloadedFile.sizeBytes > TELEGRAM_UPLOAD_LIMIT_BYTES) {
             throw TelegramFileTooLargeException(downloadedFile.sizeBytes, TELEGRAM_UPLOAD_LIMIT_BYTES)
         }
 
         logger.info("CHAT[{}] TASK[{}] upload start", chatId, taskId)
         return when (outputType) {
-            DownloadOutputType.AUDIO -> uploadAudio(chatId, downloadedFile)
+            DownloadOutputType.AUDIO -> uploadAudio(chatId, downloadedFile, sourceTitle)
             DownloadOutputType.VIDEO -> throw UnsupportedTelegramUploadException(outputType)
         }
     }
 
-    private fun uploadAudio(chatId: Long, downloadedFile: DownloadedFile): TelegramFileResult {
-        logger.info("CHAT[{}] telegram sendAudio: file={}", chatId, downloadedFile.file.fileName)
+    private fun uploadAudio(chatId: Long, downloadedFile: DownloadedFile, sourceTitle: String?): TelegramFileResult {
+        val fileName = telegramFileName(sourceTitle, downloadedFile)
+        logger.info("CHAT[{}] telegram sendAudio: file={}", chatId, fileName)
         val message = telegramClient.execute(
             SendAudio.builder()
                 .chatId(chatId)
-                .audio(InputFile(downloadedFile.file.toFile(), downloadedFile.file.fileName.toString()))
+                .audio(InputFile(downloadedFile.file.toFile(), fileName))
                 .build()
         )
 
@@ -45,6 +52,18 @@ class TelegramFileUploader(
             fileId = audio.fileId,
             fileSize = audio.fileSize ?: downloadedFile.sizeBytes,
         )
+    }
+
+    private fun telegramFileName(sourceTitle: String?, downloadedFile: DownloadedFile): String {
+        val title = sourceTitle
+            ?.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), " ")
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            ?.take(120)
+            ?.takeIf { it.isNotBlank() }
+            ?: downloadedFile.file.fileName.toString().substringBeforeLast(".")
+
+        return "$title.${downloadedFile.ext}"
     }
 }
 

@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.telegram.upload
 import com.nkudrin713.kradnik.download.domain.DownloadOutputType
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import io.mockk.every
+import io.mockk.slot
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.Test
@@ -31,7 +32,7 @@ class TelegramFileUploaderTest {
         every { message.audio } returns audio
         every { telegramClient.execute(any<SendAudio>()) } returns message
 
-        val actual = uploader.upload(100, 1, DownloadOutputType.AUDIO, downloadedFile)
+        val actual = uploader.upload(100, 1, DownloadOutputType.AUDIO, downloadedFile, "Song title")
 
         assertEquals("file-id", actual.fileId)
         assertEquals(5, actual.fileSize)
@@ -42,7 +43,7 @@ class TelegramFileUploaderTest {
         val downloadedFile = downloadedFile(tempDir, sizeBytes = 51 * 1024 * 1024)
 
         assertFailsWith<TelegramFileTooLargeException> {
-            uploader.upload(100, 1, DownloadOutputType.AUDIO, downloadedFile)
+            uploader.upload(100, 1, DownloadOutputType.AUDIO, downloadedFile, "Song title")
         }
 
         verify(exactly = 0) { telegramClient.execute(any<SendAudio>()) }
@@ -57,8 +58,25 @@ class TelegramFileUploaderTest {
         every { telegramClient.execute(any<SendAudio>()) } returns message
 
         assertFailsWith<TelegramUploadException> {
-            uploader.upload(100, 1, DownloadOutputType.AUDIO, downloadedFile)
+            uploader.upload(100, 1, DownloadOutputType.AUDIO, downloadedFile, "Song title")
         }
+    }
+
+    @Test
+    fun `uploads audio with source title filename`(@TempDir tempDir: Path) {
+        val downloadedFile = downloadedFile(tempDir, sizeBytes = 5)
+        val audio: Audio = mockk()
+        val message: Message = mockk()
+        val slot = slot<SendAudio>()
+
+        every { audio.fileId } returns "file-id"
+        every { audio.fileSize } returns 5
+        every { message.audio } returns audio
+        every { telegramClient.execute(capture(slot)) } returns message
+
+        uploader.upload(100, 1, DownloadOutputType.AUDIO, downloadedFile, "Bad/File:Name?")
+
+        assertEquals("attach://Bad File Name.mp3", slot.captured.audio.attachName)
     }
 
     private fun downloadedFile(tempDir: Path, sizeBytes: Long): DownloadedFile {

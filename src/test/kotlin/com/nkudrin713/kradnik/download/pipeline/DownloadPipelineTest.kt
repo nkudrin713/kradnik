@@ -54,7 +54,7 @@ class DownloadPipelineTest {
         every { mediaSourceRouter.find(metadata) } returns mediaSourceService
         coEvery { mediaSourceService.download(any(), any(), any(), any(), any(), any()) } returns downloadedFile
         every { downloadTaskService.markUploading(1) } returns task
-        every { telegramFileUploader.upload(task.telegramChatId, 1, task.outputType, downloadedFile) } returns telegramFile
+        every { telegramFileUploader.upload(task.telegramChatId, 1, task.outputType, downloadedFile, metadata.title) } returns telegramFile
         every { downloadTaskService.markCompleted(1, telegramFile) } returns task
 
         pipeline.processTask(1)

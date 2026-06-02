@@ -48,7 +48,13 @@ class DownloadPipeline(
             )
             downloadTaskService.markUploading(taskId)
             downloadTaskUiNotifier.uploading(taskId)
-            val telegramFile = telegramFileUploader.upload(task.telegramChatId, taskId, task.outputType, downloadedFile)
+            val telegramFile = telegramFileUploader.upload(
+                task.telegramChatId,
+                taskId,
+                task.outputType,
+                downloadedFile,
+                metadata.title,
+            )
             downloadTaskService.markCompleted(taskId, telegramFile)
             downloadTaskUiNotifier.completed(taskId)
         } catch (e: CancellationException) {

@@ -74,7 +74,6 @@ class YouTubeMediaService(
                 preset.crf,
                 preset.audioBitrate,
                 preset.ffmpegPreset,
-                preset.maxHeight,
                 preset.timeout,
             )
             if (downloadedFile.sizeBytes <= TELEGRAM_UPLOAD_LIMIT_BYTES) {
@@ -155,13 +154,12 @@ class YouTubeMediaService(
         val audioBitrate: String,
         val totalBitrateBps: Long,
         val ffmpegPreset: String,
-        val maxHeight: Int?,
         val timeout: Duration,
     ) {
-        MP4_SHORT(30, "80k", 800_000, "ultrafast", 720, 30.seconds),
-        MP4_CRF_28(28, "96k", 1_100_000, "veryfast", 720, 8.minutes),
-        MP4_CRF_30(30, "80k", 800_000, "veryfast", 720, 8.minutes),
-        MP4_CRF_32(32, "64k", 600_000, "veryfast", 720, 8.minutes),
+        MP4_SHORT(30, "80k", 800_000, "ultrafast", 30.seconds),
+        MP4_CRF_28(28, "96k", 1_100_000, "veryfast", 8.minutes),
+        MP4_CRF_30(30, "80k", 800_000, "veryfast", 8.minutes),
+        MP4_CRF_32(32, "64k", 600_000, "veryfast", 8.minutes),
     }
 
     private companion object {

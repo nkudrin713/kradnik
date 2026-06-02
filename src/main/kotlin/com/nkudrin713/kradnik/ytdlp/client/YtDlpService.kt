@@ -104,10 +104,8 @@ class YtDlpService(
         crf: Int,
         audioBitrate: String,
         ffmpegPreset: String,
-        maxHeight: Int?,
         timeout: Duration,
     ): DownloadedFile {
-        val videoFilter = maxHeight?.let { " -vf scale=-2:'min(ih,$it)',setsar=1" }.orEmpty()
         val args = listOf(
             NO_PLAYLIST,
             NO_WARNINGS,
@@ -116,7 +114,7 @@ class YtDlpService(
             RECODE_VIDEO,
             MP4,
             POSTPROCESSOR_ARGS,
-            "VideoConvertor:-c:v libx264 -preset $ffmpegPreset -crf $crf$videoFilter -c:a aac -b:a $audioBitrate -movflags +faststart",
+            "VideoConvertor:-c:v libx264 -preset $ffmpegPreset -crf $crf -vf setsar=1 -c:a aac -b:a $audioBitrate -movflags +faststart",
             OUTPUT,
             TITLE_EXT,
             RESTRICT_FILENAMES,

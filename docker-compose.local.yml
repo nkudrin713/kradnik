@@ -1,8 +1,0 @@
-services:
-  postgres:
-    environment:
-      POSTGRES_DB: kradnik
-      POSTGRES_USER: kradnik
-      POSTGRES_PASSWORD: kradnik
-    ports:
-      - "5433:5432"

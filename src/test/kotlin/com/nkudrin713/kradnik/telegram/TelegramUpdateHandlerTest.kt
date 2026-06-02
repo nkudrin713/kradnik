@@ -4,8 +4,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadOutputType
 import com.nkudrin713.kradnik.download.service.CreateDownloadTaskCommand
 import com.nkudrin713.kradnik.download.service.DownloadTaskService
 import com.nkudrin713.kradnik.settings.DownloadMode
-import com.nkudrin713.kradnik.settings.DownloadSettingDto
-import com.nkudrin713.kradnik.settings.DownloadSettingService
+import com.nkudrin713.kradnik.settings.DownloadSettingsDto
+import com.nkudrin713.kradnik.settings.DownloadSettingsService
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -19,18 +19,18 @@ import kotlin.test.assertEquals
 
 class TelegramUpdateHandlerTest {
     private val downloadTaskService: DownloadTaskService = mock()
-    private val downloadSettingService: DownloadSettingService = mock()
+    private val downloadSettingsService: DownloadSettingsService = mock()
     private val urlExtractor = UrlExtractor()
 
     private val handler = TelegramUpdateHandler(
         downloadTaskService = downloadTaskService,
-        downloadSettingService = downloadSettingService,
+        downloadSettingsService = downloadSettingsService,
         urlExtractor = urlExtractor,
     )
 
     @Test
     fun `creates download task from url`() {
-        whenever(downloadSettingService.getMode(100)).thenReturn(DownloadMode.AUDIO)
+        whenever(downloadSettingsService.getMode(100)).thenReturn(DownloadMode.AUDIO)
 
         handler.handle(update(text = "https://example.com/video", chatId = 100, userId = 200))
 
@@ -48,8 +48,8 @@ class TelegramUpdateHandlerTest {
     fun `sets audio mode`() {
         handler.handle(update(text = "/audio", chatId = 100, userId = 200))
 
-        val captor = argumentCaptor<DownloadSettingDto>()
-        verify(downloadSettingService).setMode(captor.capture())
+        val captor = argumentCaptor<DownloadSettingsDto>()
+        verify(downloadSettingsService).setMode(captor.capture())
 
         assertEquals(100, captor.firstValue.chatId)
         assertEquals("AUDIO", captor.firstValue.mode)

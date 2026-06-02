@@ -10,7 +10,7 @@ import java.time.Instant
 
 @Entity
 @Table(name = "download_settings")
-class DownloadSetting(
+class DownloadSettings(
 	@Id
 	@Column(name = "chat_id")
 	var chatId: Long = 0,

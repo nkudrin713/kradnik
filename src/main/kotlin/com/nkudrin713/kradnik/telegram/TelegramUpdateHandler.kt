@@ -4,8 +4,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadOutputType
 import com.nkudrin713.kradnik.download.service.CreateDownloadTaskCommand
 import com.nkudrin713.kradnik.download.service.DownloadTaskService
 import com.nkudrin713.kradnik.settings.DownloadMode
-import com.nkudrin713.kradnik.settings.DownloadSettingDto
-import com.nkudrin713.kradnik.settings.DownloadSettingService
+import com.nkudrin713.kradnik.settings.DownloadSettingsDto
+import com.nkudrin713.kradnik.settings.DownloadSettingsService
 import org.springframework.stereotype.Service
 import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.message.Message
@@ -13,7 +13,7 @@ import org.telegram.telegrambots.meta.api.objects.message.Message
 @Service
 class TelegramUpdateHandler(
     private val downloadTaskService: DownloadTaskService,
-    private val downloadSettingService: DownloadSettingService,
+    private val downloadSettingsService: DownloadSettingsService,
     private val urlExtractor: UrlExtractor,
 ) {
     fun handle(update: Update) {
@@ -28,8 +28,8 @@ class TelegramUpdateHandler(
     }
 
     private fun setMode(message: Message, mode: DownloadMode) {
-        downloadSettingService.setMode(
-            DownloadSettingDto(
+        downloadSettingsService.setMode(
+            DownloadSettingsDto(
                 chatId = message.chatId,
                 mode = mode.name,
             )
@@ -38,7 +38,7 @@ class TelegramUpdateHandler(
 
     private fun createDownloadTask(message: Message, text: String) {
         val url = urlExtractor.extract(text) ?: return
-        val mode = downloadSettingService.getMode(message.chatId)
+        val mode = downloadSettingsService.getMode(message.chatId)
 
         downloadTaskService.createTask(
             CreateDownloadTaskCommand(

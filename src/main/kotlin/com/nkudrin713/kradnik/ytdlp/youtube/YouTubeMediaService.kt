@@ -125,9 +125,9 @@ class YouTubeMediaService(
         val audioBitrate: String,
         val totalBitrateBps: Long,
     ) {
-        MP4_CRF_28(28, "96k", 650_000),
-        MP4_CRF_30(30, "80k", 500_000),
-        MP4_CRF_32(32, "64k", 380_000),
+        MP4_CRF_28(28, "96k", 1_100_000),
+        MP4_CRF_30(30, "80k", 800_000),
+        MP4_CRF_32(32, "64k", 600_000),
     }
 
     private companion object {

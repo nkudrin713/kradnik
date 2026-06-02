@@ -106,7 +106,7 @@ class YtDlpService(
             RECODE_VIDEO,
             MP4,
             POSTPROCESSOR_ARGS,
-            "VideoConvertor:-c:v libx264 -preset slow -crf $crf -c:a aac -b:a $audioBitrate -movflags +faststart",
+            "VideoConvertor:-c:v libx264 -preset veryfast -crf $crf -c:a aac -b:a $audioBitrate -movflags +faststart",
             OUTPUT,
             TITLE_EXT,
             RESTRICT_FILENAMES,
@@ -118,7 +118,7 @@ class YtDlpService(
             YtDlpCommand(
                 args = args,
                 workingDir = outputDir,
-                timeout = 20.minutes,
+                timeout = 8.minutes,
             )
         )
 

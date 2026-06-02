@@ -316,7 +316,7 @@ class YtDlpServiceTest {
         assertTrue(command.args.contains("--recode-video"))
         assertTrue(command.args.contains("mp4"))
         assertTrue(command.args.contains("--postprocessor-args"))
-        assertTrue(command.args.contains("VideoConvertor:-c:v libx264 -preset slow -crf 28 -c:a aac -b:a 96k -movflags +faststart"))
+        assertTrue(command.args.contains("VideoConvertor:-c:v libx264 -preset veryfast -crf 28 -c:a aac -b:a 96k -movflags +faststart"))
         assertTrue(command.args.contains("--print"))
         assertTrue(command.args.contains("after_move:filepath"))
         assertTrue(command.args.contains("https://example.com"))

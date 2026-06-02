@@ -100,7 +100,7 @@ class YouTubeMediaServiceTest {
         val validFile = downloadedFile(tempDir, "video-30.mp4", TELEGRAM_UPLOAD_LIMIT_BYTES)
         coEvery { ytDlpService.downloadVideo("url", tempDir, 30, "80k") } returns validFile
 
-        val actual = service.download("url", metadata(durationSeconds = 800), DownloadOutputType.VIDEO, tempDir, 100, 1)
+        val actual = service.download("url", metadata(durationSeconds = 400), DownloadOutputType.VIDEO, tempDir, 100, 1)
 
         assertEquals(validFile, actual)
         coVerify(exactly = 0) { ytDlpService.downloadVideo("url", tempDir, 28, "96k") }
@@ -110,7 +110,7 @@ class YouTubeMediaServiceTest {
     @Test
     fun `fails before download when all video presets are expected to be too large`(@TempDir tempDir: Path) = runTest {
         assertFailsWith<ExpectedVideoFileTooLargeException> {
-            service.download("url", metadata(durationSeconds = 1_200), DownloadOutputType.VIDEO, tempDir, 100, 1)
+            service.download("url", metadata(durationSeconds = 701), DownloadOutputType.VIDEO, tempDir, 100, 1)
         }
 
         coVerify(exactly = 0) { ytDlpService.downloadVideo(any(), any(), any(), any()) }

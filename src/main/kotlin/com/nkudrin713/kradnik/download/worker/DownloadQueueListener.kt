@@ -25,6 +25,8 @@ class DownloadQueueListener(
 ) {
     suspend fun listen(onNotification: suspend () -> Unit) = withContext(Dispatchers.IO) {
         dataSource.connection.use { connection ->
+            connection.autoCommit = true
+
             connection.createStatement().use { statement ->
                 statement.execute(LISTEN_SQL)
             }

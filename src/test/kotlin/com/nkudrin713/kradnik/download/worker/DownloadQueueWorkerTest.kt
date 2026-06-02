@@ -29,6 +29,7 @@ class DownloadQueueWorkerTest {
             downloadPipeline = downloadPipeline,
             listenerProvider = beanFactory.getBeanProvider(DownloadQueueListener::class.java),
             concurrency = 1,
+            pollIntervalMs = 5_000,
         )
 
         try {
@@ -59,6 +60,7 @@ class DownloadQueueWorkerTest {
             downloadPipeline = downloadPipeline,
             listenerProvider = beanFactory.getBeanProvider(DownloadQueueListener::class.java),
             concurrency = 1,
+            pollIntervalMs = 5_000,
         )
 
         try {

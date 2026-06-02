@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -33,6 +34,8 @@ class DownloadQueueWorker(
     private val listenerProvider: ObjectProvider<DownloadQueueListener>,
     @Value("\${download.worker.concurrency:2}")
     concurrency: Int,
+    @Value("\${download.worker.poll-interval-ms:5000}")
+    private val pollIntervalMs: Long,
 ) : ApplicationRunner, DisposableBean {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -44,12 +47,27 @@ class DownloadQueueWorker(
             drainQueue()
         }
 
+        scope.launch {
+            pollQueue()
+        }
+
         listenerProvider.ifAvailable { listener ->
             scope.launch {
-                listener.listen {
-                    drainQueue()
+                try {
+                    listener.listen {
+                        drainQueue()
+                    }
+                } catch (e: RuntimeException) {
+                    logger.error("Download queue listener failed", e)
                 }
             }
+        }
+    }
+
+    private suspend fun pollQueue() {
+        while (currentCoroutineContext().isActive) {
+            delay(pollIntervalMs.coerceAtLeast(100))
+            drainQueue()
         }
     }
 

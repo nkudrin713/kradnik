@@ -55,6 +55,9 @@ class DownloadTask(
 	@Column(name = "telegram_file_size")
 	var telegramFileSize: Long? = null,
 
+	@Column(name = "telegram_status_message_id")
+	var telegramStatusMessageId: Int? = null,
+
 	@Column(name = "error_message")
 	var errorMessage: String? = null,
 

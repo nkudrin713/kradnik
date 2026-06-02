@@ -28,12 +28,14 @@ class DownloadPipelineTest {
     private val mediaSourceRouter: MediaSourceRouter = mockk()
     private val mediaSourceService: MediaSourceService = mockk()
     private val telegramFileUploader: TelegramFileUploader = mockk()
+    private val downloadTaskUiNotifier: DownloadTaskUiNotifier = mockk(relaxed = true)
 
     private val pipeline = DownloadPipeline(
         downloadTaskService = downloadTaskService,
         ytDlpService = ytDlpService,
         mediaSourceRouter = mediaSourceRouter,
         telegramFileUploader = telegramFileUploader,
+        downloadTaskUiNotifier = downloadTaskUiNotifier,
     )
 
     @Test
@@ -51,13 +53,18 @@ class DownloadPipelineTest {
         every { downloadTaskService.markMetadata(1, metadata) } returns task
         every { mediaSourceRouter.find(metadata) } returns mediaSourceService
         coEvery { mediaSourceService.download(any(), any(), any(), any(), any(), any()) } returns downloadedFile
+        every { downloadTaskService.markUploading(1) } returns task
         every { telegramFileUploader.upload(task.telegramChatId, 1, task.outputType, downloadedFile) } returns telegramFile
         every { downloadTaskService.markCompleted(1, telegramFile) } returns task
 
         pipeline.processTask(1)
 
+        verify { downloadTaskUiNotifier.downloading(1) }
+        verify { downloadTaskService.markUploading(1) }
+        verify { downloadTaskUiNotifier.uploading(1) }
         verify { downloadTaskService.markMetadata(1, metadata) }
         verify { downloadTaskService.markCompleted(1, telegramFile) }
+        verify { downloadTaskUiNotifier.completed(1) }
     }
 
     @Test
@@ -77,6 +84,7 @@ class DownloadPipelineTest {
         }
 
         verify { downloadTaskService.markFailed(1, "download failed") }
+        verify { downloadTaskUiNotifier.failed(1) }
     }
 
     private fun task(): DownloadTask =

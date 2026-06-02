@@ -48,6 +48,13 @@ class DownloadTaskService(
 	}
 
 	@Transactional
+	fun markUploading(taskId: Long): DownloadTask {
+		val task = getTaskInternal(taskId)
+		task.status = DownloadTaskStatus.UPLOADING
+		return task
+	}
+
+	@Transactional
 	fun markCompleted(taskId: Long, result: TelegramFileResult): DownloadTask {
 		val task = getTaskInternal(taskId)
 		task.status = DownloadTaskStatus.COMPLETED
@@ -65,6 +72,13 @@ class DownloadTaskService(
 		task.status = DownloadTaskStatus.FAILED
 		task.errorMessage = errorMessage
 		task.completedAt = Instant.now()
+		return task
+	}
+
+	@Transactional
+	fun setStatusMessageId(taskId: Long, messageId: Int): DownloadTask {
+		val task = getTaskInternal(taskId)
+		task.telegramStatusMessageId = messageId
 		return task
 	}
 

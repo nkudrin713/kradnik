@@ -21,6 +21,7 @@ class DownloadPipeline(
     private val ytDlpService: YtDlpService,
     private val mediaSourceRouter: MediaSourceRouter,
     private val telegramFileUploader: TelegramFileUploader,
+    private val downloadTaskUiNotifier: DownloadTaskUiNotifier,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -33,6 +34,7 @@ class DownloadPipeline(
         val task = downloadTaskService.getTask(taskId)
 
         try {
+            downloadTaskUiNotifier.downloading(taskId)
             val metadata = ytDlpService.extractMetadata(task.normalizedUrl, task.telegramChatId, taskId).toMediaMetadata()
             downloadTaskService.markMetadata(taskId, metadata)
             val mediaSourceService = mediaSourceRouter.find(metadata)
@@ -44,12 +46,16 @@ class DownloadPipeline(
                 task.telegramChatId,
                 taskId,
             )
+            downloadTaskService.markUploading(taskId)
+            downloadTaskUiNotifier.uploading(taskId)
             val telegramFile = telegramFileUploader.upload(task.telegramChatId, taskId, task.outputType, downloadedFile)
             downloadTaskService.markCompleted(taskId, telegramFile)
+            downloadTaskUiNotifier.completed(taskId)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             downloadTaskService.markFailed(taskId, e.message ?: e::class.simpleName.orEmpty())
+            downloadTaskUiNotifier.failed(taskId)
             logger.error("CHAT[{}] TASK[{}] failed: {}", task.telegramChatId, taskId, e.message, e)
             throw e
         } finally {

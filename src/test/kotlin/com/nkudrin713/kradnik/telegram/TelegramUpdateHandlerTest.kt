@@ -2,19 +2,23 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.domain.DownloadOutputType
 import com.nkudrin713.kradnik.download.domain.DownloadTask
+import com.nkudrin713.kradnik.download.pipeline.DownloadTaskUiNotifier
 import com.nkudrin713.kradnik.download.service.CreateDownloadTaskCommand
 import com.nkudrin713.kradnik.download.service.DownloadTaskService
 import com.nkudrin713.kradnik.settings.DownloadMode
 import com.nkudrin713.kradnik.settings.DownloadSettings
 import com.nkudrin713.kradnik.settings.DownloadSettingsDto
 import com.nkudrin713.kradnik.settings.DownloadSettingsService
+import com.nkudrin713.kradnik.telegram.ui.BotUiService
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage
 import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.User
 import org.telegram.telegrambots.meta.api.objects.message.Message
+import org.telegram.telegrambots.meta.generics.TelegramClient
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -22,11 +26,17 @@ class TelegramUpdateHandlerTest {
     private val downloadTaskService: DownloadTaskService = mockk()
     private val downloadSettingsService: DownloadSettingsService = mockk()
     private val urlExtractor = UrlExtractor()
+    private val botUiService = BotUiService()
+    private val telegramClient: TelegramClient = mockk()
+    private val downloadTaskUiNotifier: DownloadTaskUiNotifier = mockk(relaxed = true)
 
     private val handler = TelegramUpdateHandler(
         downloadTaskService = downloadTaskService,
         downloadSettingsService = downloadSettingsService,
         urlExtractor = urlExtractor,
+        botUiService = botUiService,
+        telegramClient = telegramClient,
+        downloadTaskUiNotifier = downloadTaskUiNotifier,
     )
 
     @Test
@@ -44,11 +54,13 @@ class TelegramUpdateHandlerTest {
         assertEquals("https://example.com/video", slot.captured.originalUrl)
         assertEquals("https://example.com/video", slot.captured.normalizedUrl)
         assertEquals(DownloadOutputType.AUDIO, slot.captured.outputType)
+        verify { downloadTaskUiNotifier.queued(1) }
     }
 
     @Test
     fun `sets audio mode`() {
         every { downloadSettingsService.setMode(any()) } returns DownloadSettings(chatId = 100, mode = DownloadMode.AUDIO)
+        every { telegramClient.execute(any<SendMessage>()) } returns mockk(relaxed = true)
 
         handler.handle(update(text = "/audio", chatId = 100, userId = 200))
 
@@ -57,6 +69,7 @@ class TelegramUpdateHandlerTest {
 
         assertEquals(100, slot.captured.chatId)
         assertEquals("AUDIO", slot.captured.mode)
+        verify { telegramClient.execute(any<SendMessage>()) }
     }
 
     @Test

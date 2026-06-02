@@ -1,21 +1,27 @@
 package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.domain.DownloadOutputType
+import com.nkudrin713.kradnik.download.pipeline.DownloadTaskUiNotifier
 import com.nkudrin713.kradnik.download.service.CreateDownloadTaskCommand
 import com.nkudrin713.kradnik.download.service.DownloadTaskService
 import com.nkudrin713.kradnik.settings.DownloadMode
 import com.nkudrin713.kradnik.settings.DownloadSettingsDto
 import com.nkudrin713.kradnik.settings.DownloadSettingsService
+import com.nkudrin713.kradnik.telegram.ui.BotUiService
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.message.Message
+import org.telegram.telegrambots.meta.generics.TelegramClient
 
 @Service
 class TelegramUpdateHandler(
     private val downloadTaskService: DownloadTaskService,
     private val downloadSettingsService: DownloadSettingsService,
     private val urlExtractor: UrlExtractor,
+    private val botUiService: BotUiService,
+    private val telegramClient: TelegramClient,
+    private val downloadTaskUiNotifier: DownloadTaskUiNotifier,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -38,6 +44,7 @@ class TelegramUpdateHandler(
                 mode = mode.name,
             )
         )
+        telegramClient.execute(botUiService.toSendMessage(botUiService.downloadModeMessage(message.chatId, mode)))
         logger.info("CHAT[{}] mode set: {}", message.chatId, mode)
     }
 
@@ -58,6 +65,7 @@ class TelegramUpdateHandler(
                 outputType = mode.toOutputType(),
             )
         )
+        downloadTaskUiNotifier.queued(task.id!!)
         logger.info("CHAT[{}] TASK[{}] queued: type={}", message.chatId, task.id, task.outputType)
     }
 

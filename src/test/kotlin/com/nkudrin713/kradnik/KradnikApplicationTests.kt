@@ -9,11 +9,13 @@ import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
+import org.telegram.telegrambots.meta.generics.TelegramClient
 
 @SpringBootTest(
 	properties = [
 		"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
 		"download.worker.enabled=false",
+		"telegram.bot.token=",
 	]
 )
 class KradnikApplicationTests {
@@ -34,6 +36,9 @@ class KradnikApplicationTests {
 
 		@Bean
 		fun objectMapper(): ObjectMapper = mockk(relaxed = true)
+
+		@Bean
+		fun telegramClient(): TelegramClient = mockk(relaxed = true)
 	}
 
 }

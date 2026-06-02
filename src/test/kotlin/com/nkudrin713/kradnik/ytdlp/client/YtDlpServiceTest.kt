@@ -67,6 +67,23 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun ignoresUnknownMetadataFields() = runTest {
+        val expectedResult = ProcessExecutionResult(
+            output = """{"id":"video-id","title":"Test video","formats":[{"format_id":"1"}]}""",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds
+        )
+
+        coEvery { processRunner.run(any()) } returns expectedResult
+
+        val actual = service.extractMetadata("https://example.com")
+
+        assertEquals("video-id", actual.id)
+        assertEquals("Test video", actual.title)
+    }
+
+    @Test
     fun timeout() = runTest {
         val expectedResult = ProcessExecutionResult(
             output = "",

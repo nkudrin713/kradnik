@@ -10,8 +10,11 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import java.io.File
 import java.math.BigDecimal
+import java.nio.file.Path
+import kotlin.io.path.absolutePathString
+import kotlin.io.path.fileSize
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -120,11 +123,11 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun downloadAudioSuccess(@TempDir tempDir: File) = runTest {
-        val file = File(tempDir, "audio.mp3")
+    fun downloadAudioSuccess(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("audio.mp3")
         file.writeText("audio")
         val expectedResult = ProcessExecutionResult(
-            output = file.absolutePath,
+            output = file.absolutePathString(),
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds
@@ -136,12 +139,12 @@ class YtDlpServiceTest {
 
         assertEquals(file, actual.file)
         assertEquals("mp3", actual.ext)
-        assertEquals(file.length(), actual.sizeBytes)
+        assertEquals(file.fileSize(), actual.sizeBytes)
         assertTrue(actual.args.contains("https://example.com"))
     }
 
     @Test
-    fun downloadAudioTimeout(@TempDir tempDir: File) = runTest {
+    fun downloadAudioTimeout(@TempDir tempDir: Path) = runTest {
         val expectedResult = ProcessExecutionResult(
             output = "",
             timedOut = true,
@@ -159,7 +162,7 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun downloadAudioFailure(@TempDir tempDir: File) = runTest {
+    fun downloadAudioFailure(@TempDir tempDir: Path) = runTest {
         val expectedResult = ProcessExecutionResult(
             output = "yt-dlp error",
             timedOut = false,
@@ -178,7 +181,7 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun downloadAudioMissingFilepath(@TempDir tempDir: File) = runTest {
+    fun downloadAudioMissingFilepath(@TempDir tempDir: Path) = runTest {
         val expectedResult = ProcessExecutionResult(
             output = "",
             timedOut = false,
@@ -196,10 +199,10 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun downloadAudioFileNotFound(@TempDir tempDir: File) = runTest {
-        val missingFile = File(tempDir, "missing.mp3")
+    fun downloadAudioFileNotFound(@TempDir tempDir: Path) = runTest {
+        val missingFile = tempDir.resolve("missing.mp3")
         val expectedResult = ProcessExecutionResult(
-            output = missingFile.absolutePath,
+            output = missingFile.absolutePathString(),
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds
@@ -215,14 +218,14 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun downloadAudioUsesLastOutputLineAsFilepath(@TempDir tempDir: File) = runTest {
-        val file = File(tempDir, "audio.mp3")
+    fun downloadAudioUsesLastOutputLineAsFilepath(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("audio.mp3")
         file.writeText("audio")
         val expectedResult = ProcessExecutionResult(
             output = """
                 log line
                 
-                ${file.absolutePath}
+                ${file.absolutePathString()}
             """.trimIndent(),
             timedOut = false,
             exitCode = 0,
@@ -237,11 +240,11 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun downloadAudioBuildsExpectedCommand(@TempDir tempDir: File) = runTest {
-        val file = File(tempDir, "audio.mp3")
+    fun downloadAudioBuildsExpectedCommand(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("audio.mp3")
         file.writeText("audio")
         val expectedResult = ProcessExecutionResult(
-            output = file.absolutePath,
+            output = file.absolutePathString(),
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds
@@ -269,7 +272,7 @@ class YtDlpServiceTest {
         assertTrue(command.args.contains("https://example.com"))
     }
 
-    private suspend fun downloadAudio(tempDir: File) =
+    private suspend fun downloadAudio(tempDir: Path) =
         service.downloadAudio("https://example.com", tempDir, "128K")
 
 }

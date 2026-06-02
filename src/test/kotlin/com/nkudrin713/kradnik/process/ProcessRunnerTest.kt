@@ -2,7 +2,7 @@ package com.nkudrin713.kradnik.process
 
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
-import java.io.File
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -61,7 +61,7 @@ class ProcessRunnerTest {
 
     companion object {
         @TempDir
-        lateinit var tempDir: File
+        lateinit var tempDir: Path
     }
 
 }
@@ -69,6 +69,6 @@ class ProcessRunnerTest {
 private data class TestCommand(
     override val executable: String,
     override val args: List<String>,
-    override val workingDir: File?,
+    override val workingDir: Path?,
     override val timeout: kotlin.time.Duration,
 ) : Command

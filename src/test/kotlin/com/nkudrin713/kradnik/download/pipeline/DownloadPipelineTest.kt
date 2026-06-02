@@ -16,7 +16,9 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import java.io.File
+import java.nio.file.Path
+import kotlin.io.path.fileSize
+import kotlin.io.path.writeText
 import kotlin.test.assertFailsWith
 
 class DownloadPipelineTest {
@@ -34,7 +36,7 @@ class DownloadPipelineTest {
     )
 
     @Test
-    fun `downloads uploads and marks task completed`(@TempDir tempDir: File) = runTest {
+    fun `downloads uploads and marks task completed`(@TempDir tempDir: Path) = runTest {
         val task = task()
         val metadata = metadata()
         val downloadedFile = downloadedFile(tempDir)
@@ -107,13 +109,13 @@ class DownloadPipelineTest {
             format = null,
         )
 
-    private fun downloadedFile(tempDir: File): DownloadedFile {
-        val file = File(tempDir, "audio.mp3")
+    private fun downloadedFile(tempDir: Path): DownloadedFile {
+        val file = tempDir.resolve("audio.mp3")
         file.writeText("audio")
         return DownloadedFile(
             file = file,
             ext = "mp3",
-            sizeBytes = file.length(),
+            sizeBytes = file.fileSize(),
             args = emptyList(),
         )
     }

@@ -16,7 +16,7 @@ class DefaultProcessRunner : ProcessRunner {
     override suspend fun run(command: Command): ProcessExecutionResult = coroutineScope {
         val start = TimeSource.Monotonic.markNow()
         val process = ProcessBuilder(command.executable, *command.args.toTypedArray())
-            .directory(command.workingDir)
+            .directory(command.workingDir?.toFile())
             .redirectErrorStream(true)
             .start()
 

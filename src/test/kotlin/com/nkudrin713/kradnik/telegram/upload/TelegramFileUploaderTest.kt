@@ -13,7 +13,8 @@ import org.telegram.telegrambots.meta.api.methods.send.SendAudio
 import org.telegram.telegrambots.meta.api.objects.Audio
 import org.telegram.telegrambots.meta.api.objects.message.Message
 import org.telegram.telegrambots.meta.generics.TelegramClient
-import java.io.File
+import java.nio.file.Path
+import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
@@ -22,7 +23,7 @@ class TelegramFileUploaderTest {
     private val uploader = TelegramFileUploader(telegramClient)
 
     @Test
-    fun `uploads audio`(@TempDir tempDir: File) {
+    fun `uploads audio`(@TempDir tempDir: Path) {
         val downloadedFile = downloadedFile(tempDir, sizeBytes = 5)
         val audio: Audio = mock()
         val message: Message = mock()
@@ -39,7 +40,7 @@ class TelegramFileUploaderTest {
     }
 
     @Test
-    fun `rejects too large file`(@TempDir tempDir: File) {
+    fun `rejects too large file`(@TempDir tempDir: Path) {
         val downloadedFile = downloadedFile(tempDir, sizeBytes = 51 * 1024 * 1024)
 
         assertFailsWith<TelegramFileTooLargeException> {
@@ -50,7 +51,7 @@ class TelegramFileUploaderTest {
     }
 
     @Test
-    fun `fails when response does not contain audio`(@TempDir tempDir: File) {
+    fun `fails when response does not contain audio`(@TempDir tempDir: Path) {
         val downloadedFile = downloadedFile(tempDir, sizeBytes = 5)
         val message: Message = mock()
 
@@ -62,8 +63,8 @@ class TelegramFileUploaderTest {
         }
     }
 
-    private fun downloadedFile(tempDir: File, sizeBytes: Long): DownloadedFile {
-        val file = File(tempDir, "audio.mp3")
+    private fun downloadedFile(tempDir: Path, sizeBytes: Long): DownloadedFile {
+        val file = tempDir.resolve("audio.mp3")
         file.writeText("audio")
         return DownloadedFile(
             file = file,

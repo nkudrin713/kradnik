@@ -30,7 +30,7 @@ class TelegramFileUploader(
         val message = telegramClient.execute(
             SendAudio.builder()
                 .chatId(chatId)
-                .audio(InputFile(downloadedFile.file, downloadedFile.file.name))
+                .audio(InputFile(downloadedFile.file.toFile(), downloadedFile.file.fileName.toString()))
                 .build()
         )
 

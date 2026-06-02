@@ -7,7 +7,10 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
 import org.springframework.stereotype.Service
-import java.io.File
+import java.nio.file.Path
+import kotlin.io.path.extension
+import kotlin.io.path.fileSize
+import kotlin.io.path.isRegularFile
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -48,7 +51,7 @@ class YtDlpService(
         return objectMapper.readValue<YtDlpMetadataDto>(result.output)
     }
 
-    suspend fun downloadAudio(url: String, outputDir: File, audioQuality: String): DownloadedFile {
+    suspend fun downloadAudio(url: String, outputDir: Path, audioQuality: String): DownloadedFile {
         val args = listOf(
             NO_PLAYLIST,
             NO_WARNINGS,
@@ -80,17 +83,17 @@ class YtDlpService(
         return DownloadedFile(
             file = file,
             ext = file.extension,
-            sizeBytes = file.length(),
+            sizeBytes = file.fileSize(),
             args = args,
         )
     }
 
-    private fun getDownloadedFile(output: String): File {
+    private fun getDownloadedFile(output: String): Path {
         val path = output.lineSequence().lastOrNull(String::isNotBlank)
             ?: throw YtDlpException("yt-dlp audio download did not print final filepath")
-        val file = File(path)
+        val file = kotlin.io.path.Path(path)
 
-        if (!file.isFile) {
+        if (!file.isRegularFile()) {
             throw YtDlpException("yt-dlp audio download file not found: $path")
         }
 

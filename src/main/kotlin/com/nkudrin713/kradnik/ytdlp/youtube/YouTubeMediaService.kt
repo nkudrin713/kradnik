@@ -10,7 +10,8 @@ import com.nkudrin713.kradnik.util.byteToMB
 import com.nkudrin713.kradnik.util.estimateAudioSizeBytes
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import org.springframework.stereotype.Service
-import java.io.File
+import java.nio.file.Path
+import kotlin.io.path.deleteIfExists
 
 @Service
 class YouTubeMediaService(
@@ -23,7 +24,7 @@ class YouTubeMediaService(
         url: String,
         metadata: MediaMetadata,
         outputType: DownloadOutputType,
-        outputDir: File,
+        outputDir: Path,
     ): DownloadedFile =
         when (outputType) {
             DownloadOutputType.AUDIO -> downloadAudio(url, metadata, outputDir)
@@ -33,14 +34,14 @@ class YouTubeMediaService(
     private suspend fun downloadAudio(
         url: String,
         metadata: MediaMetadata,
-        outputDir: File,
+        outputDir: Path,
     ): DownloadedFile {
         for (preset in selectAudioPresets(metadata)) {
             val downloadedFile = ytDlpService.downloadAudio(url, outputDir, preset.quality)
             if (downloadedFile.sizeBytes <= TELEGRAM_UPLOAD_LIMIT_BYTES) {
                 return downloadedFile
             }
-            downloadedFile.file.delete()
+            downloadedFile.file.deleteIfExists()
         }
 
         throw TelegramFileTooLargeException(TELEGRAM_UPLOAD_LIMIT_BYTES + 1, TELEGRAM_UPLOAD_LIMIT_BYTES)

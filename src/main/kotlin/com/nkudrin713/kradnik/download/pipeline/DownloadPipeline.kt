@@ -32,7 +32,7 @@ class DownloadPipeline(
         try {
             val metadata = ytDlpService.extractMetadata(task.normalizedUrl).toMediaMetadata()
             val mediaSourceService = mediaSourceRouter.find(metadata)
-            val downloadedFile = mediaSourceService.download(task.normalizedUrl, metadata, task.outputType, tempDir.toFile())
+            val downloadedFile = mediaSourceService.download(task.normalizedUrl, metadata, task.outputType, tempDir)
             val telegramFile = telegramFileUploader.upload(task.telegramChatId, task.outputType, downloadedFile)
             downloadTaskService.markCompleted(taskId, telegramFile)
         } catch (e: RuntimeException) {

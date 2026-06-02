@@ -4,7 +4,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadOutputType
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import org.springframework.stereotype.Service
-import java.io.File
+import java.nio.file.Path
 
 interface MediaSourceService {
     fun supports(extractor: String?): Boolean
@@ -13,7 +13,7 @@ interface MediaSourceService {
         url: String,
         metadata: MediaMetadata,
         outputType: DownloadOutputType,
-        outputDir: File,
+        outputDir: Path,
     ): DownloadedFile
 }
 

@@ -1,9 +1,9 @@
 package com.nkudrin713.kradnik.download.domain
 
-import java.io.File
+import java.nio.file.Path
 
 data class DownloadedFile(
-    val file: File,
+    val file: Path,
     val ext: String,
     val sizeBytes: Long,
     val args: List<String>,

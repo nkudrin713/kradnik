@@ -26,7 +26,7 @@ class DownloadPipeline(
         val tempDir = Path(DOWNLOAD_ROOT)
             .createDirectories()
             .resolve(taskId.toString())
-            .createDirectory()
+            .createDirectories()
         val task = downloadTaskService.getTask(taskId)
 
         try {

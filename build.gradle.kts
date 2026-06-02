@@ -33,7 +33,7 @@ dependencies {
 	implementation("org.telegram:telegrambots-client:9.6.0")
 	implementation("org.postgresql:postgresql")
 	testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
-	testImplementation("org.mockito.kotlin:mockito-kotlin:6.1.0")
+	testImplementation("io.mockk:mockk:1.14.6")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")

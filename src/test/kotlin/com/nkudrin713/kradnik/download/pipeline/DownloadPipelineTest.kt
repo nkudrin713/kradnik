@@ -9,24 +9,25 @@ import com.nkudrin713.kradnik.download.service.TelegramFileResult
 import com.nkudrin713.kradnik.telegram.upload.TelegramFileUploader
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpMetadataDto
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import org.mockito.kotlin.any
-import org.mockito.kotlin.mock
-import org.mockito.kotlin.verify
-import org.mockito.kotlin.whenever
 import java.nio.file.Path
 import kotlin.io.path.fileSize
 import kotlin.io.path.writeText
 import kotlin.test.assertFailsWith
 
 class DownloadPipelineTest {
-    private val downloadTaskService: DownloadTaskService = mock()
-    private val ytDlpService: YtDlpService = mock()
-    private val mediaSourceRouter: MediaSourceRouter = mock()
-    private val mediaSourceService: MediaSourceService = mock()
-    private val telegramFileUploader: TelegramFileUploader = mock()
+    private val downloadTaskService: DownloadTaskService = mockk()
+    private val ytDlpService: YtDlpService = mockk()
+    private val mediaSourceRouter: MediaSourceRouter = mockk()
+    private val mediaSourceService: MediaSourceService = mockk()
+    private val telegramFileUploader: TelegramFileUploader = mockk()
 
     private val pipeline = DownloadPipeline(
         downloadTaskService = downloadTaskService,
@@ -45,15 +46,16 @@ class DownloadPipelineTest {
             fileSize = downloadedFile.sizeBytes,
         )
 
-        whenever(downloadTaskService.getTask(1)).thenReturn(task)
-        whenever(ytDlpService.extractMetadata(task.normalizedUrl)).thenReturn(metadataDto())
-        whenever(mediaSourceRouter.find(metadata)).thenReturn(mediaSourceService)
-        whenever(mediaSourceService.download(any(), any(), any(), any())).thenReturn(downloadedFile)
-        whenever(telegramFileUploader.upload(task.telegramChatId, task.outputType, downloadedFile)).thenReturn(telegramFile)
+        every { downloadTaskService.getTask(1) } returns task
+        coEvery { ytDlpService.extractMetadata(task.normalizedUrl) } returns metadataDto()
+        every { mediaSourceRouter.find(metadata) } returns mediaSourceService
+        coEvery { mediaSourceService.download(any(), any(), any(), any()) } returns downloadedFile
+        every { telegramFileUploader.upload(task.telegramChatId, task.outputType, downloadedFile) } returns telegramFile
+        every { downloadTaskService.markCompleted(1, telegramFile) } returns task
 
         pipeline.processTask(1)
 
-        verify(downloadTaskService).markCompleted(1, telegramFile)
+        verify { downloadTaskService.markCompleted(1, telegramFile) }
     }
 
     @Test
@@ -61,16 +63,17 @@ class DownloadPipelineTest {
         val task = task()
         val metadata = metadata()
 
-        whenever(downloadTaskService.getTask(1)).thenReturn(task)
-        whenever(ytDlpService.extractMetadata(task.normalizedUrl)).thenReturn(metadataDto())
-        whenever(mediaSourceRouter.find(metadata)).thenReturn(mediaSourceService)
-        whenever(mediaSourceService.download(any(), any(), any(), any())).thenThrow(RuntimeException("download failed"))
+        every { downloadTaskService.getTask(1) } returns task
+        coEvery { ytDlpService.extractMetadata(task.normalizedUrl) } returns metadataDto()
+        every { mediaSourceRouter.find(metadata) } returns mediaSourceService
+        coEvery { mediaSourceService.download(any(), any(), any(), any()) } throws RuntimeException("download failed")
+        every { downloadTaskService.markFailed(1, "download failed") } returns task
 
         assertFailsWith<RuntimeException> {
             pipeline.processTask(1)
         }
 
-        verify(downloadTaskService).markFailed(1, "download failed")
+        verify { downloadTaskService.markFailed(1, "download failed") }
     }
 
     private fun task(): DownloadTask =

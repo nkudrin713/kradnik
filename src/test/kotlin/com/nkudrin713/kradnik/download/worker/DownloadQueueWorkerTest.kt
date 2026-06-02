@@ -3,26 +3,25 @@ package com.nkudrin713.kradnik.download.worker
 import com.nkudrin713.kradnik.download.domain.DownloadTask
 import com.nkudrin713.kradnik.download.pipeline.DownloadPipeline
 import com.nkudrin713.kradnik.download.service.DownloadTaskService
+import io.mockk.coVerify
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.never
-import org.mockito.kotlin.any
-import org.mockito.kotlin.mock
-import org.mockito.kotlin.verify
-import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.support.DefaultListableBeanFactory
+import kotlin.time.Duration.Companion.milliseconds
 
 class DownloadQueueWorkerTest {
-    private val downloadTaskService: DownloadTaskService = mock()
-    private val downloadPipeline: DownloadPipeline = mock()
+    private val downloadTaskService: DownloadTaskService = mockk()
+    private val downloadPipeline: DownloadPipeline = mockk()
 
     @Test
     fun `claims queued task and starts pipeline`() = runTest {
-        whenever(downloadTaskService.claimNextQueuedTask())
-            .thenReturn(DownloadTask(id = 1))
-            .thenReturn(null)
+        every { downloadTaskService.claimNextQueuedTask() } returnsMany listOf(DownloadTask(id = 1), null)
+        coEvery { downloadPipeline.processTask(1) } returns Unit
 
         val beanFactory = DefaultListableBeanFactory()
         val worker = DownloadQueueWorker(
@@ -33,15 +32,15 @@ class DownloadQueueWorkerTest {
         )
 
         try {
-            worker.run(mock())
+            worker.run(mockk())
 
-            withTimeout(1_000) {
+            withTimeout(1_000.milliseconds) {
                 while (true) {
                     try {
-                        verify(downloadPipeline).processTask(1)
+                        coVerify { downloadPipeline.processTask(1) }
                         return@withTimeout
                     } catch (_: AssertionError) {
-                        delay(10)
+                        delay(10.milliseconds)
                     }
                 }
             }
@@ -52,7 +51,7 @@ class DownloadQueueWorkerTest {
 
     @Test
     fun `does nothing when queue is empty`() = runTest {
-        whenever(downloadTaskService.claimNextQueuedTask()).thenReturn(null)
+        every { downloadTaskService.claimNextQueuedTask() } returns null
 
         val beanFactory = DefaultListableBeanFactory()
         val worker = DownloadQueueWorker(
@@ -63,10 +62,10 @@ class DownloadQueueWorkerTest {
         )
 
         try {
-            worker.run(mock())
-            delay(100)
+            worker.run(mockk())
+            delay(100.milliseconds)
 
-            verify(downloadPipeline, never()).processTask(any())
+            coVerify(exactly = 0) { downloadPipeline.processTask(any()) }
         } finally {
             worker.destroy()
         }

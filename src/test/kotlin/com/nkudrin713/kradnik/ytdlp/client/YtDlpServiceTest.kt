@@ -3,13 +3,12 @@ package com.nkudrin713.kradnik.ytdlp.client
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
-import org.mockito.kotlin.any
-import org.mockito.kotlin.argumentCaptor
-import org.mockito.kotlin.mock
-import org.mockito.kotlin.verify
-import org.mockito.kotlin.whenever
 import java.math.BigDecimal
 import java.nio.file.Path
 import kotlin.io.path.absolutePathString
@@ -22,7 +21,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class YtDlpServiceTest {
-    private val processRunner: ProcessRunner = mock()
+    private val processRunner: ProcessRunner = mockk()
 
     private val service = YtDlpService(
         processRunner = processRunner,
@@ -51,7 +50,7 @@ class YtDlpServiceTest {
             duration = 5.seconds
         )
 
-        whenever(processRunner.run(any())).thenReturn(expectedResult)
+        coEvery { processRunner.run(any()) } returns expectedResult
 
         val url = "url"
         val actual = service.extractMetadata(url)
@@ -76,7 +75,7 @@ class YtDlpServiceTest {
             duration = 5.seconds
         )
 
-        whenever(processRunner.run(any())).thenReturn(expectedResult)
+        coEvery { processRunner.run(any()) } returns expectedResult
 
         val exception = assertFailsWith<YtDlpException> {
             service.extractMetadata("https://example.com")
@@ -94,7 +93,7 @@ class YtDlpServiceTest {
             duration = 5.seconds
         )
 
-        whenever(processRunner.run(any())).thenReturn(expectedResult)
+        coEvery { processRunner.run(any()) } returns expectedResult
 
         val exception = assertFailsWith<YtDlpException> {
             service.extractMetadata("https://example.com")
@@ -113,7 +112,7 @@ class YtDlpServiceTest {
             duration = 5.seconds
         )
 
-        whenever(processRunner.run(any())).thenReturn(expectedResult)
+        coEvery { processRunner.run(any()) } returns expectedResult
 
         val exception = assertFailsWith<YtDlpException> {
             service.extractMetadata("https://example.com")
@@ -133,7 +132,7 @@ class YtDlpServiceTest {
             duration = 5.seconds
         )
 
-        whenever(processRunner.run(any())).thenReturn(expectedResult)
+        coEvery { processRunner.run(any()) } returns expectedResult
 
         val actual = downloadAudio(tempDir)
 
@@ -152,7 +151,7 @@ class YtDlpServiceTest {
             duration = 5.seconds
         )
 
-        whenever(processRunner.run(any())).thenReturn(expectedResult)
+        coEvery { processRunner.run(any()) } returns expectedResult
 
         val exception = assertFailsWith<YtDlpException> {
             downloadAudio(tempDir)
@@ -170,7 +169,7 @@ class YtDlpServiceTest {
             duration = 5.seconds
         )
 
-        whenever(processRunner.run(any())).thenReturn(expectedResult)
+        coEvery { processRunner.run(any()) } returns expectedResult
 
         val exception = assertFailsWith<YtDlpException> {
             downloadAudio(tempDir)
@@ -189,7 +188,7 @@ class YtDlpServiceTest {
             duration = 5.seconds
         )
 
-        whenever(processRunner.run(any())).thenReturn(expectedResult)
+        coEvery { processRunner.run(any()) } returns expectedResult
 
         val exception = assertFailsWith<YtDlpException> {
             downloadAudio(tempDir)
@@ -208,7 +207,7 @@ class YtDlpServiceTest {
             duration = 5.seconds
         )
 
-        whenever(processRunner.run(any())).thenReturn(expectedResult)
+        coEvery { processRunner.run(any()) } returns expectedResult
 
         val exception = assertFailsWith<YtDlpException> {
             downloadAudio(tempDir)
@@ -232,7 +231,7 @@ class YtDlpServiceTest {
             duration = 5.seconds
         )
 
-        whenever(processRunner.run(any())).thenReturn(expectedResult)
+        coEvery { processRunner.run(any()) } returns expectedResult
 
         val actual = downloadAudio(tempDir)
 
@@ -250,14 +249,14 @@ class YtDlpServiceTest {
             duration = 5.seconds
         )
 
-        whenever(processRunner.run(any())).thenReturn(expectedResult)
+        coEvery { processRunner.run(any()) } returns expectedResult
 
         downloadAudio(tempDir)
 
-        val commandCaptor = argumentCaptor<Command>()
-        verify(processRunner).run(commandCaptor.capture())
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
 
-        val command = commandCaptor.firstValue
+        val command = commandSlot.captured
         assertEquals("yt-dlp", command.executable)
         assertEquals(tempDir, command.workingDir)
         assertTrue(command.args.contains("-f"))

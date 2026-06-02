@@ -5,11 +5,11 @@ import com.nkudrin713.kradnik.download.service.DownloadTaskService
 import com.nkudrin713.kradnik.telegram.upload.TelegramFileUploader
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpMetadataDto
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
+import kotlinx.coroutines.CancellationException
 import org.springframework.stereotype.Service
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.Path
 import kotlin.io.path.createDirectories
-import kotlin.io.path.createDirectory
 import kotlin.io.path.deleteRecursively
 
 private const val DOWNLOAD_ROOT = "/tmp/kradnik"
@@ -31,11 +31,14 @@ class DownloadPipeline(
 
         try {
             val metadata = ytDlpService.extractMetadata(task.normalizedUrl).toMediaMetadata()
+            downloadTaskService.markMetadata(taskId, metadata)
             val mediaSourceService = mediaSourceRouter.find(metadata)
             val downloadedFile = mediaSourceService.download(task.normalizedUrl, metadata, task.outputType, tempDir)
             val telegramFile = telegramFileUploader.upload(task.telegramChatId, task.outputType, downloadedFile)
             downloadTaskService.markCompleted(taskId, telegramFile)
-        } catch (e: RuntimeException) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             downloadTaskService.markFailed(taskId, e.message ?: e::class.simpleName.orEmpty())
             throw e
         } finally {

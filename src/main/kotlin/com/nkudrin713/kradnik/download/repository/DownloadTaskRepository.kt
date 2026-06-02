@@ -1,18 +1,10 @@
 package com.nkudrin713.kradnik.download.repository
 
-import com.nkudrin713.kradnik.download.domain.DownloadOutputType
 import com.nkudrin713.kradnik.download.domain.DownloadTask
-import com.nkudrin713.kradnik.download.domain.DownloadTaskStatus
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 
 interface DownloadTaskRepository : JpaRepository<DownloadTask, Long> {
-	fun findFirstByNormalizedUrlAndOutputTypeAndStatusAndTelegramFileIdIsNotNullOrderByCompletedAtDesc(
-		normalizedUrl: String,
-		outputType: DownloadOutputType,
-		status: DownloadTaskStatus,
-	): DownloadTask?
-
 	@Query(
 		value = """
 			WITH picked AS (

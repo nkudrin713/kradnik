@@ -48,6 +48,7 @@ class DownloadPipelineTest {
 
         every { downloadTaskService.getTask(1) } returns task
         coEvery { ytDlpService.extractMetadata(task.normalizedUrl) } returns metadataDto()
+        every { downloadTaskService.markMetadata(1, metadata) } returns task
         every { mediaSourceRouter.find(metadata) } returns mediaSourceService
         coEvery { mediaSourceService.download(any(), any(), any(), any()) } returns downloadedFile
         every { telegramFileUploader.upload(task.telegramChatId, task.outputType, downloadedFile) } returns telegramFile
@@ -55,6 +56,7 @@ class DownloadPipelineTest {
 
         pipeline.processTask(1)
 
+        verify { downloadTaskService.markMetadata(1, metadata) }
         verify { downloadTaskService.markCompleted(1, telegramFile) }
     }
 
@@ -65,6 +67,7 @@ class DownloadPipelineTest {
 
         every { downloadTaskService.getTask(1) } returns task
         coEvery { ytDlpService.extractMetadata(task.normalizedUrl) } returns metadataDto()
+        every { downloadTaskService.markMetadata(1, metadata) } returns task
         every { mediaSourceRouter.find(metadata) } returns mediaSourceService
         coEvery { mediaSourceService.download(any(), any(), any(), any()) } throws RuntimeException("download failed")
         every { downloadTaskService.markFailed(1, "download failed") } returns task

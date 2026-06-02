@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.service
 import com.nkudrin713.kradnik.download.domain.DownloadOutputType
 import com.nkudrin713.kradnik.download.domain.DownloadTask
 import com.nkudrin713.kradnik.download.domain.DownloadTaskStatus
+import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.repository.DownloadTaskRepository
 import com.nkudrin713.kradnik.download.worker.DownloadQueueNotifier
 import org.springframework.stereotype.Service
@@ -33,14 +34,14 @@ class DownloadTaskService(
 	fun claimNextQueuedTask(): DownloadTask? =
 		downloadTaskRepository.claimNextQueuedTask()
 
-	@Transactional(readOnly = true)
-	fun findCachedTask(normalizedUrl: String, outputType: DownloadOutputType): DownloadTask? =
-		downloadTaskRepository
-			.findFirstByNormalizedUrlAndOutputTypeAndStatusAndTelegramFileIdIsNotNullOrderByCompletedAtDesc(
-				normalizedUrl = normalizedUrl,
-				outputType = outputType,
-				status = DownloadTaskStatus.COMPLETED,
-			)
+	@Transactional
+	fun markMetadata(taskId: Long, metadata: MediaMetadata): DownloadTask {
+		val task = getTaskInternal(taskId)
+		task.sourceTitle = metadata.title
+		task.sourceExtractor = metadata.extractor
+		task.sourceDurationSeconds = metadata.durationSeconds?.toInt()
+		return task
+	}
 
 	@Transactional
 	fun markCompleted(taskId: Long, result: TelegramFileResult): DownloadTask {

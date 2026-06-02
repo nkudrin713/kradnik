@@ -14,6 +14,8 @@ interface MediaSourceService {
         metadata: MediaMetadata,
         outputType: DownloadOutputType,
         outputDir: Path,
+        chatId: Long,
+        taskId: Long,
     ): DownloadedFile
 }
 

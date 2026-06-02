@@ -83,6 +83,7 @@ class DownloadQueueWorker(
                     semaphore.release()
                     return
                 }
+                logger.info("CHAT[{}] TASK[{}] claimed", task.telegramChatId, taskId)
 
                 scope.launch {
                     try {

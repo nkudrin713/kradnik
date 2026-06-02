@@ -4,6 +4,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadOutputType
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.service.TelegramFileResult
 import com.nkudrin713.kradnik.util.byteToMB
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.telegram.telegrambots.meta.api.methods.send.SendAudio
 import org.telegram.telegrambots.meta.api.objects.InputFile
@@ -15,11 +16,14 @@ const val TELEGRAM_UPLOAD_LIMIT_BYTES: Long = 50 * 1024 * 1024
 class TelegramFileUploader(
     private val telegramClient: TelegramClient,
 ) {
-    fun upload(chatId: Long, outputType: DownloadOutputType, downloadedFile: DownloadedFile): TelegramFileResult {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
+    fun upload(chatId: Long, taskId: Long, outputType: DownloadOutputType, downloadedFile: DownloadedFile): TelegramFileResult {
         if (downloadedFile.sizeBytes > TELEGRAM_UPLOAD_LIMIT_BYTES) {
             throw TelegramFileTooLargeException(downloadedFile.sizeBytes, TELEGRAM_UPLOAD_LIMIT_BYTES)
         }
 
+        logger.info("CHAT[{}] TASK[{}] upload start", chatId, taskId)
         return when (outputType) {
             DownloadOutputType.AUDIO -> uploadAudio(chatId, downloadedFile)
             DownloadOutputType.VIDEO -> throw UnsupportedTelegramUploadException(outputType)
@@ -27,6 +31,7 @@ class TelegramFileUploader(
     }
 
     private fun uploadAudio(chatId: Long, downloadedFile: DownloadedFile): TelegramFileResult {
+        logger.info("CHAT[{}] telegram sendAudio: file={}", chatId, downloadedFile.file.fileName)
         val message = telegramClient.execute(
             SendAudio.builder()
                 .chatId(chatId)

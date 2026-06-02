@@ -6,6 +6,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadTaskStatus
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.repository.DownloadTaskRepository
 import com.nkudrin713.kradnik.download.worker.DownloadQueueNotifier
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -15,6 +16,8 @@ class DownloadTaskService(
 	private val downloadTaskRepository: DownloadTaskRepository,
 	private val downloadQueueNotifier: DownloadQueueNotifier,
 ) {
+	private val logger = LoggerFactory.getLogger(javaClass)
+
 	@Transactional
 	fun createTask(command: CreateDownloadTaskCommand): DownloadTask {
 		val task = downloadTaskRepository.save(
@@ -40,6 +43,7 @@ class DownloadTaskService(
 		task.sourceTitle = metadata.title
 		task.sourceExtractor = metadata.extractor
 		task.sourceDurationSeconds = metadata.durationSeconds?.toInt()
+		logger.info("CHAT[{}] TASK[{}] metadata ok: source={}", task.telegramChatId, taskId, metadata.extractor)
 		return task
 	}
 
@@ -51,6 +55,7 @@ class DownloadTaskService(
 		task.telegramFileSize = result.fileSize
 		task.errorMessage = null
 		task.completedAt = Instant.now()
+		logger.info("CHAT[{}] TASK[{}] done: telegramFileSize={}", task.telegramChatId, taskId, result.fileSize)
 		return task
 	}
 

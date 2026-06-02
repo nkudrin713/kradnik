@@ -6,6 +6,7 @@ import com.nkudrin713.kradnik.telegram.upload.TelegramFileUploader
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpMetadataDto
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import kotlinx.coroutines.CancellationException
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.Path
@@ -21,6 +22,8 @@ class DownloadPipeline(
     private val mediaSourceRouter: MediaSourceRouter,
     private val telegramFileUploader: TelegramFileUploader,
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     @OptIn(ExperimentalPathApi::class)
     suspend fun processTask(taskId: Long) {
         val tempDir = Path(DOWNLOAD_ROOT)
@@ -30,16 +33,24 @@ class DownloadPipeline(
         val task = downloadTaskService.getTask(taskId)
 
         try {
-            val metadata = ytDlpService.extractMetadata(task.normalizedUrl).toMediaMetadata()
+            val metadata = ytDlpService.extractMetadata(task.normalizedUrl, task.telegramChatId, taskId).toMediaMetadata()
             downloadTaskService.markMetadata(taskId, metadata)
             val mediaSourceService = mediaSourceRouter.find(metadata)
-            val downloadedFile = mediaSourceService.download(task.normalizedUrl, metadata, task.outputType, tempDir)
-            val telegramFile = telegramFileUploader.upload(task.telegramChatId, task.outputType, downloadedFile)
+            val downloadedFile = mediaSourceService.download(
+                task.normalizedUrl,
+                metadata,
+                task.outputType,
+                tempDir,
+                task.telegramChatId,
+                taskId,
+            )
+            val telegramFile = telegramFileUploader.upload(task.telegramChatId, taskId, task.outputType, downloadedFile)
             downloadTaskService.markCompleted(taskId, telegramFile)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             downloadTaskService.markFailed(taskId, e.message ?: e::class.simpleName.orEmpty())
+            logger.error("CHAT[{}] TASK[{}] failed: {}", task.telegramChatId, taskId, e.message, e)
             throw e
         } finally {
             tempDir.deleteRecursively()

@@ -47,11 +47,11 @@ class DownloadPipelineTest {
         )
 
         every { downloadTaskService.getTask(1) } returns task
-        coEvery { ytDlpService.extractMetadata(task.normalizedUrl) } returns metadataDto()
+        coEvery { ytDlpService.extractMetadata(task.normalizedUrl, task.telegramChatId, 1) } returns metadataDto()
         every { downloadTaskService.markMetadata(1, metadata) } returns task
         every { mediaSourceRouter.find(metadata) } returns mediaSourceService
-        coEvery { mediaSourceService.download(any(), any(), any(), any()) } returns downloadedFile
-        every { telegramFileUploader.upload(task.telegramChatId, task.outputType, downloadedFile) } returns telegramFile
+        coEvery { mediaSourceService.download(any(), any(), any(), any(), any(), any()) } returns downloadedFile
+        every { telegramFileUploader.upload(task.telegramChatId, 1, task.outputType, downloadedFile) } returns telegramFile
         every { downloadTaskService.markCompleted(1, telegramFile) } returns task
 
         pipeline.processTask(1)
@@ -66,10 +66,10 @@ class DownloadPipelineTest {
         val metadata = metadata()
 
         every { downloadTaskService.getTask(1) } returns task
-        coEvery { ytDlpService.extractMetadata(task.normalizedUrl) } returns metadataDto()
+        coEvery { ytDlpService.extractMetadata(task.normalizedUrl, task.telegramChatId, 1) } returns metadataDto()
         every { downloadTaskService.markMetadata(1, metadata) } returns task
         every { mediaSourceRouter.find(metadata) } returns mediaSourceService
-        coEvery { mediaSourceService.download(any(), any(), any(), any()) } throws RuntimeException("download failed")
+        coEvery { mediaSourceService.download(any(), any(), any(), any(), any(), any()) } throws RuntimeException("download failed")
         every { downloadTaskService.markFailed(1, "download failed") } returns task
 
         assertFailsWith<RuntimeException> {

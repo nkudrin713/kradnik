@@ -31,7 +31,7 @@ class TelegramFileUploaderTest {
         every { message.audio } returns audio
         every { telegramClient.execute(any<SendAudio>()) } returns message
 
-        val actual = uploader.upload(100, DownloadOutputType.AUDIO, downloadedFile)
+        val actual = uploader.upload(100, 1, DownloadOutputType.AUDIO, downloadedFile)
 
         assertEquals("file-id", actual.fileId)
         assertEquals(5, actual.fileSize)
@@ -42,7 +42,7 @@ class TelegramFileUploaderTest {
         val downloadedFile = downloadedFile(tempDir, sizeBytes = 51 * 1024 * 1024)
 
         assertFailsWith<TelegramFileTooLargeException> {
-            uploader.upload(100, DownloadOutputType.AUDIO, downloadedFile)
+            uploader.upload(100, 1, DownloadOutputType.AUDIO, downloadedFile)
         }
 
         verify(exactly = 0) { telegramClient.execute(any<SendAudio>()) }
@@ -57,7 +57,7 @@ class TelegramFileUploaderTest {
         every { telegramClient.execute(any<SendAudio>()) } returns message
 
         assertFailsWith<TelegramUploadException> {
-            uploader.upload(100, DownloadOutputType.AUDIO, downloadedFile)
+            uploader.upload(100, 1, DownloadOutputType.AUDIO, downloadedFile)
         }
     }
 

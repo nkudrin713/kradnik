@@ -27,7 +27,7 @@ class YouTubeMediaServiceTest {
         val downloadedFile = downloadedFile(tempDir, "audio-128.mp3", TELEGRAM_UPLOAD_LIMIT_BYTES)
         coEvery { ytDlpService.downloadAudio("url", tempDir, "128K") } returns downloadedFile
 
-        val actual = service.download("url", metadata(durationSeconds = 60), DownloadOutputType.AUDIO, tempDir)
+        val actual = service.download("url", metadata(durationSeconds = 60), DownloadOutputType.AUDIO, tempDir, 100, 1)
 
         assertEquals(downloadedFile, actual)
         coVerify { ytDlpService.downloadAudio("url", tempDir, "128K") }
@@ -41,7 +41,7 @@ class YouTubeMediaServiceTest {
         coEvery { ytDlpService.downloadAudio("url", tempDir, "128K") } returns tooLargeFile
         coEvery { ytDlpService.downloadAudio("url", tempDir, "96K") } returns validFile
 
-        val actual = service.download("url", metadata(durationSeconds = 60), DownloadOutputType.AUDIO, tempDir)
+        val actual = service.download("url", metadata(durationSeconds = 60), DownloadOutputType.AUDIO, tempDir, 100, 1)
 
         assertEquals(validFile, actual)
         coVerify { ytDlpService.downloadAudio("url", tempDir, "128K") }
@@ -53,7 +53,7 @@ class YouTubeMediaServiceTest {
         val validFile = downloadedFile(tempDir, "audio-96.mp3", TELEGRAM_UPLOAD_LIMIT_BYTES)
         coEvery { ytDlpService.downloadAudio("url", tempDir, "96K") } returns validFile
 
-        val actual = service.download("url", metadata(durationSeconds = 3_600), DownloadOutputType.AUDIO, tempDir)
+        val actual = service.download("url", metadata(durationSeconds = 3_600), DownloadOutputType.AUDIO, tempDir, 100, 1)
 
         assertEquals(validFile, actual)
         coVerify(exactly = 0) { ytDlpService.downloadAudio("url", tempDir, "128K") }
@@ -63,7 +63,7 @@ class YouTubeMediaServiceTest {
     @Test
     fun `fails before download when all audio presets are expected to be too large`(@TempDir tempDir: Path) = runTest {
         assertFailsWith<ExpectedAudioFileTooLargeException> {
-            service.download("url", metadata(durationSeconds = 7_000), DownloadOutputType.AUDIO, tempDir)
+            service.download("url", metadata(durationSeconds = 7_000), DownloadOutputType.AUDIO, tempDir, 100, 1)
         }
 
         coVerify(exactly = 0) { ytDlpService.downloadAudio(any(), any(), any()) }

@@ -6,6 +6,7 @@ import com.nkudrin713.kradnik.download.service.DownloadTaskService
 import com.nkudrin713.kradnik.settings.DownloadMode
 import com.nkudrin713.kradnik.settings.DownloadSettingsDto
 import com.nkudrin713.kradnik.settings.DownloadSettingsService
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.message.Message
@@ -16,9 +17,12 @@ class TelegramUpdateHandler(
     private val downloadSettingsService: DownloadSettingsService,
     private val urlExtractor: UrlExtractor,
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     fun handle(update: Update) {
         val message = update.message ?: return
         val text = message.text ?: return
+        logger.info("CHAT[{}] message received", message.chatId)
 
         when (text.trim()) {
             "/audio" -> setMode(message, DownloadMode.AUDIO)
@@ -34,13 +38,18 @@ class TelegramUpdateHandler(
                 mode = mode.name,
             )
         )
+        logger.info("CHAT[{}] mode set: {}", message.chatId, mode)
     }
 
     private fun createDownloadTask(message: Message, text: String) {
-        val url = urlExtractor.extract(text) ?: return
+        val url = urlExtractor.extract(text)
+        if (url == null) {
+            logger.info("CHAT[{}] no url", message.chatId)
+            return
+        }
         val mode = downloadSettingsService.getMode(message.chatId)
 
-        downloadTaskService.createTask(
+        val task = downloadTaskService.createTask(
             CreateDownloadTaskCommand(
                 telegramUserId = message.from.id,
                 telegramChatId = message.chatId,
@@ -49,6 +58,7 @@ class TelegramUpdateHandler(
                 outputType = mode.toOutputType(),
             )
         )
+        logger.info("CHAT[{}] TASK[{}] queued: type={}", message.chatId, task.id, task.outputType)
     }
 
     private fun normalizeUrl(url: String): String =

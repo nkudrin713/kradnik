@@ -6,6 +6,7 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 import kotlin.io.path.extension
@@ -33,9 +34,13 @@ private const val BESTAUDIO_BEST = "bestaudio/best"
 class YtDlpService(
     private val processRunner: ProcessRunner,
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
 
-    suspend fun extractMetadata(url: String): YtDlpMetadataDto {
+    suspend fun extractMetadata(url: String, chatId: Long? = null, taskId: Long? = null): YtDlpMetadataDto {
+        if (chatId != null && taskId != null) {
+            logger.info("CHAT[{}] TASK[{}] metadata start", chatId, taskId)
+        }
         val result = processRunner.run(
             YtDlpCommand(
                 args = listOf(DUMP_SINGLE_JSON, NO_PLAYLIST, NO_WARNINGS, url),

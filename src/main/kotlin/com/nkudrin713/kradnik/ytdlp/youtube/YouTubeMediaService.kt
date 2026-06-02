@@ -9,6 +9,7 @@ import com.nkudrin713.kradnik.telegram.upload.TelegramFileTooLargeException
 import com.nkudrin713.kradnik.util.byteToMB
 import com.nkudrin713.kradnik.util.estimateAudioSizeBytes
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 import kotlin.io.path.deleteIfExists
@@ -17,6 +18,8 @@ import kotlin.io.path.deleteIfExists
 class YouTubeMediaService(
     private val ytDlpService: YtDlpService,
 ) : MediaSourceService {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     override fun supports(extractor: String?): Boolean =
         extractor == YOUTUBE_EXTRACTOR
 
@@ -25,9 +28,11 @@ class YouTubeMediaService(
         metadata: MediaMetadata,
         outputType: DownloadOutputType,
         outputDir: Path,
+        chatId: Long,
+        taskId: Long,
     ): DownloadedFile =
         when (outputType) {
-            DownloadOutputType.AUDIO -> downloadAudio(url, metadata, outputDir)
+            DownloadOutputType.AUDIO -> downloadAudio(url, metadata, outputDir, chatId, taskId)
             DownloadOutputType.VIDEO -> throw UnsupportedOperationException("YouTube video download is not implemented yet")
         }
 
@@ -35,10 +40,14 @@ class YouTubeMediaService(
         url: String,
         metadata: MediaMetadata,
         outputDir: Path,
+        chatId: Long,
+        taskId: Long,
     ): DownloadedFile {
         for (preset in selectAudioPresets(metadata)) {
+            logger.info("CHAT[{}] TASK[{}] download start", chatId, taskId)
             val downloadedFile = ytDlpService.downloadAudio(url, outputDir, preset.quality)
             if (downloadedFile.sizeBytes <= TELEGRAM_UPLOAD_LIMIT_BYTES) {
+                logger.info("CHAT[{}] TASK[{}] download ok: size={}", chatId, taskId, downloadedFile.sizeBytes)
                 return downloadedFile
             }
             downloadedFile.file.deleteIfExists()

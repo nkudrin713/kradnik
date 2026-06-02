@@ -18,6 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 class YtDlpServiceTest {
@@ -301,7 +302,7 @@ class YtDlpServiceTest {
 
         coEvery { processRunner.run(any()) } returns expectedResult
 
-        val actual = service.downloadVideo("https://example.com", tempDir, 28, "96k")
+        val actual = service.downloadVideo("https://example.com", tempDir, 28, "96k", "veryfast", 720, 8.minutes)
 
         val commandSlot = slot<Command>()
         coVerify { processRunner.run(capture(commandSlot)) }
@@ -316,7 +317,7 @@ class YtDlpServiceTest {
         assertTrue(command.args.contains("--recode-video"))
         assertTrue(command.args.contains("mp4"))
         assertTrue(command.args.contains("--postprocessor-args"))
-        assertTrue(command.args.contains("VideoConvertor:-c:v libx264 -preset veryfast -crf 28 -c:a aac -b:a 96k -movflags +faststart"))
+        assertTrue(command.args.contains("VideoConvertor:-c:v libx264 -preset veryfast -crf 28 -vf scale=-2:'min(ih,720)',setsar=1 -c:a aac -b:a 96k -movflags +faststart"))
         assertTrue(command.args.contains("--print"))
         assertTrue(command.args.contains("after_move:filepath"))
         assertTrue(command.args.contains("https://example.com"))

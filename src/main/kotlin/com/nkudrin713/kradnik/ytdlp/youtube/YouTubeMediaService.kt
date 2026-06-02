@@ -13,6 +13,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 import kotlin.io.path.deleteIfExists
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 @Service
 class YouTubeMediaService(
@@ -65,7 +68,15 @@ class YouTubeMediaService(
     ): DownloadedFile {
         for (preset in selectVideoPresets(metadata)) {
             logger.info("CHAT[{}] TASK[{}] video download start: crf={}", chatId, taskId, preset.crf)
-            val downloadedFile = ytDlpService.downloadVideo(url, outputDir, preset.crf, preset.audioBitrate)
+            val downloadedFile = ytDlpService.downloadVideo(
+                url,
+                outputDir,
+                preset.crf,
+                preset.audioBitrate,
+                preset.ffmpegPreset,
+                preset.maxHeight,
+                preset.timeout,
+            )
             if (downloadedFile.sizeBytes <= TELEGRAM_UPLOAD_LIMIT_BYTES) {
                 logger.info("CHAT[{}] TASK[{}] video download ok: size={}", chatId, taskId, downloadedFile.sizeBytes)
                 return downloadedFile
@@ -93,9 +104,15 @@ class YouTubeMediaService(
         }
 
     private fun selectVideoPresets(metadata: MediaMetadata): List<VideoPreset> {
+        if (metadata.isShortsLike()) {
+            return listOf(VideoPreset.MP4_SHORT)
+        }
+
         val presets = VideoPreset.entries.filter { preset ->
-            metadata.durationSeconds == null ||
+            preset != VideoPreset.MP4_SHORT &&
+                (metadata.durationSeconds == null ||
                 estimateVideoSizeBytes(metadata.durationSeconds, preset.totalBitrateBps) <= TELEGRAM_UPLOAD_LIMIT_BYTES
+                )
         }
 
         return presets.ifEmpty {
@@ -111,6 +128,19 @@ class YouTubeMediaService(
     private fun estimateVideoSizeBytes(durationSeconds: Long, bitrateBps: Long): Long =
         durationSeconds * bitrateBps / BITS_IN_BYTE
 
+    private fun MediaMetadata.isShortsLike(): Boolean =
+        durationSeconds != null &&
+            durationSeconds <= SHORTS_MAX_DURATION_SECONDS &&
+            isVerticalOrSquare()
+
+    private fun MediaMetadata.isVerticalOrSquare(): Boolean {
+        if (width == null || height == null) {
+            return false
+        }
+
+        return height >= width
+    }
+
     private enum class AudioPreset(
         val quality: String,
         val bitrateBps: Long,
@@ -124,15 +154,20 @@ class YouTubeMediaService(
         val crf: Int,
         val audioBitrate: String,
         val totalBitrateBps: Long,
+        val ffmpegPreset: String,
+        val maxHeight: Int?,
+        val timeout: Duration,
     ) {
-        MP4_CRF_28(28, "96k", 1_100_000),
-        MP4_CRF_30(30, "80k", 800_000),
-        MP4_CRF_32(32, "64k", 600_000),
+        MP4_SHORT(30, "80k", 800_000, "ultrafast", 720, 30.seconds),
+        MP4_CRF_28(28, "96k", 1_100_000, "veryfast", 720, 8.minutes),
+        MP4_CRF_30(30, "80k", 800_000, "veryfast", 720, 8.minutes),
+        MP4_CRF_32(32, "64k", 600_000, "veryfast", 720, 8.minutes),
     }
 
     private companion object {
         const val YOUTUBE_EXTRACTOR = "youtube"
         const val BITS_IN_BYTE = 8
+        const val SHORTS_MAX_DURATION_SECONDS = 180L
     }
 }
 

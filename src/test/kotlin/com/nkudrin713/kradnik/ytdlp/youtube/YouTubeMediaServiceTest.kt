@@ -4,6 +4,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadOutputType
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.telegram.upload.TELEGRAM_UPLOAD_LIMIT_BYTES
+import com.nkudrin713.kradnik.telegram.upload.TelegramFileTooLargeException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -15,6 +16,8 @@ import java.nio.file.Path
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 class YouTubeMediaServiceTest {
     private val ytDlpService: YtDlpService = mockk()
@@ -70,41 +73,38 @@ class YouTubeMediaServiceTest {
     }
 
     @Test
-    fun `downloads video with default compression preset`(@TempDir tempDir: Path) = runTest {
+    fun `downloads shorts with fast preset`(@TempDir tempDir: Path) = runTest {
         val downloadedFile = downloadedFile(tempDir, "video.mp4", TELEGRAM_UPLOAD_LIMIT_BYTES)
-        coEvery { ytDlpService.downloadVideo("url", tempDir, 28, "96k") } returns downloadedFile
+        coEvery { ytDlpService.downloadVideo("url", tempDir, 30, "80k", "ultrafast", 720, 30.seconds) } returns downloadedFile
 
-        val actual = service.download("url", metadata(durationSeconds = 60), DownloadOutputType.VIDEO, tempDir, 100, 1)
+        val actual = service.download("url", metadata(durationSeconds = 180, width = 720, height = 1280), DownloadOutputType.VIDEO, tempDir, 100, 1)
 
         assertEquals(downloadedFile, actual)
-        coVerify { ytDlpService.downloadVideo("url", tempDir, 28, "96k") }
+        coVerify { ytDlpService.downloadVideo("url", tempDir, 30, "80k", "ultrafast", 720, 30.seconds) }
     }
 
     @Test
-    fun `tries next video preset when downloaded file is too large`(@TempDir tempDir: Path) = runTest {
+    fun `short video fails after one fast preset if downloaded file is too large`(@TempDir tempDir: Path) = runTest {
         val tooLargeFile = downloadedFile(tempDir, "video-28.mp4", TELEGRAM_UPLOAD_LIMIT_BYTES + 1)
-        val validFile = downloadedFile(tempDir, "video-30.mp4", TELEGRAM_UPLOAD_LIMIT_BYTES)
 
-        coEvery { ytDlpService.downloadVideo("url", tempDir, 28, "96k") } returns tooLargeFile
-        coEvery { ytDlpService.downloadVideo("url", tempDir, 30, "80k") } returns validFile
+        coEvery { ytDlpService.downloadVideo("url", tempDir, 30, "80k", "ultrafast", 720, 30.seconds) } returns tooLargeFile
 
-        val actual = service.download("url", metadata(durationSeconds = 60), DownloadOutputType.VIDEO, tempDir, 100, 1)
-
-        assertEquals(validFile, actual)
-        coVerify { ytDlpService.downloadVideo("url", tempDir, 28, "96k") }
-        coVerify { ytDlpService.downloadVideo("url", tempDir, 30, "80k") }
+        assertFailsWith<TelegramFileTooLargeException> {
+            service.download("url", metadata(durationSeconds = 60, width = 720, height = 1280), DownloadOutputType.VIDEO, tempDir, 100, 1)
+        }
+        coVerify { ytDlpService.downloadVideo("url", tempDir, 30, "80k", "ultrafast", 720, 30.seconds) }
     }
 
     @Test
     fun `skips video preset when expected file is too large`(@TempDir tempDir: Path) = runTest {
         val validFile = downloadedFile(tempDir, "video-30.mp4", TELEGRAM_UPLOAD_LIMIT_BYTES)
-        coEvery { ytDlpService.downloadVideo("url", tempDir, 30, "80k") } returns validFile
+        coEvery { ytDlpService.downloadVideo("url", tempDir, 30, "80k", "veryfast", 720, 8.minutes) } returns validFile
 
         val actual = service.download("url", metadata(durationSeconds = 400), DownloadOutputType.VIDEO, tempDir, 100, 1)
 
         assertEquals(validFile, actual)
-        coVerify(exactly = 0) { ytDlpService.downloadVideo("url", tempDir, 28, "96k") }
-        coVerify { ytDlpService.downloadVideo("url", tempDir, 30, "80k") }
+        coVerify(exactly = 0) { ytDlpService.downloadVideo("url", tempDir, 28, "96k", "veryfast", 720, 8.minutes) }
+        coVerify { ytDlpService.downloadVideo("url", tempDir, 30, "80k", "veryfast", 720, 8.minutes) }
     }
 
     @Test
@@ -113,14 +113,16 @@ class YouTubeMediaServiceTest {
             service.download("url", metadata(durationSeconds = 701), DownloadOutputType.VIDEO, tempDir, 100, 1)
         }
 
-        coVerify(exactly = 0) { ytDlpService.downloadVideo(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { ytDlpService.downloadVideo(any(), any(), any(), any(), any(), any(), any()) }
     }
 
-    private fun metadata(durationSeconds: Long): MediaMetadata =
+    private fun metadata(durationSeconds: Long, width: Int? = 1920, height: Int? = 1080): MediaMetadata =
         MediaMetadata(
             title = "title",
             extractor = "youtube",
             durationSeconds = durationSeconds,
+            width = width,
+            height = height,
             webpageUrl = "url",
         )
 

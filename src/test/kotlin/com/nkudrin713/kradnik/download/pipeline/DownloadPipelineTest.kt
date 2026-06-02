@@ -100,6 +100,8 @@ class DownloadPipelineTest {
             title = "title",
             extractor = "youtube",
             durationSeconds = 10,
+            width = 1920,
+            height = 1080,
             webpageUrl = "https://example.com",
         )
 
@@ -112,8 +114,8 @@ class DownloadPipelineTest {
             thumbnail = null,
             duration = 10,
             ext = null,
-            width = null,
-            height = null,
+            width = 1920,
+            height = 1080,
             fps = null,
             filesize = null,
             vcodec = null,

@@ -75,5 +75,7 @@ private fun YtDlpMetadataDto.toMediaMetadata(): MediaMetadata =
         title = title,
         extractor = extractor,
         durationSeconds = duration?.toLong(),
+        width = width,
+        height = height,
         webpageUrl = webpageUrl,
     )

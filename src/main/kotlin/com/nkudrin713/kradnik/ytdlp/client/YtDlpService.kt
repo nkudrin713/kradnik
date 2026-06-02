@@ -12,6 +12,7 @@ import java.nio.file.Path
 import kotlin.io.path.extension
 import kotlin.io.path.fileSize
 import kotlin.io.path.isRegularFile
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -97,7 +98,16 @@ class YtDlpService(
         )
     }
 
-    suspend fun downloadVideo(url: String, outputDir: Path, crf: Int, audioBitrate: String): DownloadedFile {
+    suspend fun downloadVideo(
+        url: String,
+        outputDir: Path,
+        crf: Int,
+        audioBitrate: String,
+        ffmpegPreset: String,
+        maxHeight: Int?,
+        timeout: Duration,
+    ): DownloadedFile {
+        val videoFilter = maxHeight?.let { " -vf scale=-2:'min(ih,$it)',setsar=1" }.orEmpty()
         val args = listOf(
             NO_PLAYLIST,
             NO_WARNINGS,
@@ -106,7 +116,7 @@ class YtDlpService(
             RECODE_VIDEO,
             MP4,
             POSTPROCESSOR_ARGS,
-            "VideoConvertor:-c:v libx264 -preset veryfast -crf $crf -c:a aac -b:a $audioBitrate -movflags +faststart",
+            "VideoConvertor:-c:v libx264 -preset $ffmpegPreset -crf $crf$videoFilter -c:a aac -b:a $audioBitrate -movflags +faststart",
             OUTPUT,
             TITLE_EXT,
             RESTRICT_FILENAMES,
@@ -118,7 +128,7 @@ class YtDlpService(
             YtDlpCommand(
                 args = args,
                 workingDir = outputDir,
-                timeout = 8.minutes,
+                timeout = timeout,
             )
         )
 

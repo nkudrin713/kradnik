@@ -69,6 +69,53 @@ class YouTubeMediaServiceTest {
         coVerify(exactly = 0) { ytDlpService.downloadAudio(any(), any(), any()) }
     }
 
+    @Test
+    fun `downloads video with default compression preset`(@TempDir tempDir: Path) = runTest {
+        val downloadedFile = downloadedFile(tempDir, "video.mp4", TELEGRAM_UPLOAD_LIMIT_BYTES)
+        coEvery { ytDlpService.downloadVideo("url", tempDir, 28, "96k") } returns downloadedFile
+
+        val actual = service.download("url", metadata(durationSeconds = 60), DownloadOutputType.VIDEO, tempDir, 100, 1)
+
+        assertEquals(downloadedFile, actual)
+        coVerify { ytDlpService.downloadVideo("url", tempDir, 28, "96k") }
+    }
+
+    @Test
+    fun `tries next video preset when downloaded file is too large`(@TempDir tempDir: Path) = runTest {
+        val tooLargeFile = downloadedFile(tempDir, "video-28.mp4", TELEGRAM_UPLOAD_LIMIT_BYTES + 1)
+        val validFile = downloadedFile(tempDir, "video-30.mp4", TELEGRAM_UPLOAD_LIMIT_BYTES)
+
+        coEvery { ytDlpService.downloadVideo("url", tempDir, 28, "96k") } returns tooLargeFile
+        coEvery { ytDlpService.downloadVideo("url", tempDir, 30, "80k") } returns validFile
+
+        val actual = service.download("url", metadata(durationSeconds = 60), DownloadOutputType.VIDEO, tempDir, 100, 1)
+
+        assertEquals(validFile, actual)
+        coVerify { ytDlpService.downloadVideo("url", tempDir, 28, "96k") }
+        coVerify { ytDlpService.downloadVideo("url", tempDir, 30, "80k") }
+    }
+
+    @Test
+    fun `skips video preset when expected file is too large`(@TempDir tempDir: Path) = runTest {
+        val validFile = downloadedFile(tempDir, "video-30.mp4", TELEGRAM_UPLOAD_LIMIT_BYTES)
+        coEvery { ytDlpService.downloadVideo("url", tempDir, 30, "80k") } returns validFile
+
+        val actual = service.download("url", metadata(durationSeconds = 800), DownloadOutputType.VIDEO, tempDir, 100, 1)
+
+        assertEquals(validFile, actual)
+        coVerify(exactly = 0) { ytDlpService.downloadVideo("url", tempDir, 28, "96k") }
+        coVerify { ytDlpService.downloadVideo("url", tempDir, 30, "80k") }
+    }
+
+    @Test
+    fun `fails before download when all video presets are expected to be too large`(@TempDir tempDir: Path) = runTest {
+        assertFailsWith<ExpectedVideoFileTooLargeException> {
+            service.download("url", metadata(durationSeconds = 1_200), DownloadOutputType.VIDEO, tempDir, 100, 1)
+        }
+
+        coVerify(exactly = 0) { ytDlpService.downloadVideo(any(), any(), any(), any()) }
+    }
+
     private fun metadata(durationSeconds: Long): MediaMetadata =
         MediaMetadata(
             title = "title",

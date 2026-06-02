@@ -22,13 +22,17 @@ private const val FORMAT = "-f"
 private const val EXTRACT_AUDIO = "-x"
 private const val AUDIO_FORMAT = "--audio-format"
 private const val AUDIO_QUALITY = "--audio-quality"
+private const val RECODE_VIDEO = "--recode-video"
+private const val POSTPROCESSOR_ARGS = "--postprocessor-args"
 private const val OUTPUT = "-o"
 private const val RESTRICT_FILENAMES = "--restrict-filenames"
 private const val TITLE_EXT = "%(title)s.%(ext)s"
 private const val PRINT = "--print"
 private const val FINAL_FILEPATH = "after_move:filepath"
 private const val MP3 = "mp3"
+private const val MP4 = "mp4"
 private const val BESTAUDIO_BEST = "bestaudio/best"
+private const val BEST_VIDEO_AUDIO = "bv*+ba/b"
 
 @Service
 class YtDlpService(
@@ -93,13 +97,49 @@ class YtDlpService(
         )
     }
 
-    private fun getDownloadedFile(output: String): Path {
+    suspend fun downloadVideo(url: String, outputDir: Path, crf: Int, audioBitrate: String): DownloadedFile {
+        val args = listOf(
+            NO_PLAYLIST,
+            NO_WARNINGS,
+            FORMAT,
+            BEST_VIDEO_AUDIO,
+            RECODE_VIDEO,
+            MP4,
+            POSTPROCESSOR_ARGS,
+            "VideoConvertor:-c:v libx264 -preset slow -crf $crf -c:a aac -b:a $audioBitrate -movflags +faststart",
+            OUTPUT,
+            TITLE_EXT,
+            RESTRICT_FILENAMES,
+            PRINT,
+            FINAL_FILEPATH,
+            url
+        )
+        val result = processRunner.run(
+            YtDlpCommand(
+                args = args,
+                workingDir = outputDir,
+                timeout = 20.minutes,
+            )
+        )
+
+        handleBaseErrors("video download", result)
+
+        val file = getDownloadedFile(result.output, "video download")
+        return DownloadedFile(
+            file = file,
+            ext = file.extension,
+            sizeBytes = file.fileSize(),
+            args = args,
+        )
+    }
+
+    private fun getDownloadedFile(output: String, operation: String = "audio download"): Path {
         val path = output.lineSequence().lastOrNull(String::isNotBlank)
-            ?: throw YtDlpException("yt-dlp audio download did not print final filepath")
+            ?: throw YtDlpException("yt-dlp $operation did not print final filepath")
         val file = kotlin.io.path.Path(path)
 
         if (!file.isRegularFile()) {
-            throw YtDlpException("yt-dlp audio download file not found: $path")
+            throw YtDlpException("yt-dlp $operation file not found: $path")
         }
 
         return file

@@ -9,7 +9,9 @@ import io.mockk.verify
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.telegram.telegrambots.meta.api.methods.send.SendAudio
+import org.telegram.telegrambots.meta.api.methods.send.SendVideo
 import org.telegram.telegrambots.meta.api.objects.Audio
+import org.telegram.telegrambots.meta.api.objects.Video
 import org.telegram.telegrambots.meta.api.objects.message.Message
 import org.telegram.telegrambots.meta.generics.TelegramClient
 import java.nio.file.Path
@@ -79,12 +81,35 @@ class TelegramFileUploaderTest {
         assertEquals("attach://Bad File Name.mp3", slot.captured.audio.attachName)
     }
 
-    private fun downloadedFile(tempDir: Path, sizeBytes: Long): DownloadedFile {
-        val file = tempDir.resolve("audio.mp3")
+    @Test
+    fun `uploads video`(@TempDir tempDir: Path) {
+        val downloadedFile = downloadedFile(tempDir, "video.mp4", sizeBytes = 5)
+        val video: Video = mockk()
+        val message: Message = mockk()
+        val slot = slot<SendVideo>()
+
+        every { video.fileId } returns "video-id"
+        every { video.fileSize } returns 5
+        every { message.video } returns video
+        every { telegramClient.execute(capture(slot)) } returns message
+
+        val actual = uploader.upload(100, 1, DownloadOutputType.VIDEO, downloadedFile, "Video title")
+
+        assertEquals("video-id", actual.fileId)
+        assertEquals(5, actual.fileSize)
+        assertEquals("attach://Video title.mp4", slot.captured.video.attachName)
+        assertEquals(true, slot.captured.supportsStreaming)
+    }
+
+    private fun downloadedFile(tempDir: Path, sizeBytes: Long): DownloadedFile =
+        downloadedFile(tempDir, "audio.mp3", sizeBytes)
+
+    private fun downloadedFile(tempDir: Path, name: String, sizeBytes: Long): DownloadedFile {
+        val file = tempDir.resolve(name)
         file.writeText("audio")
         return DownloadedFile(
             file = file,
-            ext = "mp3",
+            ext = file.fileName.toString().substringAfterLast("."),
             sizeBytes = sizeBytes,
             args = emptyList(),
         )

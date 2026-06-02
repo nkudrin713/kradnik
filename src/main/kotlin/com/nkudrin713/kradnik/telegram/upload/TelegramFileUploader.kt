@@ -7,6 +7,7 @@ import com.nkudrin713.kradnik.util.byteToMB
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.telegram.telegrambots.meta.api.methods.send.SendAudio
+import org.telegram.telegrambots.meta.api.methods.send.SendVideo
 import org.telegram.telegrambots.meta.api.objects.InputFile
 import org.telegram.telegrambots.meta.generics.TelegramClient
 
@@ -32,7 +33,7 @@ class TelegramFileUploader(
         logger.info("CHAT[{}] TASK[{}] upload start", chatId, taskId)
         return when (outputType) {
             DownloadOutputType.AUDIO -> uploadAudio(chatId, downloadedFile, sourceTitle)
-            DownloadOutputType.VIDEO -> throw UnsupportedTelegramUploadException(outputType)
+            DownloadOutputType.VIDEO -> uploadVideo(chatId, downloadedFile, sourceTitle)
         }
     }
 
@@ -51,6 +52,25 @@ class TelegramFileUploader(
         return TelegramFileResult(
             fileId = audio.fileId,
             fileSize = audio.fileSize ?: downloadedFile.sizeBytes,
+        )
+    }
+
+    private fun uploadVideo(chatId: Long, downloadedFile: DownloadedFile, sourceTitle: String?): TelegramFileResult {
+        val fileName = telegramFileName(sourceTitle, downloadedFile)
+        logger.info("CHAT[{}] telegram sendVideo: file={}", chatId, fileName)
+        val message = telegramClient.execute(
+            SendVideo.builder()
+                .chatId(chatId)
+                .video(InputFile(downloadedFile.file.toFile(), fileName))
+                .supportsStreaming(true)
+                .build()
+        )
+
+        val video = message.video ?: throw TelegramUploadException("Telegram response does not contain video")
+
+        return TelegramFileResult(
+            fileId = video.fileId,
+            fileSize = video.fileSize ?: downloadedFile.sizeBytes,
         )
     }
 

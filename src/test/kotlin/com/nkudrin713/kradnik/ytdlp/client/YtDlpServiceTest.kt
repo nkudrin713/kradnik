@@ -288,6 +288,40 @@ class YtDlpServiceTest {
         assertTrue(command.args.contains("https://example.com"))
     }
 
+    @Test
+    fun downloadVideoBuildsExpectedCommand(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("video.mp4")
+        file.writeText("video")
+        val expectedResult = ProcessExecutionResult(
+            output = file.absolutePathString(),
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds
+        )
+
+        coEvery { processRunner.run(any()) } returns expectedResult
+
+        val actual = service.downloadVideo("https://example.com", tempDir, 28, "96k")
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+
+        val command = commandSlot.captured
+        assertEquals(file, actual.file)
+        assertEquals("mp4", actual.ext)
+        assertEquals("yt-dlp", command.executable)
+        assertEquals(tempDir, command.workingDir)
+        assertTrue(command.args.contains("-f"))
+        assertTrue(command.args.contains("bv*+ba/b"))
+        assertTrue(command.args.contains("--recode-video"))
+        assertTrue(command.args.contains("mp4"))
+        assertTrue(command.args.contains("--postprocessor-args"))
+        assertTrue(command.args.contains("VideoConvertor:-c:v libx264 -preset slow -crf 28 -c:a aac -b:a 96k -movflags +faststart"))
+        assertTrue(command.args.contains("--print"))
+        assertTrue(command.args.contains("after_move:filepath"))
+        assertTrue(command.args.contains("https://example.com"))
+    }
+
     private suspend fun downloadAudio(tempDir: Path) =
         service.downloadAudio("https://example.com", tempDir, "128K")
 

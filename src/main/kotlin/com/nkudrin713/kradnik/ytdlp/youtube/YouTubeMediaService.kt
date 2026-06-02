@@ -33,7 +33,7 @@ class YouTubeMediaService(
     ): DownloadedFile =
         when (outputType) {
             DownloadOutputType.AUDIO -> downloadAudio(url, metadata, outputDir, chatId, taskId)
-            DownloadOutputType.VIDEO -> throw UnsupportedOperationException("YouTube video download is not implemented yet")
+            DownloadOutputType.VIDEO -> downloadVideo(url, metadata, outputDir, chatId, taskId)
         }
 
     private suspend fun downloadAudio(
@@ -48,6 +48,26 @@ class YouTubeMediaService(
             val downloadedFile = ytDlpService.downloadAudio(url, outputDir, preset.quality)
             if (downloadedFile.sizeBytes <= TELEGRAM_UPLOAD_LIMIT_BYTES) {
                 logger.info("CHAT[{}] TASK[{}] download ok: size={}", chatId, taskId, downloadedFile.sizeBytes)
+                return downloadedFile
+            }
+            downloadedFile.file.deleteIfExists()
+        }
+
+        throw TelegramFileTooLargeException(TELEGRAM_UPLOAD_LIMIT_BYTES + 1, TELEGRAM_UPLOAD_LIMIT_BYTES)
+    }
+
+    private suspend fun downloadVideo(
+        url: String,
+        metadata: MediaMetadata,
+        outputDir: Path,
+        chatId: Long,
+        taskId: Long,
+    ): DownloadedFile {
+        for (preset in selectVideoPresets(metadata)) {
+            logger.info("CHAT[{}] TASK[{}] video download start: crf={}", chatId, taskId, preset.crf)
+            val downloadedFile = ytDlpService.downloadVideo(url, outputDir, preset.crf, preset.audioBitrate)
+            if (downloadedFile.sizeBytes <= TELEGRAM_UPLOAD_LIMIT_BYTES) {
+                logger.info("CHAT[{}] TASK[{}] video download ok: size={}", chatId, taskId, downloadedFile.sizeBytes)
                 return downloadedFile
             }
             downloadedFile.file.deleteIfExists()
@@ -72,6 +92,25 @@ class YouTubeMediaService(
             estimateAudioSizeBytes(it, AudioPreset.MP3_64K.bitrateBps)
         }
 
+    private fun selectVideoPresets(metadata: MediaMetadata): List<VideoPreset> {
+        val presets = VideoPreset.entries.filter { preset ->
+            metadata.durationSeconds == null ||
+                estimateVideoSizeBytes(metadata.durationSeconds, preset.totalBitrateBps) <= TELEGRAM_UPLOAD_LIMIT_BYTES
+        }
+
+        return presets.ifEmpty {
+            throw ExpectedVideoFileTooLargeException(expectedMinVideoSizeBytes(metadata))
+        }
+    }
+
+    private fun expectedMinVideoSizeBytes(metadata: MediaMetadata): Long? =
+        metadata.durationSeconds?.let {
+            estimateVideoSizeBytes(it, VideoPreset.MP4_CRF_32.totalBitrateBps)
+        }
+
+    private fun estimateVideoSizeBytes(durationSeconds: Long, bitrateBps: Long): Long =
+        durationSeconds * bitrateBps / BITS_IN_BYTE
+
     private enum class AudioPreset(
         val quality: String,
         val bitrateBps: Long,
@@ -81,8 +120,19 @@ class YouTubeMediaService(
         MP3_64K("64K", 64_000),
     }
 
+    private enum class VideoPreset(
+        val crf: Int,
+        val audioBitrate: String,
+        val totalBitrateBps: Long,
+    ) {
+        MP4_CRF_28(28, "96k", 650_000),
+        MP4_CRF_30(30, "80k", 500_000),
+        MP4_CRF_32(32, "64k", 380_000),
+    }
+
     private companion object {
         const val YOUTUBE_EXTRACTOR = "youtube"
+        const val BITS_IN_BYTE = 8
     }
 }
 
@@ -92,5 +142,14 @@ class ExpectedAudioFileTooLargeException(expectedSizeBytes: Long?) :
             "Expected audio file is too large. Limit is ${byteToMB(TELEGRAM_UPLOAD_LIMIT_BYTES)} MB"
         } else {
             "Expected audio file is too large: ${byteToMB(expectedSizeBytes)} MB. Limit is ${byteToMB(TELEGRAM_UPLOAD_LIMIT_BYTES)} MB"
+        }
+    )
+
+class ExpectedVideoFileTooLargeException(expectedSizeBytes: Long?) :
+    RuntimeException(
+        if (expectedSizeBytes == null) {
+            "Expected video file is too large. Limit is ${byteToMB(TELEGRAM_UPLOAD_LIMIT_BYTES)} MB"
+        } else {
+            "Expected video file is too large: ${byteToMB(expectedSizeBytes)} MB. Limit is ${byteToMB(TELEGRAM_UPLOAD_LIMIT_BYTES)} MB"
         }
     )

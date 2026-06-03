@@ -1,5 +1,7 @@
 package com.nkudrin713.kradnik.ytdlp.client
 
+import com.nkudrin713.kradnik.download.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -18,7 +20,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 class YtDlpServiceTest {
@@ -29,7 +30,7 @@ class YtDlpServiceTest {
     )
 
     @Test
-    fun success() = runTest {
+    fun extractMetadataSuccess() = runTest {
         val output = """
             {
               "id": "video-id",
@@ -44,17 +45,15 @@ class YtDlpServiceTest {
               "format_id": "399+251"
             }
         """.trimIndent()
-        val expectedResult = ProcessExecutionResult(
+
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = output,
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds
+            duration = 5.seconds,
         )
 
-        coEvery { processRunner.run(any()) } returns expectedResult
-
-        val url = "url"
-        val actual = service.extractMetadata(url)
+        val actual = service.extractMetadata("https://example.com")
 
         assertEquals("video-id", actual.id)
         assertEquals("Test video", actual.title)
@@ -68,15 +67,13 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun ignoresUnknownMetadataFields() = runTest {
-        val expectedResult = ProcessExecutionResult(
+    fun extractMetadataIgnoresUnknownFields() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = """{"id":"video-id","title":"Test video","formats":[{"format_id":"1"}]}""",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds
+            duration = 5.seconds,
         )
-
-        coEvery { processRunner.run(any()) } returns expectedResult
 
         val actual = service.extractMetadata("https://example.com")
 
@@ -85,15 +82,13 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun timeout() = runTest {
-        val expectedResult = ProcessExecutionResult(
+    fun extractMetadataTimeout() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = "",
             timedOut = true,
             exitCode = null,
-            duration = 5.seconds
+            duration = 5.seconds,
         )
-
-        coEvery { processRunner.run(any()) } returns expectedResult
 
         val exception = assertFailsWith<YtDlpException> {
             service.extractMetadata("https://example.com")
@@ -103,15 +98,13 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun failure() = runTest {
-        val expectedResult = ProcessExecutionResult(
+    fun extractMetadataFailure() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = "yt-dlp error",
             timedOut = false,
             exitCode = 1,
-            duration = 5.seconds
+            duration = 5.seconds,
         )
-
-        coEvery { processRunner.run(any()) } returns expectedResult
 
         val exception = assertFailsWith<YtDlpException> {
             service.extractMetadata("https://example.com")
@@ -122,15 +115,13 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun emptyOutput() = runTest {
-        val expectedResult = ProcessExecutionResult(
+    fun extractMetadataEmptyOutput() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = "",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds
+            duration = 5.seconds,
         )
-
-        coEvery { processRunner.run(any()) } returns expectedResult
 
         val exception = assertFailsWith<YtDlpException> {
             service.extractMetadata("https://example.com")
@@ -140,190 +131,115 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun downloadAudioSuccess(@TempDir tempDir: Path) = runTest {
-        val file = tempDir.resolve("audio.mp3")
-        file.writeText("audio")
-        val expectedResult = ProcessExecutionResult(
+    fun downloadSuccess(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("video.mp4")
+        file.writeText("video")
+
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = file.absolutePathString(),
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds
+            duration = 5.seconds,
         )
 
-        coEvery { processRunner.run(any()) } returns expectedResult
-
-        val actual = downloadAudio(tempDir)
+        val actual = service.download(testRequest(), tempDir)
 
         assertEquals(file, actual.file)
-        assertEquals("mp3", actual.ext)
         assertEquals(file.fileSize(), actual.sizeBytes)
-        assertTrue(actual.args.contains("https://example.com"))
     }
 
     @Test
-    fun downloadAudioTimeout(@TempDir tempDir: Path) = runTest {
-        val expectedResult = ProcessExecutionResult(
-            output = "",
-            timedOut = true,
-            exitCode = null,
-            duration = 5.seconds
-        )
+    fun downloadBuildsExpectedCommand(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("video.mp4")
+        file.writeText("video")
 
-        coEvery { processRunner.run(any()) } returns expectedResult
-
-        val exception = assertFailsWith<YtDlpException> {
-            downloadAudio(tempDir)
-        }
-
-        assertTrue(exception.message!!.contains("timed out"))
-    }
-
-    @Test
-    fun downloadAudioFailure(@TempDir tempDir: Path) = runTest {
-        val expectedResult = ProcessExecutionResult(
-            output = "yt-dlp error",
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = file.absolutePathString(),
             timedOut = false,
-            exitCode = 1,
-            duration = 5.seconds
+            exitCode = 0,
+            duration = 5.seconds,
         )
 
-        coEvery { processRunner.run(any()) } returns expectedResult
+        service.download(testRequest(), tempDir)
 
-        val exception = assertFailsWith<YtDlpException> {
-            downloadAudio(tempDir)
-        }
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
 
-        assertTrue(exception.message!!.contains("failed"))
-        assertTrue(exception.message!!.contains("yt-dlp error"))
+        val command = commandSlot.captured
+        assertEquals("yt-dlp", command.executable)
+        assertEquals(tempDir, command.workingDir)
+        assertTrue(command.args.contains("-f"))
+        assertTrue(command.args.contains("bv*+ba/b"))
+        assertTrue(command.args.contains("--print"))
+        assertTrue(command.args.contains("after_move:filepath"))
+        assertTrue(command.args.contains("--merge-output-format"))
+        assertTrue(command.args.contains("mp4"))
+        assertTrue(command.args.contains("https://example.com"))
     }
 
     @Test
-    fun downloadAudioMissingFilepath(@TempDir tempDir: Path) = runTest {
-        val expectedResult = ProcessExecutionResult(
+    fun downloadUsesLastOutputLineAsFilepath(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("video.mp4")
+        file.writeText("video")
+
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = """
+                log line
+
+                ${file.absolutePathString()}
+            """.trimIndent(),
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        val actual = service.download(testRequest(), tempDir)
+
+        assertEquals(file, actual.file)
+    }
+
+    @Test
+    fun downloadMissingFilepath(@TempDir tempDir: Path) = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = "",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds
+            duration = 5.seconds,
         )
 
-        coEvery { processRunner.run(any()) } returns expectedResult
-
         val exception = assertFailsWith<YtDlpException> {
-            downloadAudio(tempDir)
+            service.download(testRequest(), tempDir)
         }
 
         assertTrue(exception.message!!.contains("did not print final filepath"))
     }
 
     @Test
-    fun downloadAudioFileNotFound(@TempDir tempDir: Path) = runTest {
-        val missingFile = tempDir.resolve("missing.mp3")
-        val expectedResult = ProcessExecutionResult(
+    fun downloadFileNotFound(@TempDir tempDir: Path) = runTest {
+        val missingFile = tempDir.resolve("missing.mp4")
+
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = missingFile.absolutePathString(),
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds
+            duration = 5.seconds,
         )
 
-        coEvery { processRunner.run(any()) } returns expectedResult
-
         val exception = assertFailsWith<YtDlpException> {
-            downloadAudio(tempDir)
+            service.download(testRequest(), tempDir)
         }
 
         assertTrue(exception.message!!.contains("file not found"))
     }
 
-    @Test
-    fun downloadAudioUsesLastOutputLineAsFilepath(@TempDir tempDir: Path) = runTest {
-        val file = tempDir.resolve("audio.mp3")
-        file.writeText("audio")
-        val expectedResult = ProcessExecutionResult(
-            output = """
-                log line
-                
-                ${file.absolutePathString()}
-            """.trimIndent(),
-            timedOut = false,
-            exitCode = 0,
-            duration = 5.seconds
+    private fun testRequest(): DownloadRequest {
+        return DownloadRequest(
+            originalUrl = "https://example.com",
+            normalizedUrl = "https://example.com",
+            outputType = OutputType.VIDEO,
+            formatSelector = "bv*+ba/b",
+            extraArgs = listOf("--merge-output-format", "mp4"),
+            presetName = "test",
         )
-
-        coEvery { processRunner.run(any()) } returns expectedResult
-
-        val actual = downloadAudio(tempDir)
-
-        assertEquals(file, actual.file)
     }
-
-    @Test
-    fun downloadAudioBuildsExpectedCommand(@TempDir tempDir: Path) = runTest {
-        val file = tempDir.resolve("audio.mp3")
-        file.writeText("audio")
-        val expectedResult = ProcessExecutionResult(
-            output = file.absolutePathString(),
-            timedOut = false,
-            exitCode = 0,
-            duration = 5.seconds
-        )
-
-        coEvery { processRunner.run(any()) } returns expectedResult
-
-        downloadAudio(tempDir)
-
-        val commandSlot = slot<Command>()
-        coVerify { processRunner.run(capture(commandSlot)) }
-
-        val command = commandSlot.captured
-        assertEquals("yt-dlp", command.executable)
-        assertEquals(tempDir, command.workingDir)
-        assertTrue(command.args.contains("-f"))
-        assertTrue(command.args.contains("bestaudio/best"))
-        assertTrue(command.args.contains("-x"))
-        assertTrue(command.args.contains("--audio-format"))
-        assertTrue(command.args.contains("mp3"))
-        assertTrue(command.args.contains("--audio-quality"))
-        assertTrue(command.args.contains("128K"))
-        assertTrue(command.args.contains("--print"))
-        assertTrue(command.args.contains("after_move:filepath"))
-        assertTrue(command.args.contains("https://example.com"))
-    }
-
-    @Test
-    fun downloadVideoBuildsExpectedCommand(@TempDir tempDir: Path) = runTest {
-        val file = tempDir.resolve("video.mp4")
-        file.writeText("video")
-        val expectedResult = ProcessExecutionResult(
-            output = file.absolutePathString(),
-            timedOut = false,
-            exitCode = 0,
-            duration = 5.seconds
-        )
-
-        coEvery { processRunner.run(any()) } returns expectedResult
-
-        val actual = service.downloadVideo("https://example.com", tempDir, 28, "96k", "veryfast", 8.minutes)
-
-        val commandSlot = slot<Command>()
-        coVerify { processRunner.run(capture(commandSlot)) }
-
-        val command = commandSlot.captured
-        assertEquals(file, actual.file)
-        assertEquals("mp4", actual.ext)
-        assertEquals("yt-dlp", command.executable)
-        assertEquals(tempDir, command.workingDir)
-        assertTrue(command.args.contains("-f"))
-        assertTrue(command.args.contains("bv*+ba/b"))
-        assertTrue(command.args.contains("--recode-video"))
-        assertTrue(command.args.contains("mp4"))
-        assertTrue(command.args.contains("--postprocessor-args"))
-        assertTrue(command.args.contains("VideoConvertor:-c:v libx264 -preset veryfast -crf 28 -vf setsar=1 -c:a aac -b:a 96k -movflags +faststart"))
-        assertTrue(command.args.contains("--print"))
-        assertTrue(command.args.contains("after_move:filepath"))
-        assertTrue(command.args.contains("https://example.com"))
-    }
-
-    private suspend fun downloadAudio(tempDir: Path) =
-        service.downloadAudio("https://example.com", tempDir, "128K")
-
 }

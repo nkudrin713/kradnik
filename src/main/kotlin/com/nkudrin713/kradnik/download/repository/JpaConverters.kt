@@ -1,24 +1,24 @@
 package com.nkudrin713.kradnik.download.repository
 
-import com.nkudrin713.kradnik.download.domain.DownloadOutputType
-import com.nkudrin713.kradnik.download.domain.DownloadTaskStatus
+import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
+import com.nkudrin713.kradnik.download.domain.OutputType
 import jakarta.persistence.AttributeConverter
 import jakarta.persistence.Converter
 
 @Converter
-class DownloadOutputTypeConverter : AttributeConverter<DownloadOutputType, String> {
-	override fun convertToDatabaseColumn(attribute: DownloadOutputType?): String? =
+class DownloadOutputTypeConverter : AttributeConverter<OutputType, String> {
+	override fun convertToDatabaseColumn(attribute: OutputType?): String? =
 		attribute?.dbValue
 
-	override fun convertToEntityAttribute(dbData: String?): DownloadOutputType? =
-		dbData?.let(DownloadOutputType::fromDb)
+	override fun convertToEntityAttribute(dbData: String?): OutputType? =
+		dbData?.let(OutputType::fromDb)
 }
 
 @Converter
-class DownloadTaskStatusConverter : AttributeConverter<DownloadTaskStatus, String> {
-	override fun convertToDatabaseColumn(attribute: DownloadTaskStatus?): String? =
+class DownloadJobStatusConverter : AttributeConverter<DownloadJobStatus, String> {
+	override fun convertToDatabaseColumn(attribute: DownloadJobStatus?): String? =
 		attribute?.dbValue
 
-	override fun convertToEntityAttribute(dbData: String?): DownloadTaskStatus? =
-		dbData?.let(DownloadTaskStatus::fromDb)
+	override fun convertToEntityAttribute(dbData: String?): DownloadJobStatus? =
+		dbData?.let(DownloadJobStatus::fromDb)
 }

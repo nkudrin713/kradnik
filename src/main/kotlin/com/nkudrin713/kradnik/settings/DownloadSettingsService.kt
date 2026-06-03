@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.settings
 
+import com.nkudrin713.kradnik.download.domain.OutputType
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -8,12 +9,12 @@ class DownloadSettingsService(
 	private val downloadSettingsRepository: DownloadSettingsRepository,
 ) {
 	@Transactional(readOnly = true)
-	fun getMode(chatId: Long): DownloadMode =
-		downloadSettingsRepository.findByChatId(chatId)?.mode ?: DownloadMode.AUDIO
+	fun getOutputType(chatId: Long): OutputType =
+		downloadSettingsRepository.findByChatId(chatId)?.mode ?: OutputType.VIDEO
 
 	@Transactional
 	fun setMode(dto: DownloadSettingsDto): DownloadSettings {
-		val mode = DownloadMode.valueOf(dto.mode)
+		val mode = OutputType.fromDb(dto.mode)
 		val settings = downloadSettingsRepository.findByChatId(dto.chatId)
 			?: return downloadSettingsRepository.save(
 				DownloadSettings(

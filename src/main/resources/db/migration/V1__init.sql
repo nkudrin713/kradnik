@@ -1,42 +1,63 @@
-CREATE TABLE download_tasks (
-    id BIGSERIAL PRIMARY KEY,
+CREATE TABLE download_jobs
+(
+    id                          BIGSERIAL PRIMARY KEY,
 
-    telegram_user_id BIGINT NOT NULL,
-    telegram_chat_id BIGINT NOT NULL,
+    telegram_user_id            BIGINT      NOT NULL,
+    telegram_chat_id            BIGINT      NOT NULL,
 
-    original_url TEXT NOT NULL,
-    normalized_url TEXT NOT NULL,
+    original_url                TEXT        NOT NULL,
+    normalized_url              TEXT        NOT NULL,
 
-    output_type TEXT NOT NULL DEFAULT 'video'
+    output_type                 TEXT        NOT NULL DEFAULT 'video'
         CHECK (output_type IN ('video', 'audio')),
 
-    status TEXT NOT NULL DEFAULT 'queued'
+    status                      TEXT        NOT NULL DEFAULT 'queued'
         CHECK (status IN ('queued', 'processing', 'uploading', 'completed', 'failed')),
 
-    source_title TEXT,
-    source_extractor TEXT,
-    source_duration_seconds INTEGER,
+    attempts                    INTEGER     NOT NULL DEFAULT 0,
 
-    telegram_file_id TEXT,
-    telegram_file_size BIGINT,
+    source_title                TEXT,
+    source_extractor            TEXT,
+    source_duration_seconds     INTEGER,
 
-    error_message TEXT,
+    download_preset             TEXT,
+    selected_format             TEXT,
 
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    completed_at TIMESTAMPTZ
+    downloaded_file_size        BIGINT,
+
+    telegram_file_id            TEXT,
+    telegram_file_size          BIGINT,
+
+    error_message               TEXT,
+
+    created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    processing_started_at       TIMESTAMPTZ,
+    uploading_started_at        TIMESTAMPTZ,
+    downloaded_at               TIMESTAMPTZ,
+    completed_at                TIMESTAMPTZ
 );
 
-CREATE INDEX idx_download_tasks_status_created_at
-    ON download_tasks (status, created_at);
+CREATE INDEX idx_download_jobs_queue
+    ON download_jobs (created_at) WHERE status = 'queued';
 
-CREATE INDEX idx_download_tasks_cache_lookup
-    ON download_tasks (normalized_url, output_type);
+CREATE INDEX idx_download_jobs_processing_recovery
+    ON download_jobs (updated_at) WHERE status IN ('processing', 'uploading');
 
-CREATE TABLE download_settings (
-    chat_id BIGINT PRIMARY KEY,
+CREATE INDEX idx_download_jobs_completed_cache_lookup
+    ON download_jobs (normalized_url, output_type, completed_at DESC) WHERE status = 'completed'
+      AND telegram_file_id IS NOT NULL;
 
-    mode TEXT NOT NULL DEFAULT 'video'
+CREATE INDEX idx_download_jobs_chat_created_at
+    ON download_jobs (telegram_chat_id, created_at DESC);
+
+
+CREATE TABLE download_settings
+(
+    chat_id    BIGINT PRIMARY KEY,
+
+    mode       TEXT        NOT NULL DEFAULT 'video'
         CHECK (mode IN ('video', 'audio')),
 
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

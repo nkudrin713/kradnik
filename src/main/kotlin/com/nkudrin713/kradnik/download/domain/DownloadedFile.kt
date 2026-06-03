@@ -4,7 +4,5 @@ import java.nio.file.Path
 
 data class DownloadedFile(
     val file: Path,
-    val ext: String,
     val sizeBytes: Long,
-    val args: List<String>,
 )

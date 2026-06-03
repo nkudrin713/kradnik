@@ -1,10 +1,12 @@
-name: Deploy
+name: Clean Deploy
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type RESET to drop server containers, images, and database volume"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,6 +19,7 @@ jobs:
   checks:
     name: Tests and checks
     runs-on: ubuntu-latest
+    if: ${{ inputs.confirm == 'RESET' }}
 
     steps:
       - name: Checkout
@@ -34,8 +37,8 @@ jobs:
       - name: Run tests and checks
         run: ./gradlew check
 
-  deploy:
-    name: Deploy to server
+  clean-deploy:
+    name: Clean deploy to server
     runs-on: ubuntu-latest
     needs: checks
 
@@ -85,7 +88,7 @@ jobs:
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
           } | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$DEPLOY_PATH/.env'"
 
-      - name: Restart app
+      - name: Drop Docker state and deploy
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -94,6 +97,7 @@ jobs:
           set -euo pipefail
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
             cd '$DEPLOY_PATH' && \
+            docker compose down --volumes --rmi all --remove-orphans && \
             docker compose up -d --build --remove-orphans && \
             docker image prune -f\
           "

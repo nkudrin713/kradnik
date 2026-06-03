@@ -61,7 +61,10 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
+            mkdir -p '$DEPLOY_PATH' && \
+            find '$DEPLOY_PATH' -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +\
+          "
           tar \
             --exclude='.git' \
             --exclude='.gradle' \

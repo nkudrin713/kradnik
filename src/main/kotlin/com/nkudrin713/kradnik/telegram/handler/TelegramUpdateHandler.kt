@@ -10,15 +10,34 @@ class TelegramUpdateHandler(
 ) {
 
     fun handle(update: Update) {
-        val message = update.message() ?: return
-        val text = message.text() ?: return
+        val context = when {
+            update.message()?.text() != null -> {
+                val message = update.message()
+                TelegramUpdateContext(
+                    update = update,
+                    message = message,
+                    callbackQuery = null,
+                    text = message.text().trim(),
+                    chatId = message.chat().id(),
+                    messageId = message.messageId(),
+                )
+            }
 
-        val context = TelegramUpdateContext(
-            update = update,
-            message = message,
-            text = text.trim(),
-            chatId = message.chat().id(),
-        )
+            update.callbackQuery()?.data() != null -> {
+                val callbackQuery = update.callbackQuery()
+                val message = callbackQuery.message()
+                TelegramUpdateContext(
+                    update = update,
+                    message = message,
+                    callbackQuery = callbackQuery,
+                    text = callbackQuery.data().trim(),
+                    chatId = message.chat().id(),
+                    messageId = message.messageId(),
+                )
+            }
+
+            else -> return
+        }
 
         handlers
             .first { it.supports(context) }

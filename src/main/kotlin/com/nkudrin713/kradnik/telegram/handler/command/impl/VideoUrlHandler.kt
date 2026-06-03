@@ -25,13 +25,14 @@ class VideoUrlHandler(
     }
 
     override fun handle(context: TelegramUpdateContext) {
+        val message = requireNotNull(context.message)
         val outputType = downloadSettingsService.getOutputType(context.chatId)
         val handler = platformResolver.resolve(context.text)
         val request = handler.buildRequest(context.text, outputType)
 
         downloadJobService.createJob(
             CreateDownloadJobCommand(
-                telegramUserId = context.message.from().id(),
+                telegramUserId = message.from().id(),
                 telegramChatId = context.chatId,
                 originalUrl = request.originalUrl,
                 normalizedUrl = request.normalizedUrl,

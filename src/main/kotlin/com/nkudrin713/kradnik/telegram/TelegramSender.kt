@@ -1,9 +1,11 @@
 package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.VideoMetadataProbe
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendVideo
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.nio.file.Files
 import java.nio.file.Path
@@ -14,7 +16,10 @@ class TelegramSender(
     private val bot: TelegramBot,
     private val telegramTextMessenger: TelegramTextMessenger,
     private val modeView: TelegramModeView,
+    private val videoMetadataProbe: VideoMetadataProbe,
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     fun sendMessage(chatId: Long, text: String) {
         telegramTextMessenger.send(chatId, text)
     }
@@ -43,10 +48,21 @@ class TelegramSender(
         telegramTextMessenger.answerCallback(callbackQueryId)
     }
 
-    fun sendVideo(chatId: Long, file: Path): TelegramSendResult {
+    suspend fun sendVideo(chatId: Long, file: Path): TelegramSendResult {
         val fileSize = Files.size(file)
+        val metadata = videoMetadataProbe.probe(file)
+        logger.info(
+            "Telegram video upload metadata: width={}, height={}, sar={}, dar={}",
+            metadata.width,
+            metadata.height,
+            metadata.sampleAspectRatio,
+            metadata.displayAspectRatio,
+        )
+
         val response = bot.execute(
             SendVideo(chatId, file.toFile())
+                .width(metadata.width)
+                .height(metadata.height)
                 .supportsStreaming(true)
         )
 

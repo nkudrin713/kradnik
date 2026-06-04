@@ -14,6 +14,7 @@ import kotlin.time.Duration.Companion.minutes
 @Service
 class TelegramVideoPreparer(
     private val processRunner: ProcessRunner,
+    private val videoMetadataProbe: VideoMetadataProbe,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -26,7 +27,7 @@ class TelegramVideoPreparer(
             return file
         }
 
-        val dimensions = probeDimensions(file.file)
+        val dimensions = videoMetadataProbe.probe(file.file)
         if (!dimensions.isVertical) {
             throw VideoTooLargeException(file.sizeBytes)
         }
@@ -43,7 +44,7 @@ class TelegramVideoPreparer(
         transcodeVertical(file.file, compressedFile)
 
         val compressedSize = Files.size(compressedFile)
-        val compressedDimensions = probeDimensions(compressedFile)
+        val compressedDimensions = videoMetadataProbe.probe(compressedFile)
         if (compressedSize > TELEGRAM_UPLOAD_LIMIT_BYTES) {
             throw VideoTooLargeException(compressedSize)
         }
@@ -62,41 +63,6 @@ class TelegramVideoPreparer(
             file = compressedFile,
             sizeBytes = compressedSize,
         )
-    }
-
-    private suspend fun probeDimensions(file: Path): VideoDimensions {
-        val result = processRunner.run(
-            FfprobeCommand(
-                args = listOf(
-                    "-v", "error",
-                    "-select_streams", "v:0",
-                    "-show_entries", "stream=width,height,sample_aspect_ratio,display_aspect_ratio",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
-                    file.toString(),
-                ),
-                timeout = 1.minutes,
-            )
-        )
-
-        if (result.timedOut || result.exitCode != 0) {
-            throw VideoPrepareException("ffprobe failed: ${result.output.take(500)}")
-        }
-
-        val lines = result.output
-            .lineSequence()
-            .map(String::trim)
-            .filter(String::isNotEmpty)
-            .toList()
-        val width = lines.getOrNull(0)?.toIntOrNull()
-        val height = lines.getOrNull(1)?.toIntOrNull()
-        val sampleAspectRatio = lines.getOrNull(2)
-        val displayAspectRatio = lines.getOrNull(3)
-
-        if (width == null || height == null || sampleAspectRatio == null || displayAspectRatio == null) {
-            throw VideoPrepareException("ffprobe returned invalid dimensions: ${result.output.take(100)}")
-        }
-
-        return VideoDimensions(width, height, sampleAspectRatio, displayAspectRatio)
     }
 
     private suspend fun transcodeVertical(input: Path, output: Path) {
@@ -131,27 +97,11 @@ class TelegramVideoPreparer(
         return String.format(Locale.US, "%.2f", bytes / BYTES_IN_MEGABYTE)
     }
 
-    private data class VideoDimensions(
-        val width: Int,
-        val height: Int,
-        val sampleAspectRatio: String,
-        val displayAspectRatio: String,
-    ) {
-        val isVertical: Boolean = height > width
-    }
-
     private companion object {
         private const val TELEGRAM_UPLOAD_LIMIT_BYTES = 45L * 1024L * 1024L
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
     }
 }
-
-private data class FfprobeCommand(
-    override val args: List<String>,
-    override val timeout: Duration,
-    override val workingDir: Path? = null,
-    override val executable: String = "ffprobe",
-) : Command
 
 private data class FfmpegCommand(
     override val args: List<String>,

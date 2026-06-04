@@ -27,6 +27,7 @@ class DownloadJobService(
 				outputType = command.outputType,
 				downloadPreset = command.downloadPreset,
 				selectedFormat = command.selectedFormat,
+				telegramStatusMessageId = command.telegramStatusMessageId,
 			)
 		)
 	}
@@ -142,6 +143,7 @@ data class CreateDownloadJobCommand(
 	val outputType: OutputType,
 	val downloadPreset: String? = null,
 	val selectedFormat: String? = null,
+	val telegramStatusMessageId: Int? = null,
 )
 
 data class DownloadedFileResult(

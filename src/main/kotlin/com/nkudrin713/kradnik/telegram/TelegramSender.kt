@@ -1,57 +1,44 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.pengrad.telegrambot.TelegramBot
-import com.pengrad.telegrambot.model.request.InlineKeyboardButton
-import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
-import com.pengrad.telegrambot.request.AnswerCallbackQuery
-import com.pengrad.telegrambot.request.EditMessageText
-import com.pengrad.telegrambot.request.SendAudio
-import com.pengrad.telegrambot.request.SendMessage
-import com.pengrad.telegrambot.request.SendVideo
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.pengrad.telegrambot.TelegramBot
+import com.pengrad.telegrambot.request.SendAudio
+import com.pengrad.telegrambot.request.SendVideo
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 
 @Service
 class TelegramSender(
     private val bot: TelegramBot,
+    private val telegramTextMessenger: TelegramTextMessenger,
+    private val modeView: TelegramModeView,
 ) {
     fun sendMessage(chatId: Long, text: String) {
-        val response = bot.execute(SendMessage(chatId, text))
+        telegramTextMessenger.send(chatId, text)
+    }
 
-        if (!response.isOk) {
-            throw TelegramSendException(response.description())
+    fun sendStatus(chatId: Long, status: TelegramDownloadStatus): Int {
+        return telegramTextMessenger.send(chatId, status.text)
+    }
+
+    fun editStatus(chatId: Long, messageId: Int?, status: TelegramDownloadStatus) {
+        if (messageId == null) {
+            return
         }
+
+        telegramTextMessenger.edit(chatId, messageId, status.text)
     }
 
     fun sendModeMenu(chatId: Long, outputType: OutputType) {
-        val response = bot.execute(
-            SendMessage(chatId, MODE_TEXT)
-                .replyMarkup(modeKeyboard(outputType))
-        )
-
-        if (!response.isOk) {
-            throw TelegramSendException(response.description())
-        }
+        telegramTextMessenger.send(chatId, modeView.text(), modeView.keyboard(outputType))
     }
 
     fun editModeMenu(chatId: Long, messageId: Int, outputType: OutputType) {
-        val response = bot.execute(
-            EditMessageText(chatId, messageId, MODE_TEXT)
-                .replyMarkup(modeKeyboard(outputType))
-        )
-
-        if (!response.isOk) {
-            throw TelegramSendException(response.description())
-        }
+        telegramTextMessenger.edit(chatId, messageId, modeView.text(), modeView.keyboard(outputType))
     }
 
     fun answerCallback(callbackQueryId: String) {
-        val response = bot.execute(AnswerCallbackQuery(callbackQueryId))
-
-        if (!response.isOk) {
-            throw TelegramSendException(response.description())
-        }
+        telegramTextMessenger.answerCallback(callbackQueryId)
     }
 
     fun sendVideo(chatId: Long, file: Path): TelegramSendResult {
@@ -98,21 +85,10 @@ data class TelegramSendResult(
 class TelegramSendException(message: String?) :
     RuntimeException("Telegram send failed: $message")
 
-private const val MODE_TEXT = "Режим загрузки"
-private const val VIDEO_CALLBACK = "mode:video"
-private const val AUDIO_CALLBACK = "mode:audio"
-
-private fun modeKeyboard(outputType: OutputType): InlineKeyboardMarkup {
-    return InlineKeyboardMarkup(
-        InlineKeyboardButton(label("Видео", OutputType.VIDEO, outputType)).callbackData(VIDEO_CALLBACK),
-        InlineKeyboardButton(label("Аудио", OutputType.AUDIO, outputType)).callbackData(AUDIO_CALLBACK),
-    )
-}
-
-private fun label(text: String, option: OutputType, current: OutputType): String {
-    return if (option == current) {
-        "✅ $text"
-    } else {
-        text
-    }
+enum class TelegramDownloadStatus(val text: String) {
+    QUEUED("Поставил в очередь ⏳"),
+    DOWNLOADING("Скачиваю ⬇️"),
+    UPLOADING("Загружаю в Telegram ⬆️"),
+    COMPLETED("Готово ✅"),
+    ERROR("Ошибка ⛔"),
 }

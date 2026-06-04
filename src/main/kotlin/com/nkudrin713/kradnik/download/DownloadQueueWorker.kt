@@ -5,11 +5,13 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.service.DownloadedFileResult
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
+import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.nio.file.Files
@@ -18,6 +20,11 @@ import java.util.Comparator
 import kotlin.io.path.createDirectories
 
 @Component
+@ConditionalOnProperty(
+    name = ["download.worker.enabled"],
+    havingValue = "true",
+    matchIfMissing = true,
+)
 class DownloadQueueWorker(
     private val downloadJobService: DownloadJobService,
     private val downloadOrchestrator: DownloadOrchestrator,
@@ -42,6 +49,8 @@ class DownloadQueueWorker(
         val outputDir = Path.of(workDir).resolve(jobId.toString()).createDirectories()
 
         try {
+            editStatus(job, TelegramDownloadStatus.DOWNLOADING)
+
             runCatching {
                 markMetadata(job)
             }.onFailure {
@@ -51,6 +60,7 @@ class DownloadQueueWorker(
             val downloadedFile = downloadOrchestrator.download(job, outputDir)
 
             downloadJobService.markUploading(jobId)
+            editStatus(job, TelegramDownloadStatus.UPLOADING)
 
             val telegramResult = when (job.outputType) {
                 OutputType.VIDEO -> telegramSender.sendVideo(job.telegramChatId, downloadedFile.file)
@@ -65,11 +75,25 @@ class DownloadQueueWorker(
                     downloadedFileSize = downloadedFile.sizeBytes,
                 )
             )
+            editStatus(job, TelegramDownloadStatus.COMPLETED)
         } catch (error: Exception) {
             logger.error("JOB[{}] processing failed", jobId, error)
             downloadJobService.markFailedOrRetry(jobId, error.message ?: error.javaClass.simpleName)
+            editStatus(job, TelegramDownloadStatus.ERROR)
         } finally {
             deleteRecursively(outputDir)
+        }
+    }
+
+    private fun editStatus(job: DownloadJob, status: TelegramDownloadStatus) {
+        runCatching {
+            telegramSender.editStatus(
+                job.telegramChatId,
+                job.telegramStatusMessageId,
+                status,
+            )
+        }.onFailure {
+            logger.warn("JOB[{}] status message update failed: {}", job.id, it.message)
         }
     }
 

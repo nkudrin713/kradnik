@@ -4,6 +4,7 @@ import com.nkudrin713.kradnik.download.PlatformResolver
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.settings.DownloadSettingsService
+import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.handler.TelegramUpdateContext
 import com.nkudrin713.kradnik.telegram.handler.command.TelegramCommandHandler
@@ -29,6 +30,10 @@ class VideoUrlHandler(
         val outputType = downloadSettingsService.getOutputType(context.chatId)
         val handler = platformResolver.resolve(context.text)
         val request = handler.buildRequest(context.text, outputType)
+        val statusMessageId = telegramSender.sendStatus(
+            context.chatId,
+            TelegramDownloadStatus.QUEUED,
+        )
 
         downloadJobService.createJob(
             CreateDownloadJobCommand(
@@ -39,9 +44,8 @@ class VideoUrlHandler(
                 outputType = request.outputType,
                 downloadPreset = request.presetName,
                 selectedFormat = request.formatSelector,
+                telegramStatusMessageId = statusMessageId,
             )
         )
-
-        telegramSender.sendMessage(context.chatId, "Принял, поставил в очередь")
     }
 }

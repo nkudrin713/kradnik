@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Bean
 	properties = [
 		"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
 		"telegram.bot.token=test-token",
+		"download.worker.enabled=false",
 	]
 )
 class KradnikApplicationTests {

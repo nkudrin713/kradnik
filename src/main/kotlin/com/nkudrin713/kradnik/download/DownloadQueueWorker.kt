@@ -29,6 +29,7 @@ import kotlin.io.path.createDirectories
 class DownloadQueueWorker(
     private val downloadJobService: DownloadJobService,
     private val downloadOrchestrator: DownloadOrchestrator,
+    private val telegramVideoPreparer: TelegramVideoPreparer,
     private val telegramSender: TelegramSender,
     private val ytDlpService: YtDlpService,
     @Value("\${download.work-dir:/tmp/kradnik-downloads}")
@@ -65,6 +66,10 @@ class DownloadQueueWorker(
             }
 
             val downloadedFile = downloadOrchestrator.download(job, outputDir)
+            val uploadFile = when (job.outputType) {
+                OutputType.VIDEO -> telegramVideoPreparer.prepare(downloadedFile, outputDir, jobId)
+                OutputType.AUDIO -> downloadedFile
+            }
 
             downloadJobService.markUploading(jobId)
             editStatus(job, TelegramDownloadStatus.UPLOADING)
@@ -72,12 +77,12 @@ class DownloadQueueWorker(
                 "JOB[{}] uploading to Telegram: type={}, sizeMb={}",
                 jobId,
                 job.outputType,
-                formatMegabytes(downloadedFile.sizeBytes),
+                formatMegabytes(uploadFile.sizeBytes),
             )
 
             val telegramResult = when (job.outputType) {
-                OutputType.VIDEO -> telegramSender.sendVideo(job.telegramChatId, downloadedFile.file)
-                OutputType.AUDIO -> telegramSender.sendAudio(job.telegramChatId, downloadedFile.file)
+                OutputType.VIDEO -> telegramSender.sendVideo(job.telegramChatId, uploadFile.file)
+                OutputType.AUDIO -> telegramSender.sendAudio(job.telegramChatId, uploadFile.file)
             }
 
             downloadJobService.markCompleted(
@@ -85,7 +90,7 @@ class DownloadQueueWorker(
                 DownloadedFileResult(
                     telegramFileId = telegramResult.fileId,
                     telegramFileSize = telegramResult.fileSize,
-                    downloadedFileSize = downloadedFile.sizeBytes,
+                    downloadedFileSize = uploadFile.sizeBytes,
                 )
             )
             editStatus(job, TelegramDownloadStatus.COMPLETED)

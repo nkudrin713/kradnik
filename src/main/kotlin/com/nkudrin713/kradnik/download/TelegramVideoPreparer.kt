@@ -1,0 +1,157 @@
+package com.nkudrin713.kradnik.download
+
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.process.Command
+import com.nkudrin713.kradnik.process.ProcessRunner
+import org.slf4j.LoggerFactory
+import org.springframework.stereotype.Service
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.Locale
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+
+@Service
+class TelegramVideoPreparer(
+    private val processRunner: ProcessRunner,
+) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
+    suspend fun prepare(
+        file: DownloadedFile,
+        outputDir: Path,
+        jobId: Long,
+    ): DownloadedFile {
+        if (file.sizeBytes <= TELEGRAM_UPLOAD_LIMIT_BYTES) {
+            return file
+        }
+
+        val dimensions = probeDimensions(file.file)
+        if (!dimensions.isVertical) {
+            throw VideoTooLargeException(file.sizeBytes)
+        }
+
+        logger.info(
+            "JOB[{}] compressing vertical video for Telegram: sourceSizeMb={}, width={}, height={}",
+            jobId,
+            formatMegabytes(file.sizeBytes),
+            dimensions.width,
+            dimensions.height,
+        )
+
+        val compressedFile = outputDir.resolve("telegram-video.mp4")
+        transcodeVertical(file.file, compressedFile)
+
+        val compressedSize = Files.size(compressedFile)
+        if (compressedSize > TELEGRAM_UPLOAD_LIMIT_BYTES) {
+            throw VideoTooLargeException(compressedSize)
+        }
+
+        logger.info(
+            "JOB[{}] vertical video compressed: sizeMb={}",
+            jobId,
+            formatMegabytes(compressedSize),
+        )
+
+        return DownloadedFile(
+            file = compressedFile,
+            sizeBytes = compressedSize,
+        )
+    }
+
+    private suspend fun probeDimensions(file: Path): VideoDimensions {
+        val result = processRunner.run(
+            FfprobeCommand(
+                args = listOf(
+                    "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=width,height",
+                    "-of", "csv=p=0:s=x",
+                    file.toString(),
+                ),
+                timeout = 1.minutes,
+            )
+        )
+
+        if (result.timedOut || result.exitCode != 0) {
+            throw VideoPrepareException("ffprobe failed: ${result.output.take(500)}")
+        }
+
+        val parts = result.output.trim().split("x")
+        val width = parts.getOrNull(0)?.toIntOrNull()
+        val height = parts.getOrNull(1)?.toIntOrNull()
+
+        if (width == null || height == null) {
+            throw VideoPrepareException("ffprobe returned invalid dimensions: ${result.output.take(100)}")
+        }
+
+        return VideoDimensions(width, height)
+    }
+
+    private suspend fun transcodeVertical(input: Path, output: Path) {
+        val result = processRunner.run(
+            FfmpegCommand(
+                args = listOf(
+                    "-y",
+                    "-hide_banner",
+                    "-loglevel", "error",
+                    "-i", input.toString(),
+                    "-vf", "scale=min(1080\\,iw):-2",
+                    "-c:v", "libx264",
+                    "-preset", "fast",
+                    "-crf", "30",
+                    "-profile:v", "main",
+                    "-pix_fmt", "yuv420p",
+                    "-c:a", "aac",
+                    "-b:a", "96k",
+                    "-movflags", "+faststart",
+                    output.toString(),
+                ),
+                timeout = 20.minutes,
+            )
+        )
+
+        if (result.timedOut || result.exitCode != 0) {
+            throw VideoPrepareException("ffmpeg failed: ${result.output.take(500)}")
+        }
+    }
+
+    private fun formatMegabytes(bytes: Long): String {
+        return String.format(Locale.US, "%.2f", bytes / BYTES_IN_MEGABYTE)
+    }
+
+    private data class VideoDimensions(
+        val width: Int,
+        val height: Int,
+    ) {
+        val isVertical: Boolean = height > width
+    }
+
+    private companion object {
+        private const val TELEGRAM_UPLOAD_LIMIT_BYTES = 45L * 1024L * 1024L
+        private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
+    }
+}
+
+private data class FfprobeCommand(
+    override val args: List<String>,
+    override val timeout: Duration,
+    override val workingDir: Path? = null,
+    override val executable: String = "ffprobe",
+) : Command
+
+private data class FfmpegCommand(
+    override val args: List<String>,
+    override val timeout: Duration,
+    override val workingDir: Path? = null,
+    override val executable: String = "ffmpeg",
+) : Command
+
+class VideoTooLargeException(sizeBytes: Long) :
+    RuntimeException(
+        "Video is too large for Telegram upload: sizeMb=${
+            String.format(Locale.US, "%.2f", sizeBytes / (1024.0 * 1024.0))
+        }"
+    )
+
+class VideoPrepareException(message: String) : RuntimeException(message)

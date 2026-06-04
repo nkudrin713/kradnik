@@ -17,6 +17,7 @@ import kotlin.time.Duration.Companion.seconds
 private const val DUMP_SINGLE_JSON = "--dump-single-json"
 private const val NO_PLAYLIST = "--no-playlist"
 private const val NO_WARNINGS = "--no-warnings"
+private const val NO_RESTRICT_FILENAMES = "--no-restrict-filenames"
 private const val FORMAT = "-f"
 private const val OUTPUT = "-o"
 private const val PRINT = "--print"
@@ -60,6 +61,7 @@ class YtDlpService(
         val args = buildList {
             add(NO_PLAYLIST)
             add(NO_WARNINGS)
+            add(NO_RESTRICT_FILENAMES)
             add(FORMAT)
             add(request.formatSelector)
             add(OUTPUT)

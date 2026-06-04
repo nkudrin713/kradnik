@@ -23,8 +23,8 @@ class DefaultYtDlpDownloadHandler : PlatformDownloadHandler {
                 outputType = outputType,
                 presetName = "default_mobile_video",
                 formatSelector =
-                    "bv*[height<=1280][vcodec^=avc1]+ba[acodec^=mp4a]/" +
-                            "b[height<=1280][vcodec^=avc1]/b",
+                    "bv*[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
+                            "b[height<=1280][vcodec^=avc1][ext=mp4]/b",
                 extraArgs = listOf("--merge-output-format", "mp4"),
             )
 
@@ -33,7 +33,8 @@ class DefaultYtDlpDownloadHandler : PlatformDownloadHandler {
                 normalizedUrl = url,
                 outputType = outputType,
                 presetName = "default_audio",
-                formatSelector = "ba[acodec^=mp4a]/ba/bestaudio",
+                formatSelector = "ba/bestaudio",
+                extraArgs = listOf("-x", "--audio-format", "mp3"),
             )
         }
     }

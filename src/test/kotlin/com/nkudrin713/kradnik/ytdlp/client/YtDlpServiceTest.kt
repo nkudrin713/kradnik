@@ -168,6 +168,7 @@ class YtDlpServiceTest {
         val command = commandSlot.captured
         assertEquals("yt-dlp", command.executable)
         assertEquals(tempDir, command.workingDir)
+        assertTrue(command.args.contains("--no-restrict-filenames"))
         assertTrue(command.args.contains("-f"))
         assertTrue(command.args.contains("bv*+ba/b"))
         assertTrue(command.args.contains("--print"))

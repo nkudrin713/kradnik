@@ -31,9 +31,8 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
                 outputType = outputType,
                 presetName = "youtube_h264_mobile",
                 formatSelector =
-                    "bv*[filesize<20M][height<=1280][vcodec^=avc1]+ba[acodec^=mp4a]/" +
-                            "bv*[height<=1280][vcodec^=avc1]+ba[acodec^=mp4a]/" +
-                            "b[height<=1280][vcodec^=avc1]",
+                    "bv*[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
+                            "b[height<=1280][vcodec^=avc1][ext=mp4]/b",
                 extraArgs = listOf("--merge-output-format", "mp4"),
             )
 
@@ -42,7 +41,8 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
                 normalizedUrl = normalized,
                 outputType = outputType,
                 presetName = "youtube_audio",
-                formatSelector = "ba[acodec^=mp4a]/ba/bestaudio"
+                formatSelector = "ba/bestaudio",
+                extraArgs = listOf("-x", "--audio-format", "mp3"),
             )
         }
     }

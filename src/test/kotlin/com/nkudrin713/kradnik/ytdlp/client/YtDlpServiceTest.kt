@@ -131,12 +131,37 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun inspectBuildsExpectedCommand() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = """{"id":"video-id","title":"Test video"}""",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        service.inspect(testRequest())
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+
+        val command = commandSlot.captured
+        assertEquals("yt-dlp", command.executable)
+        assertEquals(null, command.workingDir)
+        assertTrue(command.args.contains("--dump-single-json"))
+        assertTrue(command.args.contains("--no-playlist"))
+        assertTrue(command.args.contains("--no-warnings"))
+        assertTrue(command.args.contains("-f"))
+        assertTrue(command.args.contains("bv*+ba/b"))
+        assertTrue(command.args.contains("https://example.com"))
+    }
+
+    @Test
     fun downloadSuccess(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("video.mp4")
         file.writeText("video")
 
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = file.absolutePathString(),
+            output = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -154,7 +179,7 @@ class YtDlpServiceTest {
         file.writeText("video")
 
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = file.absolutePathString(),
+            output = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -172,7 +197,7 @@ class YtDlpServiceTest {
         assertTrue(command.args.contains("-f"))
         assertTrue(command.args.contains("bv*+ba/b"))
         assertTrue(command.args.contains("--print"))
-        assertTrue(command.args.contains("after_move:filepath"))
+        assertTrue(command.args.contains("after_move:KRADNIK_FILEPATH:%(filepath)j"))
         assertTrue(command.args.contains("--merge-output-format"))
         assertTrue(command.args.contains("mp4"))
         assertTrue(command.args.contains("https://example.com"))
@@ -186,8 +211,8 @@ class YtDlpServiceTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = """
                 log line
-
-                ${file.absolutePathString()}
+                KRADNIK_FILEPATH:"${file.absolutePathString()}"
+                trailing log line
             """.trimIndent(),
             timedOut = false,
             exitCode = 0,
@@ -220,7 +245,7 @@ class YtDlpServiceTest {
         val missingFile = tempDir.resolve("missing.mp4")
 
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = missingFile.absolutePathString(),
+            output = "KRADNIK_FILEPATH:\"${missingFile.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,

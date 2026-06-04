@@ -23,7 +23,8 @@ private const val NO_RESTRICT_FILENAMES = "--no-restrict-filenames"
 private const val FORMAT = "-f"
 private const val OUTPUT = "-o"
 private const val PRINT = "--print"
-private const val FINAL_FILEPATH = "after_move:filepath"
+private const val FILEPATH_MARKER = "KRADNIK_FILEPATH:"
+private const val FINAL_FILEPATH = "after_move:${FILEPATH_MARKER}%(filepath)j"
 
 private const val TITLE_EXT = "%(title)s.%(ext)s"
 
@@ -51,6 +52,31 @@ class YtDlpService(
 
         if (result.output.isBlank()) {
             throw YtDlpException("yt-dlp metadata extraction returned empty output")
+        }
+
+        return objectMapper.readValue(result.output)
+    }
+
+    suspend fun inspect(request: DownloadRequest): YtDlpMetadataDto {
+        val result = processRunner.run(
+            YtDlpCommand(
+                args = listOf(
+                    DUMP_SINGLE_JSON,
+                    NO_PLAYLIST,
+                    NO_WARNINGS,
+                    FORMAT,
+                    request.formatSelector,
+                    request.originalUrl,
+                ),
+                workingDir = null,
+                timeout = 30.seconds,
+            )
+        )
+
+        handleBaseErrors("preflight inspection", result)
+
+        if (result.output.isBlank()) {
+            throw YtDlpException("yt-dlp preflight inspection returned empty output")
         }
 
         return objectMapper.readValue(result.output)
@@ -84,7 +110,7 @@ class YtDlpService(
 
         handleBaseErrors("download", result)
 
-        val file = getDownloadedFile(result.output, "download")
+        val file = getDownloadedFile(result.output)
 
         return DownloadedFile(
             file = file,
@@ -94,19 +120,18 @@ class YtDlpService(
         )
     }
 
-    private fun getDownloadedFile(
-        output: String,
-        operation: String,
-    ): Path {
+    private fun getDownloadedFile(output: String): Path {
         val path = output
             .lineSequence()
-            .lastOrNull(String::isNotBlank)
-            ?: throw YtDlpException("yt-dlp $operation did not print final filepath")
+            .lastOrNull { it.startsWith(FILEPATH_MARKER) }
+            ?.removePrefix(FILEPATH_MARKER)
+            ?.let { objectMapper.readValue<String>(it) }
+            ?: throw YtDlpException("yt-dlp download did not print final filepath")
 
         val file = Path.of(path)
 
         if (!file.isRegularFile()) {
-            throw YtDlpException("yt-dlp $operation file not found: $path")
+            throw YtDlpException("yt-dlp download file not found: $path")
         }
 
         return file

@@ -25,4 +25,18 @@ data class YtDlpMetadataDto(
 	@JsonProperty("format_id")
 	val formatId: String?,
 	val format: String?,
+	@JsonProperty("requested_formats")
+	val requestedFormats: List<YtDlpFormatDto>?,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class YtDlpFormatDto(
+	@JsonProperty("format_id")
+	val formatId: String?,
+	val ext: String?,
+	val width: Int?,
+	val height: Int?,
+	val filesize: Long?,
+	@JsonProperty("filesize_approx")
+	val filesizeApprox: Long?,
 )

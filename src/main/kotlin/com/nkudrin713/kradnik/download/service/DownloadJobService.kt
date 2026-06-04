@@ -155,6 +155,29 @@ class DownloadJobService(
 		return job
 	}
 
+	@Transactional
+	fun markFailed(
+		jobId: Long,
+		errorMessage: String,
+	): DownloadJob {
+		val job = getJobInternal(jobId)
+
+		job.status = DownloadJobStatus.FAILED
+		job.errorMessage = errorMessage.take(1000)
+		job.completedAt = Instant.now()
+
+		logger.warn(
+			"CHAT[{}] JOB[{}] failed: status={}, attempts={}, error={}",
+			job.telegramChatId,
+			jobId,
+			job.status,
+			job.attempts,
+			job.errorMessage,
+		)
+
+		return job
+	}
+
 	@Transactional(readOnly = true)
 	fun getJob(jobId: Long): DownloadJob {
 		return getJobInternal(jobId)

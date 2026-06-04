@@ -163,5 +163,6 @@ enum class TelegramDownloadStatus(val text: String) {
     DOWNLOADING("Скачиваю ⬇️"),
     UPLOADING("Загружаю в Telegram ⬆️"),
     COMPLETED("Готово ✅"),
+    REJECTED_TOO_LARGE("Файл слишком большой для Telegram ⛔"),
     ERROR("Ошибка ⛔"),
 }

@@ -4,6 +4,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
+import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
@@ -17,6 +19,8 @@ import kotlin.io.path.createDirectories
 @Component
 class DownloadJobProcessor(
     private val downloadJobService: DownloadJobService,
+    private val downloadRequestFactory: DownloadRequestFactory,
+    private val downloadPreflightService: DownloadPreflightService,
     private val downloadOrchestrator: DownloadOrchestrator,
     private val telegramVideoPreparer: TelegramVideoPreparer,
     private val telegramFileSender: TelegramFileSender,
@@ -39,6 +43,14 @@ class DownloadJobProcessor(
                 return
             }
 
+            val request = downloadRequestFactory.create(job)
+            val preflightDecision = downloadPreflightService.check(request)
+            if (preflightDecision is DownloadPreflightDecision.Rejected) {
+                downloadJobService.markFailed(jobId, preflightDecision.reason)
+                statusReporter.setStatus(job, TelegramDownloadStatus.REJECTED_TOO_LARGE)
+                return
+            }
+
             statusReporter.setStatus(job, TelegramDownloadStatus.DOWNLOADING)
 
             runCatching {
@@ -47,7 +59,7 @@ class DownloadJobProcessor(
                 logger.warn("JOB[{}] metadata extraction skipped: {}", jobId, it.message)
             }
 
-            val downloadedFile = downloadOrchestrator.download(job, outputDir)
+            val downloadedFile = downloadOrchestrator.download(request, outputDir)
             val uploadFile = prepareForUpload(job, downloadedFile, outputDir)
 
             upload(job, uploadFile)

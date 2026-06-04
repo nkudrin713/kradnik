@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessRunner
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +26,7 @@ class TelegramVideoPreparer(
         outputDir: Path,
         jobId: Long,
     ): DownloadedFile {
-        if (file.sizeBytes <= TELEGRAM_UPLOAD_LIMIT_BYTES) {
+        if (file.sizeBytes <= TelegramUploadLimits.MAX_UPLOAD_BYTES) {
             return file
         }
 
@@ -49,7 +50,7 @@ class TelegramVideoPreparer(
             Files.size(compressedFile)
         }
         val compressedDimensions = videoMetadataProbe.probe(compressedFile)
-        if (compressedSize > TELEGRAM_UPLOAD_LIMIT_BYTES) {
+        if (compressedSize > TelegramUploadLimits.MAX_UPLOAD_BYTES) {
             throw VideoTooLargeException(compressedSize)
         }
 
@@ -102,7 +103,6 @@ class TelegramVideoPreparer(
     }
 
     private companion object {
-        private const val TELEGRAM_UPLOAD_LIMIT_BYTES = 45L * 1024L * 1024L
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
     }
 }

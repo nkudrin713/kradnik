@@ -5,7 +5,9 @@ import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendVideo
 import org.springframework.stereotype.Service
+import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Locale
 
 @Service
 class TelegramSender(
@@ -42,13 +44,14 @@ class TelegramSender(
     }
 
     fun sendVideo(chatId: Long, file: Path): TelegramSendResult {
+        val fileSize = Files.size(file)
         val response = bot.execute(
             SendVideo(chatId, file.toFile())
                 .supportsStreaming(true)
         )
 
         if (!response.isOk) {
-            throw TelegramSendException(response.description())
+            throw TelegramSendException("${response.description()} (sizeMb=${formatMegabytes(fileSize)})")
         }
 
         val video = response.message()?.video()
@@ -80,10 +83,11 @@ class TelegramSender(
     }
 
     fun sendAudio(chatId: Long, file: Path): TelegramSendResult {
+        val fileSize = Files.size(file)
         val response = bot.execute(SendAudio(chatId, file.toFile()))
 
         if (!response.isOk) {
-            throw TelegramSendException(response.description())
+            throw TelegramSendException("${response.description()} (sizeMb=${formatMegabytes(fileSize)})")
         }
 
         val audio = response.message()?.audio()
@@ -109,6 +113,14 @@ class TelegramSender(
             fileId = audio.fileId ?: throw TelegramSendException("Telegram audio file_id is empty"),
             fileSize = audio.fileSize,
         )
+    }
+
+    private fun formatMegabytes(bytes: Long): String {
+        return String.format(Locale.US, "%.2f", bytes / BYTES_IN_MEGABYTE)
+    }
+
+    private companion object {
+        private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
     }
 }
 

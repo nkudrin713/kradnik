@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Comparator
+import java.util.Locale
 import kotlin.io.path.createDirectories
 
 @Component
@@ -67,6 +68,12 @@ class DownloadQueueWorker(
 
             downloadJobService.markUploading(jobId)
             editStatus(job, TelegramDownloadStatus.UPLOADING)
+            logger.info(
+                "JOB[{}] uploading to Telegram: type={}, sizeMb={}",
+                jobId,
+                job.outputType,
+                formatMegabytes(downloadedFile.sizeBytes),
+            )
 
             val telegramResult = when (job.outputType) {
                 OutputType.VIDEO -> telegramSender.sendVideo(job.telegramChatId, downloadedFile.file)
@@ -158,5 +165,13 @@ class DownloadQueueWorker(
             paths.sorted(Comparator.reverseOrder())
                 .forEach(Files::deleteIfExists)
         }
+    }
+
+    private fun formatMegabytes(bytes: Long): String {
+        return String.format(Locale.US, "%.2f", bytes / BYTES_IN_MEGABYTE)
+    }
+
+    private companion object {
+        private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
     }
 }

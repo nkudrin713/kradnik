@@ -16,6 +16,7 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import java.util.Comparator
 import java.util.Locale
 import kotlin.io.path.createDirectories
@@ -36,16 +37,25 @@ class DownloadQueueWorker(
     private val workDir: String,
     @Value("\${download.telegram-file-cache.enabled:true}")
     private val telegramFileCacheEnabled: Boolean,
+    @Value("\${download.worker-stale-timeout-ms:3600000}")
+    private val workerStaleTimeoutMs: Long,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     @Scheduled(fixedDelayString = "\${download.worker-delay-ms:1000}")
     fun processNextJob() {
+        recoverStaleJobs()
+
         val job = downloadJobService.claimNextQueuedJob() ?: return
 
         runBlocking {
             processJob(job)
         }
+    }
+
+    private fun recoverStaleJobs() {
+        val staleBefore = Instant.now().minusMillis(workerStaleTimeoutMs)
+        downloadJobService.recoverStaleInProgressJobs(staleBefore)
     }
 
     private suspend fun processJob(job: DownloadJob) {

@@ -3,7 +3,9 @@ package com.nkudrin713.kradnik.download.repository
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.OutputType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
+import java.time.Instant
 
 interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 
@@ -30,6 +32,43 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 		nativeQuery = true,
 	)
 	fun claimNextQueuedJob(maxAttempts: Int): DownloadJob?
+
+	@Modifying
+	@Query(
+		value = """
+			UPDATE download_jobs
+			SET status = 'queued',
+			    error_message = 'Recovered stale in-progress job',
+			    updated_at = now()
+			WHERE status IN ('processing', 'uploading')
+			  AND updated_at < :staleBefore
+			  AND attempts < :maxAttempts
+		""",
+		nativeQuery = true,
+	)
+	fun requeueStaleInProgressJobs(
+		staleBefore: Instant,
+		maxAttempts: Int,
+	): Int
+
+	@Modifying
+	@Query(
+		value = """
+			UPDATE download_jobs
+			SET status = 'failed',
+			    error_message = 'Failed after stale in-progress recovery',
+			    completed_at = now(),
+			    updated_at = now()
+			WHERE status IN ('processing', 'uploading')
+			  AND updated_at < :staleBefore
+			  AND attempts >= :maxAttempts
+		""",
+		nativeQuery = true,
+	)
+	fun failStaleInProgressJobs(
+		staleBefore: Instant,
+		maxAttempts: Int,
+	): Int
 
 	@Query(
 		value = """

@@ -37,6 +37,31 @@ class DownloadJobService(
 		return downloadJobRepository.claimNextQueuedJob(MAX_ATTEMPTS)
 	}
 
+	@Transactional
+	fun recoverStaleInProgressJobs(staleBefore: Instant): DownloadJobRecoveryResult {
+		val requeued = downloadJobRepository.requeueStaleInProgressJobs(
+			staleBefore = staleBefore,
+			maxAttempts = MAX_ATTEMPTS,
+		)
+		val failed = downloadJobRepository.failStaleInProgressJobs(
+			staleBefore = staleBefore,
+			maxAttempts = MAX_ATTEMPTS,
+		)
+
+		if (requeued > 0 || failed > 0) {
+			logger.warn(
+				"Recovered stale download jobs: requeued={}, failed={}",
+				requeued,
+				failed,
+			)
+		}
+
+		return DownloadJobRecoveryResult(
+			requeued = requeued,
+			failed = failed,
+		)
+	}
+
 	@Transactional(readOnly = true)
 	fun findCachedJob(job: DownloadJob): DownloadJob? {
 		return downloadJobRepository
@@ -164,4 +189,9 @@ data class DownloadedFileResult(
 	val telegramFileSize: Long? = null,
 	val downloadedFileSize: Long? = null,
 	val downloadedAt: Instant? = null,
+)
+
+data class DownloadJobRecoveryResult(
+	val requeued: Int,
+	val failed: Int,
 )

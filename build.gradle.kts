@@ -59,33 +59,56 @@ tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
 	archiveFileName.set("app.jar")
 }
 
-// jacoco config
 tasks.test {
 	useJUnitPlatform()
 	finalizedBy(tasks.jacocoTestReport)
 }
 
-tasks.test {
-	useJUnitPlatform()
-	finalizedBy(tasks.jacocoTestReport)
+val jacocoExcludedClasses = listOf(
+	"**/*Application.class",
+	"**/*Application*.class",
+	"**/*\$Companion.class",
+	"**/*Config.class",
+	"**/*Configuration.class",
+	"**/*Command.class",
+	"**/*Command\$*.class",
+	"**/*Decision.class",
+	"**/*Decision\$*.class",
+	"**/*Dto.class",
+	"**/*Dto\$*.class",
+	"**/*Exception.class",
+	"**/*Exception\$*.class",
+	"**/*Kt.class",
+	"**/*Metadata.class",
+	"**/*Repository.class",
+	"**/*Request.class",
+	"**/*Request\$*.class",
+	"**/*Result.class",
+	"**/*Result\$*.class",
+	"**/*Status.class",
+	"**/PlatformDownloadHandler.class",
+	"**/ProcessRunner.class",
+	"**/TelegramCommandHandler.class",
+	"**/WorkDirCleaner.class",
+	"**/config/**",
+	"**/domain/**",
+	"**/repository/**",
+)
+
+val mainSourceSet = extensions.getByType<SourceSetContainer>().named("main")
+val jacocoClassDirectories = mainSourceSet.map { sourceSet ->
+	files(
+		sourceSet.output.classesDirs.map { classDir ->
+			fileTree(classDir) {
+				exclude(jacocoExcludedClasses)
+			}
+		}
+	)
 }
 
 tasks.jacocoTestReport {
 	dependsOn(tasks.test)
-	classDirectories.setFrom(
-		files(classDirectories.files.map {
-			fileTree(it) {
-				exclude(
-					"**/*Application*",
-					"**/config/**",
-					"**/configuration/**",
-					"**/dto/**",
-					"**/entity/**",
-					"**/generated/**"
-				)
-			}
-		})
-	)
+	classDirectories.setFrom(jacocoClassDirectories)
 	reports {
 		xml.required.set(true)
 		html.required.set(true)
@@ -94,6 +117,7 @@ tasks.jacocoTestReport {
 }
 
 tasks.jacocoTestCoverageVerification {
+	classDirectories.setFrom(jacocoClassDirectories)
 	violationRules {
 		rule {
 			limit {

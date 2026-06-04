@@ -5,6 +5,8 @@ import com.nkudrin713.kradnik.download.VideoMetadataProbe
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendVideo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.nio.file.Files
@@ -49,7 +51,9 @@ class TelegramSender(
     }
 
     suspend fun sendVideo(chatId: Long, file: Path): TelegramSendResult {
-        val fileSize = Files.size(file)
+        val fileSize = withContext(Dispatchers.IO) {
+            Files.size(file)
+        }
         val metadata = videoMetadataProbe.probe(file)
         logger.info(
             "Telegram video upload metadata: width={}, height={}, sar={}, dar={}",
@@ -59,12 +63,14 @@ class TelegramSender(
             metadata.displayAspectRatio,
         )
 
-        val response = bot.execute(
-            SendVideo(chatId, file.toFile())
-                .width(metadata.width)
-                .height(metadata.height)
-                .supportsStreaming(true)
-        )
+        val response = withContext(Dispatchers.IO) {
+            bot.execute(
+                SendVideo(chatId, file.toFile())
+                    .width(metadata.width)
+                    .height(metadata.height)
+                    .supportsStreaming(true)
+            )
+        }
 
         if (!response.isOk) {
             throw TelegramSendException("${response.description()} (sizeMb=${formatMegabytes(fileSize)})")
@@ -98,9 +104,13 @@ class TelegramSender(
         )
     }
 
-    fun sendAudio(chatId: Long, file: Path): TelegramSendResult {
-        val fileSize = Files.size(file)
-        val response = bot.execute(SendAudio(chatId, file.toFile()))
+    suspend fun sendAudio(chatId: Long, file: Path): TelegramSendResult {
+        val fileSize = withContext(Dispatchers.IO) {
+            Files.size(file)
+        }
+        val response = withContext(Dispatchers.IO) {
+            bot.execute(SendAudio(chatId, file.toFile()))
+        }
 
         if (!response.isOk) {
             throw TelegramSendException("${response.description()} (sizeMb=${formatMegabytes(fileSize)})")

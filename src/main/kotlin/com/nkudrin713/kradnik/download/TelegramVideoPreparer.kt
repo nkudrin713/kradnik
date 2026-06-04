@@ -3,6 +3,8 @@ package com.nkudrin713.kradnik.download
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessRunner
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.nio.file.Files
@@ -43,7 +45,9 @@ class TelegramVideoPreparer(
         val compressedFile = outputDir.resolve("telegram-video.mp4")
         transcodeVertical(file.file, compressedFile)
 
-        val compressedSize = Files.size(compressedFile)
+        val compressedSize = withContext(Dispatchers.IO) {
+            Files.size(compressedFile)
+        }
         val compressedDimensions = videoMetadataProbe.probe(compressedFile)
         if (compressedSize > TELEGRAM_UPLOAD_LIMIT_BYTES) {
             throw VideoTooLargeException(compressedSize)

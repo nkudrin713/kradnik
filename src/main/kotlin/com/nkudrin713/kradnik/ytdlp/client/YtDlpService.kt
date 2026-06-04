@@ -7,6 +7,8 @@ import com.nkudrin713.kradnik.download.DownloadRequest
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 import kotlin.io.path.fileSize
@@ -86,7 +88,9 @@ class YtDlpService(
 
         return DownloadedFile(
             file = file,
-            sizeBytes = file.fileSize(),
+            sizeBytes = withContext(Dispatchers.IO) {
+                file.fileSize()
+            },
         )
     }
 

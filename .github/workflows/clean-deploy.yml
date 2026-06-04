@@ -64,6 +64,8 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -euo pipefail
+          test -n "$DEPLOY_PATH"
+          test "$DEPLOY_PATH" != "/"
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
             mkdir -p '$DEPLOY_PATH' && \
             find '$DEPLOY_PATH' -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +\
@@ -84,6 +86,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
           set -euo pipefail
+          test -n "$DEPLOY_PATH"
+          test "$DEPLOY_PATH" != "/"
           {
             printf 'POSTGRES_DB=kradnik\n'
             printf 'POSTGRES_USER=kradnik\n'
@@ -98,9 +102,13 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -euo pipefail
+          test -n "$DEPLOY_PATH"
+          test "$DEPLOY_PATH" != "/"
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
             cd '$DEPLOY_PATH' && \
             docker compose down --volumes --rmi all --remove-orphans && \
             docker compose up -d --build --remove-orphans && \
+            docker compose ps && \
+            test \"\$(docker compose ps -q app | xargs docker inspect -f '{{.State.Status}}')\" = running && \
             docker image prune -f\
           "

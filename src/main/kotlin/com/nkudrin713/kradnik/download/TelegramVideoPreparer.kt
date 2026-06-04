@@ -43,14 +43,19 @@ class TelegramVideoPreparer(
         transcodeVertical(file.file, compressedFile)
 
         val compressedSize = Files.size(compressedFile)
+        val compressedDimensions = probeDimensions(compressedFile)
         if (compressedSize > TELEGRAM_UPLOAD_LIMIT_BYTES) {
             throw VideoTooLargeException(compressedSize)
         }
 
         logger.info(
-            "JOB[{}] vertical video compressed: sizeMb={}",
+            "JOB[{}] vertical video compressed: sizeMb={}, width={}, height={}, sar={}, dar={}",
             jobId,
             formatMegabytes(compressedSize),
+            compressedDimensions.width,
+            compressedDimensions.height,
+            compressedDimensions.sampleAspectRatio,
+            compressedDimensions.displayAspectRatio,
         )
 
         return DownloadedFile(
@@ -65,8 +70,8 @@ class TelegramVideoPreparer(
                 args = listOf(
                     "-v", "error",
                     "-select_streams", "v:0",
-                    "-show_entries", "stream=width,height",
-                    "-of", "csv=p=0:s=x",
+                    "-show_entries", "stream=width,height,sample_aspect_ratio,display_aspect_ratio",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
                     file.toString(),
                 ),
                 timeout = 1.minutes,
@@ -77,15 +82,21 @@ class TelegramVideoPreparer(
             throw VideoPrepareException("ffprobe failed: ${result.output.take(500)}")
         }
 
-        val parts = result.output.trim().split("x")
-        val width = parts.getOrNull(0)?.toIntOrNull()
-        val height = parts.getOrNull(1)?.toIntOrNull()
+        val lines = result.output
+            .lineSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .toList()
+        val width = lines.getOrNull(0)?.toIntOrNull()
+        val height = lines.getOrNull(1)?.toIntOrNull()
+        val sampleAspectRatio = lines.getOrNull(2)
+        val displayAspectRatio = lines.getOrNull(3)
 
-        if (width == null || height == null) {
+        if (width == null || height == null || sampleAspectRatio == null || displayAspectRatio == null) {
             throw VideoPrepareException("ffprobe returned invalid dimensions: ${result.output.take(100)}")
         }
 
-        return VideoDimensions(width, height)
+        return VideoDimensions(width, height, sampleAspectRatio, displayAspectRatio)
     }
 
     private suspend fun transcodeVertical(input: Path, output: Path) {
@@ -96,7 +107,7 @@ class TelegramVideoPreparer(
                     "-hide_banner",
                     "-loglevel", "error",
                     "-i", input.toString(),
-                    "-vf", "scale=min(1080\\,iw):-2",
+                    "-vf", "scale=min(1080\\,iw):-2,setsar=1",
                     "-c:v", "libx264",
                     "-preset", "fast",
                     "-crf", "30",
@@ -123,6 +134,8 @@ class TelegramVideoPreparer(
     private data class VideoDimensions(
         val width: Int,
         val height: Int,
+        val sampleAspectRatio: String,
+        val displayAspectRatio: String,
     ) {
         val isVertical: Boolean = height > width
     }

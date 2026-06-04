@@ -37,6 +37,15 @@ class DownloadJobService(
 		return downloadJobRepository.claimNextQueuedJob()
 	}
 
+	@Transactional(readOnly = true)
+	fun findCachedJob(job: DownloadJob): DownloadJob? {
+		return downloadJobRepository
+			.findCachedCompletedJob(
+				normalizedUrl = job.normalizedUrl,
+				outputType = job.outputType,
+			)
+	}
+
 	@Transactional
 	fun markMetadata(jobId: Long, metadata: MediaMetadata): DownloadJob {
 		val job = getJobInternal(jobId)

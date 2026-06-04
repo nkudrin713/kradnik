@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.repository
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.OutputType
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 
@@ -29,4 +30,22 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 		nativeQuery = true,
 	)
 	fun claimNextQueuedJob(): DownloadJob?
+
+	@Query(
+		value = """
+			SELECT *
+			FROM download_jobs
+			WHERE normalized_url = :normalizedUrl
+			  AND output_type = :#{#outputType.dbValue}
+			  AND status = 'completed'
+			  AND telegram_file_id IS NOT NULL
+			ORDER BY completed_at DESC
+			LIMIT 1
+		""",
+		nativeQuery = true,
+	)
+	fun findCachedCompletedJob(
+		normalizedUrl: String,
+		outputType: OutputType,
+	): DownloadJob?
 }

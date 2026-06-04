@@ -32,6 +32,8 @@ class DownloadQueueWorker(
     private val ytDlpService: YtDlpService,
     @Value("\${download.work-dir:/tmp/kradnik-downloads}")
     private val workDir: String,
+    @Value("\${download.telegram-file-cache.enabled:true}")
+    private val telegramFileCacheEnabled: Boolean,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -49,6 +51,10 @@ class DownloadQueueWorker(
         val outputDir = Path.of(workDir).resolve(jobId.toString()).createDirectories()
 
         try {
+            if (sendCached(job)) {
+                return
+            }
+
             editStatus(job, TelegramDownloadStatus.DOWNLOADING)
 
             runCatching {
@@ -83,6 +89,35 @@ class DownloadQueueWorker(
         } finally {
             deleteRecursively(outputDir)
         }
+    }
+
+    private fun sendCached(job: DownloadJob): Boolean {
+        if (!telegramFileCacheEnabled) {
+            return false
+        }
+
+        val jobId = requireNotNull(job.id)
+        val cachedJob = downloadJobService.findCachedJob(job) ?: return false
+        val fileId = cachedJob.telegramFileId ?: return false
+
+        editStatus(job, TelegramDownloadStatus.UPLOADING)
+
+        val telegramResult = when (job.outputType) {
+            OutputType.VIDEO -> telegramSender.sendCachedVideo(job.telegramChatId, fileId)
+            OutputType.AUDIO -> telegramSender.sendCachedAudio(job.telegramChatId, fileId)
+        }
+
+        downloadJobService.markCompleted(
+            jobId,
+            DownloadedFileResult(
+                telegramFileId = telegramResult.fileId,
+                telegramFileSize = telegramResult.fileSize,
+                downloadedFileSize = cachedJob.downloadedFileSize,
+            )
+        )
+        editStatus(job, TelegramDownloadStatus.COMPLETED)
+
+        return true
     }
 
     private fun editStatus(job: DownloadJob, status: TelegramDownloadStatus) {

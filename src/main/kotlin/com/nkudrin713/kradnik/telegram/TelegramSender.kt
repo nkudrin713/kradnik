@@ -60,8 +60,43 @@ class TelegramSender(
         )
     }
 
+    fun sendCachedVideo(chatId: Long, fileId: String): TelegramSendResult {
+        val response = bot.execute(
+            SendVideo(chatId, fileId)
+                .supportsStreaming(true)
+        )
+
+        if (!response.isOk) {
+            throw TelegramSendException(response.description())
+        }
+
+        val video = response.message()?.video()
+            ?: throw TelegramSendException("Telegram response does not contain video")
+
+        return TelegramSendResult(
+            fileId = video.fileId,
+            fileSize = video.fileSize,
+        )
+    }
+
     fun sendAudio(chatId: Long, file: Path): TelegramSendResult {
         val response = bot.execute(SendAudio(chatId, file.toFile()))
+
+        if (!response.isOk) {
+            throw TelegramSendException(response.description())
+        }
+
+        val audio = response.message()?.audio()
+            ?: throw TelegramSendException("Telegram response does not contain audio")
+
+        return TelegramSendResult(
+            fileId = audio.fileId ?: throw TelegramSendException("Telegram audio file_id is empty"),
+            fileSize = audio.fileSize,
+        )
+    }
+
+    fun sendCachedAudio(chatId: Long, fileId: String): TelegramSendResult {
+        val response = bot.execute(SendAudio(chatId, fileId))
 
         if (!response.isOk) {
             throw TelegramSendException(response.description())

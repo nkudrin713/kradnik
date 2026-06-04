@@ -13,7 +13,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
                 SELECT id
                 FROM download_jobs
                 WHERE status = 'queued'
-                  AND attempts < 3
+                  AND attempts < :maxAttempts
                 ORDER BY created_at
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
@@ -29,7 +29,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
         """,
 		nativeQuery = true,
 	)
-	fun claimNextQueuedJob(): DownloadJob?
+	fun claimNextQueuedJob(maxAttempts: Int): DownloadJob?
 
 	@Query(
 		value = """

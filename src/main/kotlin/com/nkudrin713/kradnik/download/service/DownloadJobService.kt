@@ -34,7 +34,7 @@ class DownloadJobService(
 
 	@Transactional
 	fun claimNextQueuedJob(): DownloadJob? {
-		return downloadJobRepository.claimNextQueuedJob()
+		return downloadJobRepository.claimNextQueuedJob(MAX_ATTEMPTS)
 	}
 
 	@Transactional(readOnly = true)
@@ -111,7 +111,7 @@ class DownloadJobService(
 
 		job.errorMessage = errorMessage.take(1000)
 
-		if (job.attempts >= 3) {
+		if (job.attempts >= MAX_ATTEMPTS) {
 			job.status = DownloadJobStatus.FAILED
 			job.completedAt = Instant.now()
 		} else {
@@ -138,6 +138,10 @@ class DownloadJobService(
 	private fun getJobInternal(jobId: Long): DownloadJob {
 		return downloadJobRepository.findById(jobId)
 			.orElseThrow { DownloadJobNotFoundException(jobId) }
+	}
+
+	private companion object {
+		private const val MAX_ATTEMPTS = 3
 	}
 }
 

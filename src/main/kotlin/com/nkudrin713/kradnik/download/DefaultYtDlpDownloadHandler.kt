@@ -23,8 +23,9 @@ class DefaultYtDlpDownloadHandler : PlatformDownloadHandler {
                 outputType = outputType,
                 presetName = "default_mobile_video",
                 formatSelector =
-                    "bv*[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
-                            "b[height<=1280][vcodec^=avc1][ext=mp4]/b",
+                    "bv*[filesize<45M][height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
+                            "bv*[height<=720][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
+                            "b[height<=720][vcodec^=avc1][ext=mp4]/b",
                 extraArgs = listOf("--merge-output-format", "mp4"),
             )
 

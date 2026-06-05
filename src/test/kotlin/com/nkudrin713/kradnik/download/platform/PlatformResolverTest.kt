@@ -50,7 +50,13 @@ class PlatformResolverTest {
         assertEquals(OutputType.AUDIO, actual.outputType)
         assertEquals("youtube_audio", actual.presetName)
         assertEquals("ba/bestaudio", actual.formatSelector)
-        assertEquals(listOf("-x", "--audio-format", "mp3", "--embed-metadata"), actual.extraArgs)
+        assertEquals(listOf(
+            "-x",
+            "--audio-format", "mp3",
+            "--embed-metadata",
+            "--embed-thumbnail",
+            "--convert-thumbnails", "jpg",
+        ), actual.extraArgs)
     }
 
     @Test

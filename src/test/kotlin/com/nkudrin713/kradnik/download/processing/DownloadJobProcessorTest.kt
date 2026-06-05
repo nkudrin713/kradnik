@@ -3,17 +3,16 @@ package com.nkudrin713.kradnik.download.processing
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.request.DownloadRequestFactory
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import com.nkudrin713.kradnik.download.service.DownloadedFileResult
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSendResult
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
-import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import io.mockk.coEvery
@@ -37,7 +36,8 @@ class DownloadJobProcessorTest {
     private val telegramVideoPreparer: TelegramVideoPreparer = mockk()
     private val telegramFileSender: TelegramFileSender = mockk()
     private val ytDlpService: YtDlpService = mockk()
-    private val statusReporter: DownloadStatusReporter = mockk()
+    private val mediaMetadataMapper: MediaMetadataMapper = mockk()
+    private val downloadJobLifecycle: DownloadJobLifecycle = mockk(relaxed = true)
     private val workDirCleaner: WorkDirCleaner = mockk()
 
     @Test
@@ -48,16 +48,14 @@ class DownloadJobProcessorTest {
             downloadedFileSize = 100
         }
         every { downloadJobService.findCachedJob(job) } returns cachedJob
-        every { statusReporter.setStatus(any(), any()) } just runs
         every { telegramFileSender.sendCached(job, "cached-file-id", 100) } returns telegramResult()
-        every { downloadJobService.markCompleted(1, any<DownloadedFileResult>()) } returns job
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir, telegramFileCacheEnabled = true).process(job)
 
         verify { telegramFileSender.sendCached(job, "cached-file-id", 100) }
-        verify { downloadJobService.markCompleted(1, any<DownloadedFileResult>()) }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.COMPLETED) }
+        verify { downloadJobLifecycle.markUploading(job) }
+        verify { downloadJobLifecycle.complete(job, any()) }
         verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
     }
 
@@ -69,14 +67,11 @@ class DownloadJobProcessorTest {
         every { downloadRequestFactory.create(job) } returns request
         coEvery { ytDlpService.extractMetadata(request) } returns metadata()
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Rejected("too large")
-        every { downloadJobService.markFailed(1, "too large") } returns job
-        every { statusReporter.setStatus(any(), any()) } just runs
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(job)
 
-        verify { downloadJobService.markFailed(1, "too large") }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.REJECTED_TOO_LARGE) }
+        verify { downloadJobLifecycle.rejectTooLarge(job, "too large") }
         verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
     }
 
@@ -86,27 +81,27 @@ class DownloadJobProcessorTest {
         val request = request()
         val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
         val preparedFile = DownloadedFile(tempDir.resolve("prepared.mp4"), 90)
+        val metadata = metadata()
         every { downloadJobService.findCachedJob(job) } returns null
         every { downloadRequestFactory.create(job) } returns request
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed
-        every { statusReporter.setStatus(any(), any()) } just runs
-        coEvery { ytDlpService.extractMetadata(request) } returns metadata()
+        coEvery { ytDlpService.extractMetadata(request) } returns metadata
+        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
         every { downloadJobService.markMetadata(1, any()) } returns job
         coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) } returns preparedFile
-        every { downloadJobService.markUploading(1) } returns job
         coEvery { telegramFileSender.send(job, preparedFile) } returns telegramResult()
-        every { downloadJobService.markCompleted(1, any<DownloadedFileResult>()) } returns job
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(job)
 
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.DOWNLOADING) }
+        verify { downloadJobLifecycle.markDownloading(job) }
         coVerify(exactly = 1) { ytDlpService.extractMetadata(request) }
         verify { downloadJobService.markMetadata(1, any()) }
+        verify { downloadJobLifecycle.markUploading(job) }
         coVerify { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) }
         coVerify { telegramFileSender.send(job, preparedFile) }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.COMPLETED) }
+        verify { downloadJobLifecycle.complete(job, any()) }
         verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
     }
 
@@ -114,14 +109,11 @@ class DownloadJobProcessorTest {
     fun marksFailedOrRetryOnError(@TempDir tempDir: Path) = runTest {
         val job = job()
         every { downloadRequestFactory.create(job) } throws IllegalStateException("boom")
-        every { downloadJobService.markFailedOrRetry(1, "boom") } returns job
-        every { statusReporter.setStatus(any(), any()) } just runs
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(job)
 
-        verify { downloadJobService.markFailedOrRetry(1, "boom") }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.ERROR) }
+        verify { downloadJobLifecycle.failOrRetry(job, "boom") }
         verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
     }
 
@@ -133,8 +125,6 @@ class DownloadJobProcessorTest {
         every { downloadRequestFactory.create(job) } returns request
         coEvery { ytDlpService.extractMetadata(request) } returns metadata()
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Rejected("too large")
-        every { downloadJobService.markFailed(1, "too large") } returns job
-        every { statusReporter.setStatus(any(), any()) } just runs
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir, telegramFileCacheEnabled = true).process(job)
@@ -154,8 +144,6 @@ class DownloadJobProcessorTest {
         every { downloadRequestFactory.create(job) } returns request
         coEvery { ytDlpService.extractMetadata(request) } returns metadata()
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Rejected("too large")
-        every { downloadJobService.markFailed(1, "too large") } returns job
-        every { statusReporter.setStatus(any(), any()) } just runs
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir, telegramFileCacheEnabled = true).process(job)
@@ -174,15 +162,14 @@ class DownloadJobProcessorTest {
         }
         val request = request(outputType = OutputType.AUDIO)
         val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp3"), 100)
+        val metadata = metadata()
         every { downloadRequestFactory.create(job) } returns request
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed
-        every { statusReporter.setStatus(any(), any()) } just runs
-        coEvery { ytDlpService.extractMetadata(request) } returns metadata()
+        coEvery { ytDlpService.extractMetadata(request) } returns metadata
+        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
         every { downloadJobService.markMetadata(1, any()) } returns markedJob
         coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
-        every { downloadJobService.markUploading(1) } returns job
         coEvery { telegramFileSender.send(markedJob, downloadedFile) } returns telegramResult()
-        every { downloadJobService.markCompleted(1, any<DownloadedFileResult>()) } returns job
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(job)
@@ -196,9 +183,7 @@ class DownloadJobProcessorTest {
         val job = job()
         val request = request()
         every { downloadRequestFactory.create(job) } returns request
-        every { statusReporter.setStatus(any(), any()) } just runs
         coEvery { ytDlpService.extractMetadata(request) } throws IllegalStateException("metadata error")
-        every { downloadJobService.markFailedOrRetry(1, "metadata error") } returns job
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(job)
@@ -207,8 +192,7 @@ class DownloadJobProcessorTest {
         verify(exactly = 0) { downloadJobService.markMetadata(any(), any()) }
         coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
         coVerify(exactly = 0) { telegramFileSender.send(any(), any()) }
-        verify { downloadJobService.markFailedOrRetry(1, "metadata error") }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.ERROR) }
+        verify { downloadJobLifecycle.failOrRetry(job, "metadata error") }
     }
 
     @Test
@@ -216,16 +200,15 @@ class DownloadJobProcessorTest {
         val job = job()
         val request = request()
         val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
+        val metadata = metadata(duration = null)
         every { downloadRequestFactory.create(job) } returns request
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed
-        every { statusReporter.setStatus(any(), any()) } just runs
-        coEvery { ytDlpService.extractMetadata(request) } returns metadata(duration = null)
+        coEvery { ytDlpService.extractMetadata(request) } returns metadata
+        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata(durationSeconds = null)
         every { downloadJobService.markMetadata(1, any()) } returns job
         coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) } returns downloadedFile
-        every { downloadJobService.markUploading(1) } returns job
         coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
-        every { downloadJobService.markCompleted(1, any<DownloadedFileResult>()) } returns job
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(job)
@@ -237,13 +220,11 @@ class DownloadJobProcessorTest {
     fun usesExceptionClassNameWhenErrorMessageIsMissing(@TempDir tempDir: Path) = runTest {
         val job = job()
         every { downloadRequestFactory.create(job) } throws object : RuntimeException() {}
-        every { downloadJobService.markFailedOrRetry(1, any()) } returns job
-        every { statusReporter.setStatus(any(), any()) } just runs
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(job)
 
-        verify { downloadJobService.markFailedOrRetry(1, any()) }
+        verify { downloadJobLifecycle.failOrRetry(job, any()) }
     }
 
     @Test
@@ -264,7 +245,8 @@ class DownloadJobProcessorTest {
             telegramVideoPreparer = telegramVideoPreparer,
             telegramFileSender = telegramFileSender,
             ytDlpService = ytDlpService,
-            statusReporter = statusReporter,
+            mediaMetadataMapper = mediaMetadataMapper,
+            downloadJobLifecycle = downloadJobLifecycle,
             workDirCleaner = workDirCleaner,
             workDir = workDir.toString(),
             telegramFileCacheEnabled = telegramFileCacheEnabled,
@@ -315,6 +297,19 @@ class DownloadJobProcessorTest {
             uploader = "uploader",
             channel = "channel",
             requestedFormats = null,
+        )
+    }
+
+    private fun mediaMetadata(durationSeconds: Long? = 120): MediaMetadata {
+        return MediaMetadata(
+            title = "title",
+            extractor = "youtube",
+            durationSeconds = durationSeconds,
+            audioTitle = "track",
+            audioPerformer = "artist",
+            width = 1080,
+            height = 1920,
+            webpageUrl = "https://example.com/video",
         )
     }
 

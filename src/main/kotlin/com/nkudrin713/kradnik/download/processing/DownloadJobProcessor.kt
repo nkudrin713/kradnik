@@ -3,17 +3,14 @@ package com.nkudrin713.kradnik.download.processing
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
-import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.requiredId
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.request.DownloadRequestFactory
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import com.nkudrin713.kradnik.download.telegram.TelegramFileSendResult
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
-import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.slf4j.LoggerFactory
@@ -31,7 +28,8 @@ class DownloadJobProcessor(
     private val telegramVideoPreparer: TelegramVideoPreparer,
     private val telegramFileSender: TelegramFileSender,
     private val ytDlpService: YtDlpService,
-    private val statusReporter: DownloadStatusReporter,
+    private val mediaMetadataMapper: MediaMetadataMapper,
+    private val downloadJobLifecycle: DownloadJobLifecycle,
     private val workDirCleaner: WorkDirCleaner,
     @Value("\${download.work-dir:/tmp/kradnik-downloads}")
     private val workDir: String,
@@ -45,7 +43,7 @@ class DownloadJobProcessor(
         val outputDir = Path.of(workDir).resolve(jobId.toString()).createDirectories()
 
         try {
-            if (sendCached(job, jobId)) {
+            if (sendCached(job)) {
                 return
             }
 
@@ -53,21 +51,21 @@ class DownloadJobProcessor(
             val metadata = ytDlpService.extractMetadata(request)
             val preflightDecision = downloadPreflightService.check(request, metadata)
             if (preflightDecision is DownloadPreflightDecision.Rejected) {
-                rejectJob(job, jobId, preflightDecision.reason)
+                downloadJobLifecycle.rejectTooLarge(job, preflightDecision.reason)
                 return
             }
 
-            statusReporter.setStatus(job, TelegramDownloadStatus.DOWNLOADING)
+            downloadJobLifecycle.markDownloading(job)
 
             val uploadJob = markMetadata(jobId, metadata)
 
             val downloadedFile = ytDlpService.download(request, outputDir)
             val uploadFile = prepareForUpload(uploadJob, downloadedFile, outputDir, jobId)
 
-            upload(uploadJob, uploadFile, jobId)
+            upload(uploadJob, uploadFile)
         } catch (error: Exception) {
             logger.error("JOB[{}] processing failed", jobId, error)
-            failOrRetryJob(job, jobId, error.message ?: error.javaClass.simpleName)
+            downloadJobLifecycle.failOrRetry(job, error.message ?: error.javaClass.simpleName)
         } finally {
             workDirCleaner.deleteRecursively(outputDir)
         }
@@ -85,22 +83,21 @@ class DownloadJobProcessor(
         }
     }
 
-    private suspend fun upload(job: DownloadJob, uploadFile: DownloadedFile, jobId: Long) {
-        downloadJobService.markUploading(jobId)
-        statusReporter.setStatus(job, TelegramDownloadStatus.UPLOADING)
+    private suspend fun upload(job: DownloadJob, uploadFile: DownloadedFile) {
+        downloadJobLifecycle.markUploading(job)
         logger.info(
             "JOB[{}] uploading to Telegram: type={}, sizeMb={}",
-            jobId,
+            job.requiredId(),
             job.outputType,
             formatMegabytes(uploadFile.sizeBytes),
         )
 
         val telegramResult = telegramFileSender.send(job, uploadFile)
 
-        completeJob(job, jobId, telegramResult)
+        downloadJobLifecycle.complete(job, telegramResult.toDownloadedFileResult())
     }
 
-    private fun sendCached(job: DownloadJob, jobId: Long): Boolean {
+    private fun sendCached(job: DownloadJob): Boolean {
         if (!telegramFileCacheEnabled) {
             return false
         }
@@ -108,7 +105,7 @@ class DownloadJobProcessor(
         val cachedJob = downloadJobService.findCachedJob(job) ?: return false
         val fileId = cachedJob.telegramFileId ?: return false
 
-        statusReporter.setStatus(job, TelegramDownloadStatus.UPLOADING)
+        downloadJobLifecycle.markUploading(job)
 
         val telegramResult = telegramFileSender.sendCached(
             job = job,
@@ -116,36 +113,9 @@ class DownloadJobProcessor(
             downloadedFileSize = cachedJob.downloadedFileSize,
         )
 
-        completeJob(job, jobId, telegramResult)
+        downloadJobLifecycle.complete(job, telegramResult.toDownloadedFileResult())
 
         return true
-    }
-
-    private fun rejectJob(
-        job: DownloadJob,
-        jobId: Long,
-        reason: String,
-    ) {
-        downloadJobService.markFailed(jobId, reason)
-        statusReporter.setStatus(job, TelegramDownloadStatus.REJECTED_TOO_LARGE)
-    }
-
-    private fun failOrRetryJob(
-        job: DownloadJob,
-        jobId: Long,
-        errorMessage: String,
-    ) {
-        downloadJobService.markFailedOrRetry(jobId, errorMessage)
-        statusReporter.setStatus(job, TelegramDownloadStatus.ERROR)
-    }
-
-    private fun completeJob(
-        job: DownloadJob,
-        jobId: Long,
-        telegramResult: TelegramFileSendResult,
-    ) {
-        downloadJobService.markCompleted(jobId, telegramResult.toDownloadedFileResult())
-        statusReporter.setStatus(job, TelegramDownloadStatus.COMPLETED)
     }
 
     private fun markMetadata(
@@ -154,22 +124,7 @@ class DownloadJobProcessor(
     ): DownloadJob {
         return downloadJobService.markMetadata(
             jobId,
-            MediaMetadata(
-                title = metadata.title,
-                extractor = metadata.extractor,
-                durationSeconds = metadata.duration?.toLong(),
-                audioTitle = metadata.track
-                    ?: metadata.title
-                    ?: DEFAULT_AUDIO_TITLE,
-                audioPerformer = metadata.artist
-                    ?: metadata.uploader
-                    ?: metadata.channel
-                    ?: metadata.extractor
-                    ?: DEFAULT_AUDIO_PERFORMER,
-                width = metadata.width,
-                height = metadata.height,
-                webpageUrl = metadata.webpageUrl,
-            )
+            mediaMetadataMapper.toMediaMetadata(metadata),
         )
     }
 
@@ -179,7 +134,5 @@ class DownloadJobProcessor(
 
     private companion object {
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
-        private const val DEFAULT_AUDIO_TITLE = "Audio"
-        private const val DEFAULT_AUDIO_PERFORMER = "Unknown"
     }
 }

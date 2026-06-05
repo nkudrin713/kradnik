@@ -1,10 +1,16 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.VideoMetadataProbe
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.pengrad.telegrambot.TelegramBot
+import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
+import com.pengrad.telegrambot.request.AnswerCallbackQuery
+import com.pengrad.telegrambot.request.BaseRequest
+import com.pengrad.telegrambot.request.EditMessageText
 import com.pengrad.telegrambot.request.SendAudio
+import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendVideo
+import com.pengrad.telegrambot.response.BaseResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
@@ -16,18 +22,17 @@ import java.util.Locale
 @Service
 class TelegramSender(
     private val bot: TelegramBot,
-    private val telegramTextMessenger: TelegramTextMessenger,
     private val modeView: TelegramModeView,
     private val videoMetadataProbe: VideoMetadataProbe,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     fun sendMessage(chatId: Long, text: String) {
-        telegramTextMessenger.send(chatId, text)
+        sendText(chatId, text)
     }
 
     fun sendStatus(chatId: Long, status: TelegramDownloadStatus): Int {
-        return telegramTextMessenger.send(chatId, status.text)
+        return sendText(chatId, status.text)
     }
 
     fun editStatus(chatId: Long, messageId: Int?, status: TelegramDownloadStatus) {
@@ -35,19 +40,19 @@ class TelegramSender(
             return
         }
 
-        telegramTextMessenger.edit(chatId, messageId, status.text)
+        editText(chatId, messageId, status.text)
     }
 
     fun sendModeMenu(chatId: Long, outputType: OutputType) {
-        telegramTextMessenger.send(chatId, modeView.text(), modeView.keyboard(outputType))
+        sendText(chatId, modeView.text(), modeView.keyboard(outputType))
     }
 
     fun editModeMenu(chatId: Long, messageId: Int, outputType: OutputType) {
-        telegramTextMessenger.edit(chatId, messageId, modeView.text(), modeView.keyboard(outputType))
+        editText(chatId, messageId, modeView.text(), modeView.keyboard(outputType))
     }
 
     fun answerCallback(callbackQueryId: String) {
-        telegramTextMessenger.answerCallback(callbackQueryId)
+        executeTelegram(AnswerCallbackQuery(callbackQueryId))
     }
 
     suspend fun sendVideo(chatId: Long, file: Path): TelegramSendResult {
@@ -139,6 +144,44 @@ class TelegramSender(
             fileId = audio.fileId ?: throw TelegramSendException("Telegram audio file_id is empty"),
             fileSize = audio.fileSize,
         )
+    }
+
+    private fun sendText(
+        chatId: Long,
+        text: String,
+        keyboard: InlineKeyboardMarkup? = null,
+    ): Int {
+        val request = SendMessage(chatId, text)
+        if (keyboard != null) {
+            request.replyMarkup(keyboard)
+        }
+
+        val response = executeTelegram(request)
+        return requireNotNull(response.message()).messageId()
+    }
+
+    private fun editText(
+        chatId: Long,
+        messageId: Int,
+        text: String,
+        keyboard: InlineKeyboardMarkup? = null,
+    ) {
+        val request = EditMessageText(chatId, messageId, text)
+        if (keyboard != null) {
+            request.replyMarkup(keyboard)
+        }
+
+        executeTelegram(request)
+    }
+
+    private fun <T, R> executeTelegram(request: BaseRequest<T, R>): R
+            where T : BaseRequest<T, R>, R : BaseResponse {
+        val response = bot.execute(request)
+        if (!response.isOk) {
+            throw TelegramSendException(response.description())
+        }
+
+        return response
     }
 
     private fun formatMegabytes(bytes: Long): String {

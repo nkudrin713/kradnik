@@ -49,6 +49,31 @@ class DownloadJobServiceTest {
     @Test
     fun marksCompleted() {
         val job = job()
+        val downloadedAt = Instant.parse("2026-01-01T00:00:00Z")
+        every { repository.findById(1) } returns Optional.of(job)
+
+        val actual = service.markCompleted(
+            jobId = 1,
+            result = DownloadedFileResult(
+                telegramFileId = "file-id",
+                telegramFileSize = 100,
+                downloadedFileSize = 200,
+                downloadedAt = downloadedAt,
+            )
+        )
+
+        assertEquals(DownloadJobStatus.COMPLETED, actual.status)
+        assertEquals("file-id", actual.telegramFileId)
+        assertEquals(100, actual.telegramFileSize)
+        assertEquals(200, actual.downloadedFileSize)
+        assertEquals(null, actual.errorMessage)
+        assertEquals(downloadedAt, actual.downloadedAt)
+        assertNotNull(actual.completedAt)
+    }
+
+    @Test
+    fun marksCompletedWithCurrentDownloadTimeWhenResultHasNoDownloadTime() {
+        val job = job()
         every { repository.findById(1) } returns Optional.of(job)
 
         val actual = service.markCompleted(
@@ -60,13 +85,7 @@ class DownloadJobServiceTest {
             )
         )
 
-        assertEquals(DownloadJobStatus.COMPLETED, actual.status)
-        assertEquals("file-id", actual.telegramFileId)
-        assertEquals(100, actual.telegramFileSize)
-        assertEquals(200, actual.downloadedFileSize)
-        assertEquals(null, actual.errorMessage)
         assertNotNull(actual.downloadedAt)
-        assertNotNull(actual.completedAt)
     }
 
     @Test
@@ -112,6 +131,26 @@ class DownloadJobServiceTest {
         assertEquals("title", actual.sourceTitle)
         assertEquals("youtube", actual.sourceExtractor)
         assertEquals(120, actual.sourceDurationSeconds)
+    }
+
+    @Test
+    fun marksMetadataWithoutDuration() {
+        val job = job()
+        every { repository.findById(1) } returns Optional.of(job)
+
+        val actual = service.markMetadata(
+            jobId = 1,
+            metadata = MediaMetadata(
+                title = "title",
+                extractor = "youtube",
+                durationSeconds = null,
+                width = null,
+                height = null,
+                webpageUrl = "https://example.com",
+            )
+        )
+
+        assertEquals(null, actual.sourceDurationSeconds)
     }
 
     @Test
@@ -173,6 +212,28 @@ class DownloadJobServiceTest {
         assertEquals(1, actual.failed)
         verify { repository.requeueStaleInProgressJobs(staleBefore, 3) }
         verify { repository.failStaleInProgressJobs(staleBefore, 3) }
+    }
+
+    @Test
+    fun recoversNoStaleJobs() {
+        val staleBefore = Instant.parse("2026-01-01T00:00:00Z")
+        every { repository.requeueStaleInProgressJobs(staleBefore, 3) } returns 0
+        every { repository.failStaleInProgressJobs(staleBefore, 3) } returns 0
+
+        val actual = service.recoverStaleInProgressJobs(staleBefore)
+
+        assertEquals(0, actual.requeued)
+        assertEquals(0, actual.failed)
+    }
+
+    @Test
+    fun getsJob() {
+        val job = job()
+        every { repository.findById(1) } returns Optional.of(job)
+
+        val actual = service.getJob(1)
+
+        assertEquals(job, actual)
     }
 
     @Test

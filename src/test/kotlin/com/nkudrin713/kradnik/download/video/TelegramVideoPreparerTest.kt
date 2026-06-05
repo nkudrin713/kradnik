@@ -10,6 +10,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
+import java.io.RandomAccessFile
 import java.nio.file.Path
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -68,6 +69,48 @@ class TelegramVideoPreparerTest {
 
         assertFailsWith<VideoPrepareException> {
             preparer.prepare(file, tempDir, jobId = 1)
+        }
+    }
+
+    @Test
+    fun failsWhenCompressionProcessTimesOut(@TempDir tempDir: Path) = runTest {
+        val source = tempDir.resolve("source.mp4")
+        val file = DownloadedFile(source, TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
+        coEvery { videoMetadataProbe.probe(source) } returns verticalMetadata()
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            timedOut = true,
+            exitCode = null,
+            output = "ffmpeg timeout",
+            duration = 1.seconds,
+        )
+
+        assertFailsWith<VideoPrepareException> {
+            preparer.prepare(file, tempDir, jobId = 1)
+        }
+    }
+
+    @Test
+    fun failsWhenCompressedVideoIsStillTooLarge(@TempDir tempDir: Path) = runTest {
+        val source = tempDir.resolve("source.mp4")
+        val file = DownloadedFile(source, TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
+        coEvery { videoMetadataProbe.probe(source) } returns verticalMetadata()
+        coEvery { processRunner.run(any()) } answers {
+            RandomAccessFile(Path.of(firstArg<Command>().args.last()).toFile(), "rw").use { file ->
+                file.setLength(TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
+            }
+            processResult()
+        }
+        coEvery { videoMetadataProbe.probe(tempDir.resolve("telegram-video.mp4")) } returns verticalMetadata()
+
+        assertFailsWith<VideoTooLargeException> {
+            TelegramVideoPreparer(
+                processRunner = processRunner,
+                videoMetadataProbe = videoMetadataProbe,
+            ).prepare(
+                file = file.copy(sizeBytes = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1),
+                outputDir = tempDir,
+                jobId = 1,
+            )
         }
     }
 

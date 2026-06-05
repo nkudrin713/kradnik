@@ -76,6 +76,46 @@ class VideoMetadataProbeTest {
         }
     }
 
+    @Test
+    fun throwsOnTimedOutProcess() = runTest {
+        coEvery { processRunner.run(any()) } returns result(
+            output = "ffprobe timeout",
+            exitCode = null,
+            timedOut = true,
+        )
+
+        assertFailsWith<VideoMetadataProbeException> {
+            probe.probe(Path.of("video.mp4"))
+        }
+    }
+
+    @Test
+    fun throwsOnInvalidHeight() = runTest {
+        coEvery { processRunner.run(any()) } returns result("1080\ninvalid\n1:1\n9:16")
+
+        assertFailsWith<VideoMetadataProbeException> {
+            probe.probe(Path.of("video.mp4"))
+        }
+    }
+
+    @Test
+    fun throwsOnInvalidWidth() = runTest {
+        coEvery { processRunner.run(any()) } returns result("invalid\n1080\n1:1\n9:16")
+
+        assertFailsWith<VideoMetadataProbeException> {
+            probe.probe(Path.of("video.mp4"))
+        }
+    }
+
+    @Test
+    fun detectsHorizontalVideo() = runTest {
+        coEvery { processRunner.run(any()) } returns result("1920\n1080\n1:1\n16:9")
+
+        val actual = probe.probe(Path.of("video.mp4"))
+
+        assertEquals(false, actual.isVertical)
+    }
+
     private fun result(
         output: String,
         exitCode: Int? = 0,

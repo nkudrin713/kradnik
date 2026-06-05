@@ -59,6 +59,18 @@ class TelegramFileSenderTest {
     }
 
     @Test
+    fun sendsCachedAudio() {
+        every { telegramSender.sendCachedAudio(100, "cached-id") } returns TelegramSendResult("audio-id", 456)
+
+        val actual = sender.sendCached(job(OutputType.AUDIO), "cached-id", downloadedFileSize = 123)
+
+        assertEquals("audio-id", actual.telegramFileId)
+        assertEquals(456, actual.telegramFileSize)
+        assertEquals(123, actual.downloadedFileSize)
+        verify { telegramSender.sendCachedAudio(100, "cached-id") }
+    }
+
+    @Test
     fun mapsResultToDownloadedFileResult() {
         val actual = TelegramFileSendResult(
             telegramFileId = "file-id",

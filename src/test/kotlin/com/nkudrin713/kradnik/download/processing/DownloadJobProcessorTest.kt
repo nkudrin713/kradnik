@@ -27,6 +27,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 class DownloadJobProcessorTest {
     private val downloadJobService: DownloadJobService = mockk()
@@ -121,6 +122,129 @@ class DownloadJobProcessorTest {
         verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
     }
 
+    @Test
+    fun skipsCacheWhenCachedJobIsMissing(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val request = request()
+        every { downloadJobService.findCachedJob(job) } returns null
+        every { downloadRequestFactory.create(job) } returns request
+        coEvery { downloadPreflightService.check(request) } returns DownloadPreflightDecision.Rejected("too large")
+        every { downloadJobService.markFailed(1, "too large") } returns job
+        every { statusReporter.setStatus(any(), any()) } just runs
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir, telegramFileCacheEnabled = true).process(job)
+
+        verify { downloadJobService.findCachedJob(job) }
+        verify { downloadRequestFactory.create(job) }
+    }
+
+    @Test
+    fun skipsCacheWhenCachedJobHasNoTelegramFileId(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val cachedJob = job().apply {
+            telegramFileId = null
+        }
+        val request = request()
+        every { downloadJobService.findCachedJob(job) } returns cachedJob
+        every { downloadRequestFactory.create(job) } returns request
+        coEvery { downloadPreflightService.check(request) } returns DownloadPreflightDecision.Rejected("too large")
+        every { downloadJobService.markFailed(1, "too large") } returns job
+        every { statusReporter.setStatus(any(), any()) } just runs
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir, telegramFileCacheEnabled = true).process(job)
+
+        verify { downloadJobService.findCachedJob(job) }
+        verify { downloadRequestFactory.create(job) }
+    }
+
+    @Test
+    fun downloadsAndUploadsAudioWithoutVideoPreparation(@TempDir tempDir: Path) = runTest {
+        val job = job(outputType = OutputType.AUDIO)
+        val request = request(outputType = OutputType.AUDIO)
+        val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp3"), 100)
+        every { downloadRequestFactory.create(job) } returns request
+        coEvery { downloadPreflightService.check(request) } returns DownloadPreflightDecision.Allowed
+        every { statusReporter.setStatus(any(), any()) } just runs
+        coEvery { ytDlpService.extractMetadata(job.originalUrl) } returns metadata()
+        every { downloadJobService.markMetadata(1, any()) } returns job
+        coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
+        every { downloadJobService.markUploading(1) } returns job
+        coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
+        every { downloadJobService.markCompleted(1, any<DownloadedFileResult>()) } returns job
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(job)
+
+        coVerify(exactly = 0) { telegramVideoPreparer.prepare(any(), any(), any()) }
+        coVerify { telegramFileSender.send(job, downloadedFile) }
+    }
+
+    @Test
+    fun continuesWhenMetadataExtractionFails(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val request = request()
+        val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
+        every { downloadRequestFactory.create(job) } returns request
+        coEvery { downloadPreflightService.check(request) } returns DownloadPreflightDecision.Allowed
+        every { statusReporter.setStatus(any(), any()) } just runs
+        coEvery { ytDlpService.extractMetadata(job.originalUrl) } throws IllegalStateException("metadata error")
+        coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
+        coEvery { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) } returns downloadedFile
+        every { downloadJobService.markUploading(1) } returns job
+        coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
+        every { downloadJobService.markCompleted(1, any<DownloadedFileResult>()) } returns job
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(job)
+
+        verify(exactly = 0) { downloadJobService.markMetadata(any(), any()) }
+        coVerify { telegramFileSender.send(job, downloadedFile) }
+    }
+
+    @Test
+    fun marksMetadataWithoutDuration(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val request = request()
+        val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
+        every { downloadRequestFactory.create(job) } returns request
+        coEvery { downloadPreflightService.check(request) } returns DownloadPreflightDecision.Allowed
+        every { statusReporter.setStatus(any(), any()) } just runs
+        coEvery { ytDlpService.extractMetadata(job.originalUrl) } returns metadata(duration = null)
+        every { downloadJobService.markMetadata(1, any()) } returns job
+        coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
+        coEvery { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) } returns downloadedFile
+        every { downloadJobService.markUploading(1) } returns job
+        coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
+        every { downloadJobService.markCompleted(1, any<DownloadedFileResult>()) } returns job
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(job)
+
+        verify { downloadJobService.markMetadata(1, any()) }
+    }
+
+    @Test
+    fun usesExceptionClassNameWhenErrorMessageIsMissing(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        every { downloadRequestFactory.create(job) } throws object : RuntimeException() {}
+        every { downloadJobService.markFailedOrRetry(1, any()) } returns job
+        every { statusReporter.setStatus(any(), any()) } just runs
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(job)
+
+        verify { downloadJobService.markFailedOrRetry(1, any()) }
+    }
+
+    @Test
+    fun failsWhenJobIdIsMissing(@TempDir tempDir: Path) = runTest {
+        assertFailsWith<IllegalArgumentException> {
+            processor(tempDir).process(job().apply { id = null })
+        }
+    }
+
     private fun processor(
         workDir: Path,
         telegramFileCacheEnabled: Boolean = false,
@@ -139,34 +263,34 @@ class DownloadJobProcessorTest {
         )
     }
 
-    private fun job(): DownloadJob {
+    private fun job(outputType: OutputType = OutputType.VIDEO): DownloadJob {
         return DownloadJob(
             id = 1,
             telegramChatId = 100,
             originalUrl = "https://example.com/video",
             normalizedUrl = "https://example.com/video",
-            outputType = OutputType.VIDEO,
+            outputType = outputType,
         )
     }
 
-    private fun request(): DownloadRequest {
+    private fun request(outputType: OutputType = OutputType.VIDEO): DownloadRequest {
         return DownloadRequest(
             originalUrl = "https://example.com/video",
             normalizedUrl = "https://example.com/video",
-            outputType = OutputType.VIDEO,
+            outputType = outputType,
             formatSelector = "format",
             presetName = "preset",
         )
     }
 
-    private fun metadata(): YtDlpMetadataDto {
+    private fun metadata(duration: Int? = 120): YtDlpMetadataDto {
         return YtDlpMetadataDto(
             id = "id",
             title = "title",
             extractor = "youtube",
             webpageUrl = "https://example.com/video",
             thumbnail = null,
-            duration = 120,
+            duration = duration,
             ext = "mp4",
             width = 1080,
             height = 1920,

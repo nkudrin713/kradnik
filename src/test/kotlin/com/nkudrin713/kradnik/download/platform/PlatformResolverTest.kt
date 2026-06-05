@@ -83,6 +83,14 @@ class PlatformResolverTest {
     }
 
     @Test
+    fun defaultHandlerSupportsAndNormalizesAnyUrl() {
+        val handler = DefaultYtDlpDownloadHandler()
+
+        assertEquals(true, handler.supports("https://example.com/video"))
+        assertEquals("https://example.com/video", handler.normalize("https://example.com/video"))
+    }
+
+    @Test
     fun defaultHandlerBuildsAudioRequest() {
         val actual = DefaultYtDlpDownloadHandler().buildRequest(
             url = "https://example.com/audio",

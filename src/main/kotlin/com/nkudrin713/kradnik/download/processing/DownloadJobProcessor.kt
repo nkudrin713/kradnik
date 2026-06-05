@@ -42,7 +42,7 @@ class DownloadJobProcessor(
         val outputDir = Path.of(workDir).resolve(jobId.toString()).createDirectories()
 
         try {
-            if (sendCached(job)) {
+            if (sendCached(job, jobId)) {
                 return
             }
 
@@ -57,15 +57,15 @@ class DownloadJobProcessor(
             statusReporter.setStatus(job, TelegramDownloadStatus.DOWNLOADING)
 
             runCatching {
-                markMetadata(job)
+                markMetadata(job, jobId)
             }.onFailure {
                 logger.warn("JOB[{}] metadata extraction skipped: {}", jobId, it.message)
             }
 
             val downloadedFile = ytDlpService.download(request, outputDir)
-            val uploadFile = prepareForUpload(job, downloadedFile, outputDir)
+            val uploadFile = prepareForUpload(job, downloadedFile, outputDir, jobId)
 
-            upload(job, uploadFile)
+            upload(job, uploadFile, jobId)
         } catch (error: Exception) {
             logger.error("JOB[{}] processing failed", jobId, error)
             downloadJobService.markFailedOrRetry(jobId, error.message ?: error.javaClass.simpleName)
@@ -79,18 +79,15 @@ class DownloadJobProcessor(
         job: DownloadJob,
         downloadedFile: DownloadedFile,
         outputDir: Path,
+        jobId: Long,
     ): DownloadedFile {
-        val jobId = requireNotNull(job.id)
-
         return when (job.outputType) {
             OutputType.VIDEO -> telegramVideoPreparer.prepare(downloadedFile, outputDir, jobId)
             OutputType.AUDIO -> downloadedFile
         }
     }
 
-    private suspend fun upload(job: DownloadJob, uploadFile: DownloadedFile) {
-        val jobId = requireNotNull(job.id)
-
+    private suspend fun upload(job: DownloadJob, uploadFile: DownloadedFile, jobId: Long) {
         downloadJobService.markUploading(jobId)
         statusReporter.setStatus(job, TelegramDownloadStatus.UPLOADING)
         logger.info(
@@ -106,12 +103,11 @@ class DownloadJobProcessor(
         statusReporter.setStatus(job, TelegramDownloadStatus.COMPLETED)
     }
 
-    private fun sendCached(job: DownloadJob): Boolean {
+    private fun sendCached(job: DownloadJob, jobId: Long): Boolean {
         if (!telegramFileCacheEnabled) {
             return false
         }
 
-        val jobId = requireNotNull(job.id)
         val cachedJob = downloadJobService.findCachedJob(job) ?: return false
         val fileId = cachedJob.telegramFileId ?: return false
 
@@ -129,8 +125,7 @@ class DownloadJobProcessor(
         return true
     }
 
-    private suspend fun markMetadata(job: DownloadJob) {
-        val jobId = requireNotNull(job.id)
+    private suspend fun markMetadata(job: DownloadJob, jobId: Long) {
         val metadata = ytDlpService.extractMetadata(job.originalUrl)
 
         downloadJobService.markMetadata(

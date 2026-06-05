@@ -32,6 +32,7 @@ dependencies {
 	implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
 	implementation("org.postgresql:postgresql")
 	implementation("com.github.pengrad:java-telegram-bot-api:9.2.0")
+	testImplementation("io.kotest:kotest-property:6.0.0")
 	testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
 	testImplementation("io.mockk:mockk:1.14.6")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")

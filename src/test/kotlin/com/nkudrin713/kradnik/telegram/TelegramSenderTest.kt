@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.download.VideoMetadataProbe
+import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.Audio

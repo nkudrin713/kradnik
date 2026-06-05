@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download
+package com.nkudrin713.kradnik.download.platform
 
 import org.springframework.stereotype.Service
 

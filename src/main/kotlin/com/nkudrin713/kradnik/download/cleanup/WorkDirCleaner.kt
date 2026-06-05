@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download
+package com.nkudrin713.kradnik.download.cleanup
 
 import org.springframework.stereotype.Component
 import java.nio.file.Files

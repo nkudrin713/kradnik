@@ -1,6 +1,7 @@
-package com.nkudrin713.kradnik.download
+package com.nkudrin713.kradnik.download.request
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import org.springframework.stereotype.Service
 
 @Service

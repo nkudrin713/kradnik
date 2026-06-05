@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.download.limit
 
-import com.nkudrin713.kradnik.download.DownloadRequest
+import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpFormatDto
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpMetadataDto

@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.telegram.handler.command.impl
 
-import com.nkudrin713.kradnik.download.PlatformResolver
+import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.settings.DownloadSettingsService

@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download
+package com.nkudrin713.kradnik.download.video
 
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessRunner

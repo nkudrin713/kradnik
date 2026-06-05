@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.ytdlp.client
 
-import com.nkudrin713.kradnik.download.DownloadRequest
+import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult

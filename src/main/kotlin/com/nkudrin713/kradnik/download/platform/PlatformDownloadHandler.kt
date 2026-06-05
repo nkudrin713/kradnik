@@ -1,6 +1,7 @@
-package com.nkudrin713.kradnik.download
+package com.nkudrin713.kradnik.download.platform
 
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.request.DownloadRequest
 
 interface PlatformDownloadHandler {
 

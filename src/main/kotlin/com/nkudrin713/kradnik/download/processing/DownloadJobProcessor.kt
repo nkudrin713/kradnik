@@ -7,6 +7,7 @@ import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
+import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.request.DownloadRequestFactory
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
@@ -56,16 +57,16 @@ class DownloadJobProcessor(
 
             statusReporter.setStatus(job, TelegramDownloadStatus.DOWNLOADING)
 
-            runCatching {
-                markMetadata(job, jobId)
+            val uploadJob = runCatching {
+                markMetadata(jobId, request)
             }.onFailure {
                 logger.warn("JOB[{}] metadata extraction skipped: {}", jobId, it.message)
-            }
+            }.getOrDefault(job)
 
             val downloadedFile = ytDlpService.download(request, outputDir)
-            val uploadFile = prepareForUpload(job, downloadedFile, outputDir, jobId)
+            val uploadFile = prepareForUpload(uploadJob, downloadedFile, outputDir, jobId)
 
-            upload(job, uploadFile, jobId)
+            upload(uploadJob, uploadFile, jobId)
         } catch (error: Exception) {
             logger.error("JOB[{}] processing failed", jobId, error)
             downloadJobService.markFailedOrRetry(jobId, error.message ?: error.javaClass.simpleName)
@@ -125,15 +126,26 @@ class DownloadJobProcessor(
         return true
     }
 
-    private suspend fun markMetadata(job: DownloadJob, jobId: Long) {
-        val metadata = ytDlpService.extractMetadata(job.originalUrl)
+    private suspend fun markMetadata(
+        jobId: Long,
+        request: DownloadRequest,
+    ): DownloadJob {
+        val metadata = ytDlpService.extractMetadata(request)
 
-        downloadJobService.markMetadata(
+        return downloadJobService.markMetadata(
             jobId,
             MediaMetadata(
                 title = metadata.title,
                 extractor = metadata.extractor,
                 durationSeconds = metadata.duration?.toLong(),
+                audioTitle = metadata.track
+                    ?: metadata.title
+                    ?: DEFAULT_AUDIO_TITLE,
+                audioPerformer = metadata.artist
+                    ?: metadata.uploader
+                    ?: metadata.channel
+                    ?: metadata.extractor
+                    ?: DEFAULT_AUDIO_PERFORMER,
                 width = metadata.width,
                 height = metadata.height,
                 webpageUrl = metadata.webpageUrl,
@@ -147,5 +159,7 @@ class DownloadJobProcessor(
 
     private companion object {
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
+        private const val DEFAULT_AUDIO_TITLE = "Audio"
+        private const val DEFAULT_AUDIO_PERFORMER = "Unknown"
     }
 }

@@ -89,7 +89,7 @@ class TelegramVideoPreparer(
                     "-movflags", "+faststart",
                     output.toString(),
                 ),
-                timeout = 20.minutes,
+                timeout = FFMPEG_TIMEOUT_MINUTES.minutes,
             )
         )
 
@@ -104,6 +104,7 @@ class TelegramVideoPreparer(
 
     private companion object {
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
+        private const val FFMPEG_TIMEOUT_MINUTES = 20
     }
 }
 

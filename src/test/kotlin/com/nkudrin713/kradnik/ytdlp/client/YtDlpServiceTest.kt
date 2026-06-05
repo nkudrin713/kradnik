@@ -30,7 +30,7 @@ class YtDlpServiceTest {
     )
 
     @Test
-    fun extractMetadataSuccess() = runTest {
+    fun extractMetadataParsesMetadata() = runTest {
         val output = """
             {
               "id": "video-id",
@@ -53,11 +53,11 @@ class YtDlpServiceTest {
             duration = 5.seconds,
         )
 
-        val actual = service.extractMetadata("https://example.com")
+        val actual = service.extractMetadata(testRequest())
 
         assertEquals("video-id", actual.id)
         assertEquals("Test video", actual.title)
-        assertEquals(120, actual.duration)
+        assertEquals(BigDecimal.valueOf(120), actual.duration)
         assertEquals("webm", actual.ext)
         assertEquals(1080, actual.width)
         assertEquals(1920, actual.height)
@@ -75,14 +75,14 @@ class YtDlpServiceTest {
             duration = 5.seconds,
         )
 
-        val actual = service.extractMetadata("https://example.com")
+        val actual = service.extractMetadata(testRequest())
 
         assertEquals("video-id", actual.id)
         assertEquals("Test video", actual.title)
     }
 
     @Test
-    fun extractMetadataTimeout() = runTest {
+    fun extractMetadataCommandTimeout() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = "",
             timedOut = true,
@@ -91,14 +91,14 @@ class YtDlpServiceTest {
         )
 
         val exception = assertFailsWith<YtDlpException> {
-            service.extractMetadata("https://example.com")
+            service.extractMetadata(testRequest())
         }
 
         assertTrue(exception.message!!.contains("timed out"))
     }
 
     @Test
-    fun extractMetadataFailure() = runTest {
+    fun extractMetadataCommandFailure() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = "yt-dlp error",
             timedOut = false,
@@ -107,7 +107,7 @@ class YtDlpServiceTest {
         )
 
         val exception = assertFailsWith<YtDlpException> {
-            service.extractMetadata("https://example.com")
+            service.extractMetadata(testRequest())
         }
 
         assertTrue(exception.message!!.contains("failed"))
@@ -115,7 +115,7 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun extractMetadataEmptyOutput() = runTest {
+    fun extractMetadataCommandEmptyOutput() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = "",
             timedOut = false,
@@ -124,14 +124,14 @@ class YtDlpServiceTest {
         )
 
         val exception = assertFailsWith<YtDlpException> {
-            service.extractMetadata("https://example.com")
+            service.extractMetadata(testRequest())
         }
 
         assertTrue(exception.message!!.contains("empty output"))
     }
 
     @Test
-    fun inspectBuildsExpectedCommand() = runTest {
+    fun extractMetadataBuildsExpectedCommand() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = """{"id":"video-id","title":"Test video"}""",
             timedOut = false,
@@ -139,7 +139,7 @@ class YtDlpServiceTest {
             duration = 5.seconds,
         )
 
-        service.inspect(testRequest())
+        service.extractMetadata(testRequest())
 
         val commandSlot = slot<Command>()
         coVerify { processRunner.run(capture(commandSlot)) }
@@ -156,7 +156,7 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun inspectSuccess() = runTest {
+    fun extractMetadataSuccess() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = """{"id":"video-id","title":"Test video","filesize":1000}""",
             timedOut = false,
@@ -164,7 +164,7 @@ class YtDlpServiceTest {
             duration = 5.seconds,
         )
 
-        val actual = service.inspect(testRequest())
+        val actual = service.extractMetadata(testRequest())
 
         assertEquals("video-id", actual.id)
         assertEquals("Test video", actual.title)
@@ -172,7 +172,7 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun inspectTimeout() = runTest {
+    fun extractMetadataTimeout() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = "",
             timedOut = true,
@@ -181,14 +181,14 @@ class YtDlpServiceTest {
         )
 
         val exception = assertFailsWith<YtDlpException> {
-            service.inspect(testRequest())
+            service.extractMetadata(testRequest())
         }
 
-        assertTrue(exception.message!!.contains("preflight inspection timed out"))
+        assertTrue(exception.message!!.contains("command timed out"))
     }
 
     @Test
-    fun inspectFailure() = runTest {
+    fun extractMetadataFailure() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = "inspect error",
             timedOut = false,
@@ -197,15 +197,15 @@ class YtDlpServiceTest {
         )
 
         val exception = assertFailsWith<YtDlpException> {
-            service.inspect(testRequest())
+            service.extractMetadata(testRequest())
         }
 
-        assertTrue(exception.message!!.contains("preflight inspection failed"))
+        assertTrue(exception.message!!.contains("command failed"))
         assertTrue(exception.message!!.contains("inspect error"))
     }
 
     @Test
-    fun inspectEmptyOutput() = runTest {
+    fun extractMetadataEmptyOutput() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = "",
             timedOut = false,
@@ -214,7 +214,7 @@ class YtDlpServiceTest {
         )
 
         val exception = assertFailsWith<YtDlpException> {
-            service.inspect(testRequest())
+            service.extractMetadata(testRequest())
         }
 
         assertTrue(exception.message!!.contains("empty output"))
@@ -336,7 +336,7 @@ class YtDlpServiceTest {
             service.download(testRequest(), tempDir)
         }
 
-        assertTrue(exception.message!!.contains("download timed out"))
+        assertTrue(exception.message!!.contains("command timed out"))
     }
 
     @Test
@@ -352,7 +352,7 @@ class YtDlpServiceTest {
             service.download(testRequest(), tempDir)
         }
 
-        assertTrue(exception.message!!.contains("download failed"))
+        assertTrue(exception.message!!.contains("command failed"))
         assertTrue(exception.message!!.contains("download error"))
     }
 

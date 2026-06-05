@@ -109,12 +109,29 @@ class TelegramSender(
         )
     }
 
-    suspend fun sendAudio(chatId: Long, file: Path): TelegramSendResult {
+    suspend fun sendAudio(
+        chatId: Long,
+        file: Path,
+        title: String?,
+        performer: String?,
+        durationSeconds: Int?,
+    ): TelegramSendResult {
         val fileSize = withContext(Dispatchers.IO) {
             Files.size(file)
         }
         val response = withContext(Dispatchers.IO) {
-            bot.execute(SendAudio(chatId, file.toFile()))
+            val request = SendAudio(chatId, file.toFile())
+            if (title != null) {
+                request.title(title)
+            }
+            if (performer != null) {
+                request.performer(performer)
+            }
+            if (durationSeconds != null) {
+                request.duration(durationSeconds)
+            }
+
+            bot.execute(request)
         }
 
         if (!response.isOk) {

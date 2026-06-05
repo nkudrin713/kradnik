@@ -35,30 +35,7 @@ class YtDlpService(
 ) {
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
 
-    suspend fun extractMetadata(url: String): YtDlpMetadataDto {
-        val result = processRunner.run(
-            YtDlpCommand(
-                args = listOf(
-                    DUMP_SINGLE_JSON,
-                    NO_PLAYLIST,
-                    NO_WARNINGS,
-                    url,
-                ),
-                workingDir = null,
-                timeout = 30.seconds,
-            )
-        )
-
-        handleBaseErrors("metadata extraction", result)
-
-        if (result.output.isBlank()) {
-            throw YtDlpException("yt-dlp metadata extraction returned empty output")
-        }
-
-        return objectMapper.readValue(result.output)
-    }
-
-    suspend fun inspect(request: DownloadRequest): YtDlpMetadataDto {
+    suspend fun extractMetadata(request: DownloadRequest): YtDlpMetadataDto {
         val result = processRunner.run(
             YtDlpCommand(
                 args = listOf(
@@ -74,10 +51,9 @@ class YtDlpService(
             )
         )
 
-        handleBaseErrors("preflight inspection", result)
-
+        handleBaseErrors(result)
         if (result.output.isBlank()) {
-            throw YtDlpException("yt-dlp preflight inspection returned empty output")
+            throw YtDlpException("yt-dlp metadata extraction returned empty output")
         }
 
         return objectMapper.readValue(result.output)
@@ -109,8 +85,7 @@ class YtDlpService(
             )
         )
 
-        handleBaseErrors("download", result)
-
+        handleBaseErrors(result)
         val file = getDownloadedFile(result.output)
 
         return DownloadedFile(
@@ -138,17 +113,14 @@ class YtDlpService(
         return file
     }
 
-    private fun handleBaseErrors(
-        operation: String,
-        result: ProcessExecutionResult,
-    ) {
+    private fun handleBaseErrors(result: ProcessExecutionResult) {
         if (result.timedOut) {
-            throw YtDlpException("yt-dlp $operation timed out")
+            throw YtDlpException("yt-dlp command timed out")
         }
 
         if (result.exitCode != 0) {
             throw YtDlpException(
-                "yt-dlp $operation failed: ${result.output.takeLast(500)}"
+                "yt-dlp command failed: ${result.output.takeLast(500)}"
             )
         }
     }

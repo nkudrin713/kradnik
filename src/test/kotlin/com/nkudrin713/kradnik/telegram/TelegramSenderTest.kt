@@ -8,7 +8,12 @@ import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.Video
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
-import com.pengrad.telegrambot.request.*
+import com.pengrad.telegrambot.request.AnswerCallbackQuery
+import com.pengrad.telegrambot.request.BaseRequest
+import com.pengrad.telegrambot.request.EditMessageText
+import com.pengrad.telegrambot.request.SendAudio
+import com.pengrad.telegrambot.request.SendMessage
+import com.pengrad.telegrambot.request.SendVideo
 import com.pengrad.telegrambot.response.BaseResponse
 import com.pengrad.telegrambot.response.SendResponse
 import io.kotest.matchers.shouldBe
@@ -20,7 +25,11 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Path
+import kotlin.io.path.writeText
 
 class TelegramSenderTest {
     private val bot: TelegramBot = mockk()
@@ -171,6 +180,35 @@ class TelegramSenderTest {
         val actual = request.captured as SendAudio
         actual.getParameters()["chat_id"] shouldBe chatId
         actual.getParameters()["audio"] shouldBe fileId
+        actualResult.fileId shouldBe telegramFileId
+        actualResult.fileSize shouldBe fileSize
+    }
+
+    @Test
+    fun sendAudioPassesMetadata(@TempDir tempDir: Path) = runTest {
+        val chatId = chatId()
+        val file = tempDir.resolve("audio.mp3")
+        file.writeText("audio")
+        val telegramFileId = text()
+        val fileSize = fileSize()
+        val request = slot<BaseRequest<*, *>>()
+        every { bot.execute(capture(request)) } returns sendResponse(
+            audio = audio(telegramFileId, fileSize),
+        )
+
+        val actualResult = sender.sendAudio(
+            chatId = chatId,
+            file = file,
+            title = "audio title",
+            performer = "artist",
+            durationSeconds = 120,
+        )
+
+        val actual = request.captured as SendAudio
+        actual.getParameters()["chat_id"] shouldBe chatId
+        actual.getParameters()["title"] shouldBe "audio title"
+        actual.getParameters()["performer"] shouldBe "artist"
+        actual.getParameters()["duration"] shouldBe 120
         actualResult.fileId shouldBe telegramFileId
         actualResult.fileSize shouldBe fileSize
     }

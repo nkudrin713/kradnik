@@ -78,6 +78,8 @@ class DownloadJobService(
 		job.sourceTitle = metadata.title
 		job.sourceExtractor = metadata.extractor
 		job.sourceDurationSeconds = metadata.durationSeconds?.toInt()
+		job.sourceAudioTitle = metadata.audioTitle
+		job.sourceAudioPerformer = metadata.audioPerformer
 
 		logger.info(
 			"CHAT[{}] JOB[{}] metadata ok: source={}",

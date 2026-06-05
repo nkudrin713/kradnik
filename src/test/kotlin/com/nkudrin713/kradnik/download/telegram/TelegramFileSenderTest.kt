@@ -36,14 +36,30 @@ class TelegramFileSenderTest {
     @Test
     fun sendsAudioFile(@TempDir tempDir: Path) = runTest {
         val file = DownloadedFile(tempDir.resolve("audio.mp3"), sizeBytes = 123)
-        coEvery { telegramSender.sendAudio(100, file.file) } returns TelegramSendResult("audio-id", 456)
+        coEvery {
+            telegramSender.sendAudio(
+                chatId = 100,
+                file = file.file,
+                title = "audio title",
+                performer = "artist",
+                durationSeconds = 120,
+            )
+        } returns TelegramSendResult("audio-id", 456)
 
-        val actual = sender.send(job(OutputType.AUDIO), file)
+        val actual = sender.send(audioJob(), file)
 
         assertEquals("audio-id", actual.telegramFileId)
         assertEquals(456, actual.telegramFileSize)
         assertEquals(123, actual.downloadedFileSize)
-        coVerify { telegramSender.sendAudio(100, file.file) }
+        coVerify {
+            telegramSender.sendAudio(
+                chatId = 100,
+                file = file.file,
+                title = "audio title",
+                performer = "artist",
+                durationSeconds = 120,
+            )
+        }
     }
 
     @Test
@@ -89,5 +105,13 @@ class TelegramFileSenderTest {
             telegramChatId = 100,
             outputType = outputType,
         )
+    }
+
+    private fun audioJob(): DownloadJob {
+        return job(OutputType.AUDIO).apply {
+            sourceAudioTitle = "audio title"
+            sourceAudioPerformer = "artist"
+            sourceDurationSeconds = 120
+        }
     }
 }

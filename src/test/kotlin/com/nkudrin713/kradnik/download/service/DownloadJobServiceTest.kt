@@ -122,6 +122,8 @@ class DownloadJobServiceTest {
                 title = "title",
                 extractor = "youtube",
                 durationSeconds = 120,
+                audioTitle = "audio title",
+                audioPerformer = "artist",
                 width = 1080,
                 height = 1920,
                 webpageUrl = "https://example.com",
@@ -131,6 +133,8 @@ class DownloadJobServiceTest {
         assertEquals("title", actual.sourceTitle)
         assertEquals("youtube", actual.sourceExtractor)
         assertEquals(120, actual.sourceDurationSeconds)
+        assertEquals("audio title", actual.sourceAudioTitle)
+        assertEquals("artist", actual.sourceAudioPerformer)
     }
 
     @Test
@@ -144,6 +148,8 @@ class DownloadJobServiceTest {
                 title = "title",
                 extractor = "youtube",
                 durationSeconds = null,
+                audioTitle = null,
+                audioPerformer = null,
                 width = null,
                 height = null,
                 webpageUrl = "https://example.com",

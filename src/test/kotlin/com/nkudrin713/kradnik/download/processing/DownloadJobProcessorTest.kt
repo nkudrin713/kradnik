@@ -25,6 +25,7 @@ import io.mockk.runs
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
+import java.math.BigDecimal
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -88,7 +89,7 @@ class DownloadJobProcessorTest {
         every { downloadRequestFactory.create(job) } returns request
         coEvery { downloadPreflightService.check(request) } returns DownloadPreflightDecision.Allowed
         every { statusReporter.setStatus(any(), any()) } just runs
-        coEvery { ytDlpService.extractMetadata(job.originalUrl) } returns metadata()
+        coEvery { ytDlpService.extractMetadata(request) } returns metadata()
         every { downloadJobService.markMetadata(1, any()) } returns job
         coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) } returns preparedFile
@@ -162,23 +163,28 @@ class DownloadJobProcessorTest {
     @Test
     fun downloadsAndUploadsAudioWithoutVideoPreparation(@TempDir tempDir: Path) = runTest {
         val job = job(outputType = OutputType.AUDIO)
+        val markedJob = job(outputType = OutputType.AUDIO).apply {
+            sourceAudioTitle = "track"
+            sourceAudioPerformer = "artist"
+            sourceDurationSeconds = 120
+        }
         val request = request(outputType = OutputType.AUDIO)
         val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp3"), 100)
         every { downloadRequestFactory.create(job) } returns request
         coEvery { downloadPreflightService.check(request) } returns DownloadPreflightDecision.Allowed
         every { statusReporter.setStatus(any(), any()) } just runs
-        coEvery { ytDlpService.extractMetadata(job.originalUrl) } returns metadata()
-        every { downloadJobService.markMetadata(1, any()) } returns job
+        coEvery { ytDlpService.extractMetadata(request) } returns metadata()
+        every { downloadJobService.markMetadata(1, any()) } returns markedJob
         coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
         every { downloadJobService.markUploading(1) } returns job
-        coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
+        coEvery { telegramFileSender.send(markedJob, downloadedFile) } returns telegramResult()
         every { downloadJobService.markCompleted(1, any<DownloadedFileResult>()) } returns job
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(job)
 
         coVerify(exactly = 0) { telegramVideoPreparer.prepare(any(), any(), any()) }
-        coVerify { telegramFileSender.send(job, downloadedFile) }
+        coVerify { telegramFileSender.send(markedJob, downloadedFile) }
     }
 
     @Test
@@ -189,7 +195,7 @@ class DownloadJobProcessorTest {
         every { downloadRequestFactory.create(job) } returns request
         coEvery { downloadPreflightService.check(request) } returns DownloadPreflightDecision.Allowed
         every { statusReporter.setStatus(any(), any()) } just runs
-        coEvery { ytDlpService.extractMetadata(job.originalUrl) } throws IllegalStateException("metadata error")
+        coEvery { ytDlpService.extractMetadata(request) } throws IllegalStateException("metadata error")
         coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) } returns downloadedFile
         every { downloadJobService.markUploading(1) } returns job
@@ -211,7 +217,7 @@ class DownloadJobProcessorTest {
         every { downloadRequestFactory.create(job) } returns request
         coEvery { downloadPreflightService.check(request) } returns DownloadPreflightDecision.Allowed
         every { statusReporter.setStatus(any(), any()) } just runs
-        coEvery { ytDlpService.extractMetadata(job.originalUrl) } returns metadata(duration = null)
+        coEvery { ytDlpService.extractMetadata(request) } returns metadata(duration = null)
         every { downloadJobService.markMetadata(1, any()) } returns job
         coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) } returns downloadedFile
@@ -290,7 +296,7 @@ class DownloadJobProcessorTest {
             extractor = "youtube",
             webpageUrl = "https://example.com/video",
             thumbnail = null,
-            duration = duration,
+            duration = duration?.let { BigDecimal.valueOf(it.toLong()) },
             ext = "mp4",
             width = 1080,
             height = 1920,
@@ -301,6 +307,11 @@ class DownloadJobProcessorTest {
             filesizeApprox = null,
             formatId = "format",
             format = null,
+            track = "track",
+            artist = "artist",
+            creator = null,
+            uploader = "uploader",
+            channel = "channel",
             requestedFormats = null,
         )
     }

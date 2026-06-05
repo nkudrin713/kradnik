@@ -13,7 +13,7 @@ class DownloadPreflightService(
     private val ytDlpService: YtDlpService,
 ) {
     suspend fun check(request: DownloadRequest): DownloadPreflightDecision {
-        val metadata = ytDlpService.inspect(request)
+        val metadata = ytDlpService.extractMetadata(request)
         val selectedSize = selectedSize(metadata) ?: return DownloadPreflightDecision.Allowed
 
         if (selectedSize <= TelegramUploadLimits.MAX_UPLOAD_BYTES) {

@@ -14,7 +14,13 @@ class TelegramFileSender(
     suspend fun send(job: DownloadJob, file: DownloadedFile): TelegramFileSendResult {
         val result = when (job.outputType) {
             OutputType.VIDEO -> telegramSender.sendVideo(job.telegramChatId, file.file)
-            OutputType.AUDIO -> telegramSender.sendAudio(job.telegramChatId, file.file)
+            OutputType.AUDIO -> telegramSender.sendAudio(
+                chatId = job.telegramChatId,
+                file = file.file,
+                title = job.sourceAudioTitle,
+                performer = job.sourceAudioPerformer,
+                durationSeconds = job.sourceDurationSeconds,
+            )
         }
 
         return TelegramFileSendResult(

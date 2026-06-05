@@ -45,7 +45,11 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
                 outputType = outputType,
                 presetName = "youtube_audio",
                 formatSelector = "ba/bestaudio",
-                extraArgs = listOf("-x", "--audio-format", "mp3"),
+                extraArgs = listOf(
+                    "-x",
+                    "--audio-format", "mp3",
+                    "--embed-metadata",
+                ),
             )
         }
     }

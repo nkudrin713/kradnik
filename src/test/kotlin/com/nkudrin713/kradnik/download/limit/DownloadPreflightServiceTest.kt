@@ -8,6 +8,7 @@ import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -18,7 +19,7 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun allowsUnknownSize() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(filesize = null, filesizeApprox = null)
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(filesize = null, filesizeApprox = null)
 
         val actual = service.check(videoRequest())
 
@@ -27,7 +28,7 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun rejectsLargeAudio() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
 
         val actual = service.check(audioRequest())
 
@@ -36,7 +37,7 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun allowsSizeEqualToLimit() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES)
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES)
 
         val actual = service.check(audioRequest())
 
@@ -45,7 +46,7 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun usesApproximateSizeWhenExactSizeIsMissing() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(
             filesize = null,
             filesizeApprox = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
         )
@@ -57,7 +58,7 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun rejectsLargeNonVerticalVideo() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(
             filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
             width = 1920,
             height = 1080,
@@ -70,7 +71,7 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun allowsLargeVerticalVideoForCompressionPath() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(
             filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
             width = 1080,
             height = 1920,
@@ -83,9 +84,9 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun sumsRequestedFormatsWhenTopLevelSizeIsMissing() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(
             requestedFormats = listOf(
-                YtDlpFormatDto(
+                format(
                     formatId = "video",
                     ext = "mp4",
                     width = 1920,
@@ -93,7 +94,7 @@ class DownloadPreflightServiceTest {
                     filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES,
                     filesizeApprox = null,
                 ),
-                YtDlpFormatDto(
+                format(
                     formatId = "audio",
                     ext = "m4a",
                     width = null,
@@ -111,7 +112,7 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun allowsEmptyRequestedFormats() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(
             filesize = null,
             filesizeApprox = null,
             requestedFormats = emptyList(),
@@ -124,11 +125,11 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun allowsRequestedFormatsWithUnknownSize() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(
             filesize = null,
             filesizeApprox = null,
             requestedFormats = listOf(
-                YtDlpFormatDto(
+                format(
                     formatId = "video",
                     ext = "mp4",
                     width = 1920,
@@ -146,11 +147,11 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun sumsApproximateRequestedFormatSizes() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(
             filesize = null,
             filesizeApprox = null,
             requestedFormats = listOf(
-                YtDlpFormatDto(
+                format(
                     formatId = "video",
                     ext = "mp4",
                     width = 1920,
@@ -158,7 +159,7 @@ class DownloadPreflightServiceTest {
                     filesize = null,
                     filesizeApprox = TelegramUploadLimits.MAX_UPLOAD_BYTES,
                 ),
-                YtDlpFormatDto(
+                format(
                     formatId = "audio",
                     ext = "m4a",
                     width = null,
@@ -176,7 +177,7 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun rejectsLargeVideoWhenWidthIsMissing() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(
             filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
             width = null,
             height = 1920,
@@ -189,7 +190,7 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun rejectsLargeVideoWhenHeightIsMissing() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(
             filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
             width = 1080,
             height = null,
@@ -202,7 +203,7 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun rejectedReasonContainsFormattedSize() = runTest {
-        coEvery { ytDlpService.inspect(any()) } returns metadata(
+        coEvery { ytDlpService.extractMetadata(any()) } returns metadata(
             filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
         )
 
@@ -227,7 +228,7 @@ class DownloadPreflightServiceTest {
             extractor = "youtube",
             webpageUrl = "https://example.com",
             thumbnail = null,
-            duration = 120,
+            duration = BigDecimal.valueOf(120),
             ext = "mp4",
             width = width,
             height = height,
@@ -238,7 +239,37 @@ class DownloadPreflightServiceTest {
             filesizeApprox = filesizeApprox,
             formatId = "format",
             format = null,
+            track = null,
+            artist = null,
+            creator = null,
+            uploader = null,
+            channel = null,
             requestedFormats = requestedFormats,
+        )
+    }
+
+    private fun format(
+        formatId: String,
+        ext: String,
+        width: Int?,
+        height: Int?,
+        filesize: Long?,
+        filesizeApprox: Long?,
+    ): YtDlpFormatDto {
+        return YtDlpFormatDto(
+            formatId = formatId,
+            formatNote = null,
+            ext = ext,
+            width = width,
+            height = height,
+            fps = null,
+            filesize = filesize,
+            filesizeApprox = filesizeApprox,
+            vcodec = null,
+            acodec = null,
+            tbr = null,
+            vbr = null,
+            abr = null,
         )
     }
 

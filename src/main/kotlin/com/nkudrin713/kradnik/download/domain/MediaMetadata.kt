@@ -4,6 +4,8 @@ data class MediaMetadata(
     val title: String?,
     val extractor: String?,
     val durationSeconds: Long?,
+    val audioTitle: String?,
+    val audioPerformer: String?,
     val width: Int?,
     val height: Int?,
     val webpageUrl: String?,

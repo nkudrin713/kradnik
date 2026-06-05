@@ -52,6 +52,12 @@ class DownloadJob(
 	@Column(name = "source_duration_seconds")
 	var sourceDurationSeconds: Int? = null,
 
+	@Column(name = "source_audio_title")
+	var sourceAudioTitle: String? = null,
+
+	@Column(name = "source_audio_performer")
+	var sourceAudioPerformer: String? = null,
+
 	@Column(name = "download_preset")
 	var downloadPreset: String? = null,
 

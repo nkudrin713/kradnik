@@ -4,16 +4,15 @@ import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import org.springframework.stereotype.Service
 import java.util.Locale
 
 @Service
-class DownloadPreflightService(
-    private val ytDlpService: YtDlpService,
-) {
-    suspend fun check(request: DownloadRequest): DownloadPreflightDecision {
-        val metadata = ytDlpService.extractMetadata(request)
+class DownloadPreflightService {
+    fun check(
+        request: DownloadRequest,
+        metadata: YtDlpMetadataDto,
+    ): DownloadPreflightDecision {
         val selectedSize = selectedSize(metadata) ?: return DownloadPreflightDecision.Allowed
 
         if (selectedSize <= TelegramUploadLimits.MAX_UPLOAD_BYTES) {

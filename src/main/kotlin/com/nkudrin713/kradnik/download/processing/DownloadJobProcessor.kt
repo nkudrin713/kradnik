@@ -10,10 +10,12 @@ import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.request.DownloadRequestFactory
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.download.telegram.TelegramFileSendResult
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
+import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -48,20 +50,16 @@ class DownloadJobProcessor(
             }
 
             val request = downloadRequestFactory.create(job)
-            val preflightDecision = downloadPreflightService.check(request)
+            val metadata = ytDlpService.extractMetadata(request)
+            val preflightDecision = downloadPreflightService.check(request, metadata)
             if (preflightDecision is DownloadPreflightDecision.Rejected) {
-                downloadJobService.markFailed(jobId, preflightDecision.reason)
-                statusReporter.setStatus(job, TelegramDownloadStatus.REJECTED_TOO_LARGE)
+                rejectJob(job, jobId, preflightDecision.reason)
                 return
             }
 
             statusReporter.setStatus(job, TelegramDownloadStatus.DOWNLOADING)
 
-            val uploadJob = runCatching {
-                markMetadata(jobId, request)
-            }.onFailure {
-                logger.warn("JOB[{}] metadata extraction skipped: {}", jobId, it.message)
-            }.getOrDefault(job)
+            val uploadJob = markMetadata(jobId, metadata)
 
             val downloadedFile = ytDlpService.download(request, outputDir)
             val uploadFile = prepareForUpload(uploadJob, downloadedFile, outputDir, jobId)
@@ -69,8 +67,7 @@ class DownloadJobProcessor(
             upload(uploadJob, uploadFile, jobId)
         } catch (error: Exception) {
             logger.error("JOB[{}] processing failed", jobId, error)
-            downloadJobService.markFailedOrRetry(jobId, error.message ?: error.javaClass.simpleName)
-            statusReporter.setStatus(job, TelegramDownloadStatus.ERROR)
+            failOrRetryJob(job, jobId, error.message ?: error.javaClass.simpleName)
         } finally {
             workDirCleaner.deleteRecursively(outputDir)
         }
@@ -100,8 +97,7 @@ class DownloadJobProcessor(
 
         val telegramResult = telegramFileSender.send(job, uploadFile)
 
-        downloadJobService.markCompleted(jobId, telegramResult.toDownloadedFileResult())
-        statusReporter.setStatus(job, TelegramDownloadStatus.COMPLETED)
+        completeJob(job, jobId, telegramResult)
     }
 
     private fun sendCached(job: DownloadJob, jobId: Long): Boolean {
@@ -120,18 +116,42 @@ class DownloadJobProcessor(
             downloadedFileSize = cachedJob.downloadedFileSize,
         )
 
-        downloadJobService.markCompleted(jobId, telegramResult.toDownloadedFileResult())
-        statusReporter.setStatus(job, TelegramDownloadStatus.COMPLETED)
+        completeJob(job, jobId, telegramResult)
 
         return true
     }
 
-    private suspend fun markMetadata(
+    private fun rejectJob(
+        job: DownloadJob,
         jobId: Long,
-        request: DownloadRequest,
-    ): DownloadJob {
-        val metadata = ytDlpService.extractMetadata(request)
+        reason: String,
+    ) {
+        downloadJobService.markFailed(jobId, reason)
+        statusReporter.setStatus(job, TelegramDownloadStatus.REJECTED_TOO_LARGE)
+    }
 
+    private fun failOrRetryJob(
+        job: DownloadJob,
+        jobId: Long,
+        errorMessage: String,
+    ) {
+        downloadJobService.markFailedOrRetry(jobId, errorMessage)
+        statusReporter.setStatus(job, TelegramDownloadStatus.ERROR)
+    }
+
+    private fun completeJob(
+        job: DownloadJob,
+        jobId: Long,
+        telegramResult: TelegramFileSendResult,
+    ) {
+        downloadJobService.markCompleted(jobId, telegramResult.toDownloadedFileResult())
+        statusReporter.setStatus(job, TelegramDownloadStatus.COMPLETED)
+    }
+
+    private fun markMetadata(
+        jobId: Long,
+        metadata: YtDlpMetadataDto,
+    ): DownloadJob {
         return downloadJobService.markMetadata(
             jobId,
             MediaMetadata(

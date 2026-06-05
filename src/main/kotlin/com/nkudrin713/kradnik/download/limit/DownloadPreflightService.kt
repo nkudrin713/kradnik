@@ -2,8 +2,8 @@ package com.nkudrin713.kradnik.download.limit
 
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpFormatDto
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
+import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import org.springframework.stereotype.Service
 import java.util.Locale

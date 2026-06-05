@@ -156,6 +156,71 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun inspectSuccess() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = """{"id":"video-id","title":"Test video","filesize":1000}""",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        val actual = service.inspect(testRequest())
+
+        assertEquals("video-id", actual.id)
+        assertEquals("Test video", actual.title)
+        assertEquals(1000, actual.filesize)
+    }
+
+    @Test
+    fun inspectTimeout() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = "",
+            timedOut = true,
+            exitCode = null,
+            duration = 5.seconds,
+        )
+
+        val exception = assertFailsWith<YtDlpException> {
+            service.inspect(testRequest())
+        }
+
+        assertTrue(exception.message!!.contains("preflight inspection timed out"))
+    }
+
+    @Test
+    fun inspectFailure() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = "inspect error",
+            timedOut = false,
+            exitCode = 1,
+            duration = 5.seconds,
+        )
+
+        val exception = assertFailsWith<YtDlpException> {
+            service.inspect(testRequest())
+        }
+
+        assertTrue(exception.message!!.contains("preflight inspection failed"))
+        assertTrue(exception.message!!.contains("inspect error"))
+    }
+
+    @Test
+    fun inspectEmptyOutput() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = "",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        val exception = assertFailsWith<YtDlpException> {
+            service.inspect(testRequest())
+        }
+
+        assertTrue(exception.message!!.contains("empty output"))
+    }
+
+    @Test
     fun downloadSuccess(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("video.mp4")
         file.writeText("video")
@@ -256,6 +321,53 @@ class YtDlpServiceTest {
         }
 
         assertTrue(exception.message!!.contains("file not found"))
+    }
+
+    @Test
+    fun downloadTimeout(@TempDir tempDir: Path) = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = "",
+            timedOut = true,
+            exitCode = null,
+            duration = 5.seconds,
+        )
+
+        val exception = assertFailsWith<YtDlpException> {
+            service.download(testRequest(), tempDir)
+        }
+
+        assertTrue(exception.message!!.contains("download timed out"))
+    }
+
+    @Test
+    fun downloadFailure(@TempDir tempDir: Path) = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = "download error",
+            timedOut = false,
+            exitCode = 1,
+            duration = 5.seconds,
+        )
+
+        val exception = assertFailsWith<YtDlpException> {
+            service.download(testRequest(), tempDir)
+        }
+
+        assertTrue(exception.message!!.contains("download failed"))
+        assertTrue(exception.message!!.contains("download error"))
+    }
+
+    @Test
+    fun downloadInvalidFilepathJson(@TempDir tempDir: Path) = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = "KRADNIK_FILEPATH:not-json",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        assertFailsWith<Exception> {
+            service.download(testRequest(), tempDir)
+        }
     }
 
     private fun testRequest(): DownloadRequest {

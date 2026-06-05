@@ -14,7 +14,7 @@ import com.nkudrin713.kradnik.download.telegram.TelegramFileSendResult
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import io.mockk.coEvery
 import io.mockk.coVerify

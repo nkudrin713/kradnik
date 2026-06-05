@@ -7,6 +7,7 @@ import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
+import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.springframework.stereotype.Service

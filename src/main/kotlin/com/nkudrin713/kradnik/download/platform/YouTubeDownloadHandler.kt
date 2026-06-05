@@ -49,6 +49,8 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
                     "-x",
                     "--audio-format", "mp3",
                     "--embed-metadata",
+                    "--embed-thumbnail",
+                    "--convert-thumbnails", "jpg"
                 ),
             )
         }

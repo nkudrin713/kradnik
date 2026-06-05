@@ -21,7 +21,6 @@ class DownloadJobProcessor(
     private val downloadJobService: DownloadJobService,
     private val downloadRequestFactory: DownloadRequestFactory,
     private val downloadPreflightService: DownloadPreflightService,
-    private val downloadOrchestrator: DownloadOrchestrator,
     private val telegramVideoPreparer: TelegramVideoPreparer,
     private val telegramFileSender: TelegramFileSender,
     private val ytDlpService: YtDlpService,
@@ -59,7 +58,7 @@ class DownloadJobProcessor(
                 logger.warn("JOB[{}] metadata extraction skipped: {}", jobId, it.message)
             }
 
-            val downloadedFile = downloadOrchestrator.download(request, outputDir)
+            val downloadedFile = ytDlpService.download(request, outputDir)
             val uploadFile = prepareForUpload(job, downloadedFile, outputDir)
 
             upload(job, uploadFile)

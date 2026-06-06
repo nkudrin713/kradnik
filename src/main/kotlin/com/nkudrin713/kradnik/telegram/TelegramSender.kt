@@ -70,10 +70,7 @@ class TelegramSender(
         messageId: Int,
         donationUrl: String,
     ) {
-        executeTelegram(
-            EditMessageText(channelId, messageId, DONATION_PIN_TEXT)
-                .replyMarkup(donationKeyboard(donationUrl))
-        )
+        editDonationPin(channelId, messageId, donationUrl)
         unpinMessage(channelId, messageId)
         pinMessage(channelId, messageId)
     }
@@ -233,6 +230,19 @@ class TelegramSender(
         )
     }
 
+    private fun editDonationPin(channelId: String, messageId: Int, donationUrl: String) {
+        runCatching {
+            executeTelegram(
+                EditMessageText(channelId, messageId, DONATION_PIN_TEXT)
+                    .replyMarkup(donationKeyboard(donationUrl))
+            )
+        }.onFailure {
+            if (it !is TelegramSendException || it.message?.contains(MESSAGE_NOT_MODIFIED_ERROR) != true) {
+                throw it
+            }
+        }
+    }
+
     private fun pinMessage(channelId: String, messageId: Int) {
         executeTelegram(
             PinChatMessage(channelId, messageId)
@@ -263,6 +273,7 @@ class TelegramSender(
 
     private companion object {
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
+        private const val MESSAGE_NOT_MODIFIED_ERROR = "message is not modified"
         private val DONATION_MESSAGE = """
             Крадник остаётся бесплатным.
            

@@ -296,6 +296,27 @@ class TelegramSenderTest {
         pinMessage.getParameters()["disable_notification"] shouldBe true
     }
 
+    @Test
+    fun updateDonationPinRepinsWhenMessageIsNotModified() {
+        val channelId = "@channel"
+        val donationUrl = "https://example.com/donate"
+        val messageId = messageId()
+        val requests = mutableListOf<BaseRequest<*, *>>()
+        every { bot.execute(capture(requests)) } returnsMany listOf(
+            failedResponse("Bad Request: message is not modified"),
+            okResponse(),
+            okResponse(),
+        )
+
+        sender.updateDonationPin(channelId, messageId, donationUrl)
+
+        requests[0] as EditMessageText
+        val unpinMessage = requests[1] as UnpinChatMessage
+        unpinMessage.getParameters()["message_id"] shouldBe messageId
+        val pinMessage = requests[2] as PinChatMessage
+        pinMessage.getParameters()["message_id"] shouldBe messageId
+    }
+
     private fun chatId(): Long {
         return Arb.long().next()
     }
@@ -319,6 +340,13 @@ class TelegramSenderTest {
     private fun okResponse(): BaseResponse {
         return mockk {
             every { isOk } returns true
+        }
+    }
+
+    private fun failedResponse(description: String): BaseResponse {
+        return mockk {
+            every { isOk } returns false
+            every { description() } returns description
         }
     }
 

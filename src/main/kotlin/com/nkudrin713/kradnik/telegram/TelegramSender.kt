@@ -250,13 +250,16 @@ class TelegramSender(
     private companion object {
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
         private val DONATION_MESSAGE = """
-            Крадник бесплатный для людей. Для сервера эта концепция пока сложновата.
-            Поддержать проект можно здесь. Донат уйдет на хостинг, трафик и улучшения.
-
-            Спасибо. Это помогает.
+            Крадник остаётся бесплатным.
+           
+            А это — банка для тех, кто хочет подкинуть топлива проекту.
+            Донаты уходят на хостинг, новые фичи и моральную устойчивость разработчика.
+            Обещаю не покупать пиво и сигареты.
+            
+            Спасибо, что помогаете боту жить.
         """.trimIndent()
-        private const val DONATION_PIN_TEXT = "Поддержать кражу медиафайлов 🏴‍☠️"
-        private const val DONATION_BUTTON_TEXT = "Поддержать"
+        private const val DONATION_PIN_TEXT = "Плеснуть топлива в медиадвигатель 🛢"
+        private const val DONATION_BUTTON_TEXT = "Поддержать проект"
     }
 }
 

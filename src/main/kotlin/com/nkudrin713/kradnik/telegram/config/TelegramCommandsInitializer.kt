@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.telegram.config
 
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.BotCommand
+import com.pengrad.telegrambot.request.DeleteMyCommands
 import com.pengrad.telegrambot.request.SetMyCommands
 import org.slf4j.LoggerFactory
 import org.springframework.boot.ApplicationArguments
@@ -15,6 +16,11 @@ class TelegramCommandsInitializer(
     private val logger = LoggerFactory.getLogger(javaClass)
 
     override fun run(args: ApplicationArguments) {
+        val deleteResponse = bot.execute(DeleteMyCommands())
+        if (!deleteResponse.isOk) {
+            logger.warn("Telegram commands deletion failed: {}", deleteResponse.description())
+        }
+
         val response = bot.execute(
             SetMyCommands(
                 BotCommand("start", "запустить бота"),

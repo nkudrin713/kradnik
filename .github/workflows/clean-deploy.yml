@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 concurrency:
   group: deploy-production
@@ -37,12 +38,32 @@ jobs:
       - name: Run tests and build jar
         run: ./gradlew check bootJar
 
-      - name: Upload app jar
-        uses: actions/upload-artifact@v4
+      - name: Prepare Docker context
+        run: |
+          set -euo pipefail
+          mkdir -p .deploy
+          cp build/libs/app.jar .deploy/app.jar
+
+      - name: Set image name
+        run: |
+          set -euo pipefail
+          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          name: app-jar
-          path: build/libs/app.jar
-          if-no-files-found: error
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
 
   clean-deploy:
     name: Clean deploy to server
@@ -52,12 +73,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
-      - name: Download app jar
-        uses: actions/download-artifact@v4
-        with:
-          name: app-jar
-          path: .deploy
 
       - name: Configure SSH
         env:
@@ -70,7 +85,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
-      - name: Sync sources
+      - name: Sync compose file
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -79,16 +94,8 @@ jobs:
           set -euo pipefail
           test -n "$DEPLOY_PATH"
           test "$DEPLOY_PATH" != "/"
-          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
-            mkdir -p '$DEPLOY_PATH' && \
-            find '$DEPLOY_PATH' -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +\
-          "
-          tar \
-            --exclude='.git' \
-            --exclude='.gradle' \
-            --exclude='build' \
-            -czf - . \
-            | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "tar -xzf - -C '$DEPLOY_PATH'"
+          tar -czf - docker-compose.yml \
+            | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH' && tar -xzf - -C '$DEPLOY_PATH'"
 
       - name: Write environment
         env:
@@ -101,12 +108,25 @@ jobs:
           set -euo pipefail
           test -n "$DEPLOY_PATH"
           test "$DEPLOY_PATH" != "/"
+          app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
           {
+            printf 'APP_IMAGE=%s\n' "$app_image"
             printf 'POSTGRES_DB=kradnik\n'
             printf 'POSTGRES_USER=kradnik\n'
             printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
           } | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$DEPLOY_PATH/.env'"
+
+      - name: Login to GHCR on server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$GHCR_TOKEN" \
+            | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
 
       - name: Drop Docker state and deploy
         env:
@@ -120,7 +140,8 @@ jobs:
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
             cd '$DEPLOY_PATH' && \
             docker compose down --volumes --rmi all --remove-orphans && \
-            docker compose up -d --build --remove-orphans && \
+            docker compose pull app && \
+            docker compose up -d --remove-orphans && \
             docker compose ps && \
             test \"\$(docker compose ps -q app | xargs docker inspect -f '{{.State.Status}}')\" = running && \
             docker image prune -f\

@@ -1,7 +1,6 @@
 services:
   app:
-    build:
-      context: .
+    image: ${APP_IMAGE:?APP_IMAGE is required}
     container_name: kradnik-app
     restart: unless-stopped
     depends_on:

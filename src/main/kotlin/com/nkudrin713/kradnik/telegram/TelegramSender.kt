@@ -7,11 +7,13 @@ import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
 import com.pengrad.telegrambot.request.BaseRequest
+import com.pengrad.telegrambot.request.DeleteMessage
 import com.pengrad.telegrambot.request.EditMessageText
 import com.pengrad.telegrambot.request.PinChatMessage
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendVideo
+import com.pengrad.telegrambot.request.UnpinChatMessage
 import com.pengrad.telegrambot.response.BaseResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -72,6 +74,7 @@ class TelegramSender(
             EditMessageText(channelId, messageId, DONATION_PIN_TEXT)
                 .replyMarkup(donationKeyboard(donationUrl))
         )
+        unpinMessage(channelId, messageId)
         pinMessage(channelId, messageId)
     }
 
@@ -81,6 +84,10 @@ class TelegramSender(
 
     fun answerCallback(callbackQueryId: String) {
         executeTelegram(AnswerCallbackQuery(callbackQueryId))
+    }
+
+    fun deleteMessage(chatId: Long, messageId: Int) {
+        executeTelegram(DeleteMessage(chatId, messageId))
     }
 
     suspend fun sendVideo(chatId: Long, file: Path): TelegramSendResult {
@@ -230,6 +237,13 @@ class TelegramSender(
         executeTelegram(
             PinChatMessage(channelId, messageId)
                 .disableNotification(true)
+        )
+    }
+
+    private fun unpinMessage(channelId: String, messageId: Int) {
+        executeTelegram(
+            UnpinChatMessage(channelId)
+                .messageId(messageId)
         )
     }
 

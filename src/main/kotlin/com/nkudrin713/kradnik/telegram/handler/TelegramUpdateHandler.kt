@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram.handler
 
+import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.handler.command.TelegramCommandHandler
 import com.pengrad.telegrambot.model.Update
 import org.springframework.stereotype.Service
@@ -7,10 +8,20 @@ import org.springframework.stereotype.Service
 @Service
 class TelegramUpdateHandler(
     private val handlers: List<TelegramCommandHandler>,
+    private val telegramSender: TelegramSender,
 ) {
 
     fun handle(update: Update) {
         val context = when {
+            update.message()?.pinnedMessage() != null -> {
+                val message = update.message()
+                telegramSender.deleteMessage(
+                    chatId = message.chat().id(),
+                    messageId = message.messageId(),
+                )
+                return
+            }
+
             update.message()?.text() != null -> {
                 val message = update.message()
                 TelegramUpdateContext(

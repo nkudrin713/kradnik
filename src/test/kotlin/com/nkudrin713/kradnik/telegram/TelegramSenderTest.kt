@@ -10,11 +10,13 @@ import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
 import com.pengrad.telegrambot.request.BaseRequest
+import com.pengrad.telegrambot.request.DeleteMessage
 import com.pengrad.telegrambot.request.EditMessageText
 import com.pengrad.telegrambot.request.PinChatMessage
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendVideo
+import com.pengrad.telegrambot.request.UnpinChatMessage
 import com.pengrad.telegrambot.response.BaseResponse
 import com.pengrad.telegrambot.response.SendResponse
 import io.kotest.matchers.shouldBe
@@ -146,6 +148,20 @@ class TelegramSenderTest {
     }
 
     @Test
+    fun deleteMessage() {
+        val chatId = chatId()
+        val messageId = messageId()
+        val request = slot<BaseRequest<*, *>>()
+        every { bot.execute(capture(request)) } returns okResponse()
+
+        sender.deleteMessage(chatId, messageId)
+
+        val actual = request.captured as DeleteMessage
+        actual.getParameters()["chat_id"] shouldBe chatId
+        actual.getParameters()["message_id"] shouldBe messageId
+    }
+
+    @Test
     fun sendCachedVideo() {
         val chatId = chatId()
         val fileId = text()
@@ -261,6 +277,7 @@ class TelegramSenderTest {
         every { bot.execute(capture(requests)) } returnsMany listOf(
             okResponse(),
             okResponse(),
+            okResponse(),
         )
 
         sender.updateDonationPin(channelId, messageId, donationUrl)
@@ -270,9 +287,13 @@ class TelegramSenderTest {
         editMessage.getParameters()["message_id"] shouldBe messageId
         editMessage.getParameters().containsKey("text") shouldBe true
         editMessage.getParameters().containsKey("reply_markup") shouldBe true
-        val pinMessage = requests[1] as PinChatMessage
+        val unpinMessage = requests[1] as UnpinChatMessage
+        unpinMessage.getParameters()["chat_id"] shouldBe channelId
+        unpinMessage.getParameters()["message_id"] shouldBe messageId
+        val pinMessage = requests[2] as PinChatMessage
         pinMessage.getParameters()["chat_id"] shouldBe channelId
         pinMessage.getParameters()["message_id"] shouldBe messageId
+        pinMessage.getParameters()["disable_notification"] shouldBe true
     }
 
     private fun chatId(): Long {

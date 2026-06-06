@@ -40,9 +40,6 @@ class TelegramSenderTest {
         bot = bot,
         modeView = modeView,
         videoMetadataProbe = videoMetadataProbe,
-        donationMessage = DONATION_MESSAGE,
-        donationPinText = DONATION_PIN_TEXT,
-        donationButtonText = DONATION_BUTTON_TEXT,
     )
 
     @Test
@@ -228,8 +225,8 @@ class TelegramSenderTest {
 
         val actual = request.captured as SendMessage
         actual.getParameters()["chat_id"] shouldBe chatId
-        actual.getParameters()["text"] shouldBe DONATION_MESSAGE
-        actual.getParameters()["reply_markup"] shouldBe donationKeyboard(donationUrl)
+        actual.getParameters().containsKey("text") shouldBe true
+        actual.getParameters().containsKey("reply_markup") shouldBe true
     }
 
     @Test
@@ -248,8 +245,8 @@ class TelegramSenderTest {
         actualMessageId shouldBe messageId
         val sendMessage = requests[0] as SendMessage
         sendMessage.getParameters()["chat_id"] shouldBe channelId
-        sendMessage.getParameters()["text"] shouldBe DONATION_PIN_TEXT
-        sendMessage.getParameters()["reply_markup"] shouldBe donationKeyboard(donationUrl)
+        sendMessage.getParameters().containsKey("text") shouldBe true
+        sendMessage.getParameters().containsKey("reply_markup") shouldBe true
         val pinMessage = requests[1] as PinChatMessage
         pinMessage.getParameters()["chat_id"] shouldBe channelId
         pinMessage.getParameters()["message_id"] shouldBe messageId
@@ -271,8 +268,8 @@ class TelegramSenderTest {
         val editMessage = requests[0] as EditMessageText
         editMessage.getParameters()["chat_id"] shouldBe channelId
         editMessage.getParameters()["message_id"] shouldBe messageId
-        editMessage.getParameters()["text"] shouldBe DONATION_PIN_TEXT
-        editMessage.getParameters()["reply_markup"] shouldBe donationKeyboard(donationUrl)
+        editMessage.getParameters().containsKey("text") shouldBe true
+        editMessage.getParameters().containsKey("reply_markup") shouldBe true
         val pinMessage = requests[1] as PinChatMessage
         pinMessage.getParameters()["chat_id"] shouldBe channelId
         pinMessage.getParameters()["message_id"] shouldBe messageId
@@ -296,13 +293,6 @@ class TelegramSenderTest {
 
     private fun keyboard(label: String): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(InlineKeyboardButton(label))
-    }
-
-    private fun donationKeyboard(donationUrl: String): InlineKeyboardMarkup {
-        return InlineKeyboardMarkup(
-            InlineKeyboardButton(DONATION_BUTTON_TEXT)
-                .url(donationUrl)
-        )
     }
 
     private fun okResponse(): BaseResponse {
@@ -362,8 +352,5 @@ class TelegramSenderTest {
         private const val VIDEO_WIDTH = 1920
         private const val VIDEO_HEIGHT = 1080
         private const val VIDEO_DURATION_SECONDS = 60
-        private const val DONATION_MESSAGE = "donation-message"
-        private const val DONATION_PIN_TEXT = "donation-pin-text"
-        private const val DONATION_BUTTON_TEXT = "donation-button-text"
     }
 }

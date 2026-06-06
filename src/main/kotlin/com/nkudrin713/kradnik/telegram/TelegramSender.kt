@@ -16,25 +16,16 @@ import com.pengrad.telegrambot.response.BaseResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Locale
-
-private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
 
 @Service
 class TelegramSender(
     private val bot: TelegramBot,
     private val modeView: TelegramModeView,
     private val videoMetadataProbe: VideoMetadataProbe,
-    @Value("\${telegram.donation.message}")
-    private val donationMessage: String,
-    @Value("\${telegram.donation.pin-text}")
-    private val donationPinText: String,
-    @Value("\${telegram.donation.button-text}")
-    private val donationButtonText: String,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -59,12 +50,12 @@ class TelegramSender(
     }
 
     fun sendDonationMessage(chatId: Long, donationUrl: String) {
-        sendText(chatId, donationMessage, donationKeyboard(donationUrl))
+        sendText(chatId, DONATION_MESSAGE, donationKeyboard(donationUrl))
     }
 
     fun sendDonationPin(channelId: String, donationUrl: String): Int {
         val response = executeTelegram(
-            SendMessage(channelId, donationPinText)
+            SendMessage(channelId, DONATION_PIN_TEXT)
                 .replyMarkup(donationKeyboard(donationUrl))
         )
         val messageId = requireNotNull(response.message()).messageId()
@@ -78,7 +69,7 @@ class TelegramSender(
         donationUrl: String,
     ) {
         executeTelegram(
-            EditMessageText(channelId, messageId, donationPinText)
+            EditMessageText(channelId, messageId, DONATION_PIN_TEXT)
                 .replyMarkup(donationKeyboard(donationUrl))
         )
         pinMessage(channelId, messageId)
@@ -230,7 +221,7 @@ class TelegramSender(
 
     private fun donationKeyboard(donationUrl: String): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
-            InlineKeyboardButton(donationButtonText)
+            InlineKeyboardButton(DONATION_BUTTON_TEXT)
                 .url(donationUrl)
         )
     }
@@ -254,6 +245,21 @@ class TelegramSender(
 
     private fun formatMegabytes(bytes: Long): String {
         return String.format(Locale.US, "%.2f", bytes / BYTES_IN_MEGABYTE)
+    }
+
+    private companion object {
+        private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
+        private val DONATION_MESSAGE = """
+            Крадник остаётся бесплатным.
+           
+            А это — банка для тех, кто хочет подкинуть топлива проекту.
+            Донаты уходят на хостинг, новые фичи и моральную устойчивость разработчика.
+            Обещаю не покупать пиво и сигареты.
+            
+            Спасибо, что помогаете боту жить.
+        """.trimIndent()
+        private const val DONATION_PIN_TEXT = "Плеснуть топлива в медиадвигатель 🛢"
+        private const val DONATION_BUTTON_TEXT = "Поддержать проект"
     }
 }
 

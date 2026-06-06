@@ -11,6 +11,7 @@ import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
 import com.pengrad.telegrambot.request.BaseRequest
 import com.pengrad.telegrambot.request.EditMessageText
+import com.pengrad.telegrambot.request.PinChatMessage
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendVideo
@@ -213,6 +214,72 @@ class TelegramSenderTest {
         actualResult.fileSize shouldBe fileSize
     }
 
+    @Test
+    fun sendDonationMessage() {
+        val chatId = chatId()
+        val donationUrl = "https://example.com/donate"
+        val request = slot<BaseRequest<*, *>>()
+        every { bot.execute(capture(request)) } returns sendResponse()
+
+        sender.sendDonationMessage(chatId, donationUrl)
+
+        val actual = request.captured as SendMessage
+        actual.getParameters()["chat_id"] shouldBe chatId
+        actual.getParameters()["text"] shouldBe """
+            Крадник бесплатный для людей. Для сервера эта концепция пока сложновата.
+            Поддержать проект можно здесь. Донат уйдет на хостинг, трафик и улучшения.
+
+            Спасибо. Это помогает.
+        """.trimIndent()
+        actual.getParameters()["reply_markup"] shouldBe donationKeyboard(donationUrl)
+    }
+
+    @Test
+    fun sendDonationPin() {
+        val channelId = "@channel"
+        val donationUrl = "https://example.com/donate"
+        val messageId = messageId()
+        val requests = mutableListOf<BaseRequest<*, *>>()
+        every { bot.execute(capture(requests)) } returnsMany listOf(
+            sendResponse(messageId),
+            okResponse(),
+        )
+
+        val actualMessageId = sender.sendDonationPin(channelId, donationUrl)
+
+        actualMessageId shouldBe messageId
+        val sendMessage = requests[0] as SendMessage
+        sendMessage.getParameters()["chat_id"] shouldBe channelId
+        sendMessage.getParameters()["text"] shouldBe "Поддержать кражу медиафайлов 🏴‍☠️"
+        sendMessage.getParameters()["reply_markup"] shouldBe donationKeyboard(donationUrl)
+        val pinMessage = requests[1] as PinChatMessage
+        pinMessage.getParameters()["chat_id"] shouldBe channelId
+        pinMessage.getParameters()["message_id"] shouldBe messageId
+    }
+
+    @Test
+    fun updateDonationPin() {
+        val channelId = "@channel"
+        val donationUrl = "https://example.com/donate"
+        val messageId = messageId()
+        val requests = mutableListOf<BaseRequest<*, *>>()
+        every { bot.execute(capture(requests)) } returnsMany listOf(
+            okResponse(),
+            okResponse(),
+        )
+
+        sender.updateDonationPin(channelId, messageId, donationUrl)
+
+        val editMessage = requests[0] as EditMessageText
+        editMessage.getParameters()["chat_id"] shouldBe channelId
+        editMessage.getParameters()["message_id"] shouldBe messageId
+        editMessage.getParameters()["text"] shouldBe "Поддержать кражу медиафайлов 🏴‍☠️"
+        editMessage.getParameters()["reply_markup"] shouldBe donationKeyboard(donationUrl)
+        val pinMessage = requests[1] as PinChatMessage
+        pinMessage.getParameters()["chat_id"] shouldBe channelId
+        pinMessage.getParameters()["message_id"] shouldBe messageId
+    }
+
     private fun chatId(): Long {
         return Arb.long().next()
     }
@@ -231,6 +298,13 @@ class TelegramSenderTest {
 
     private fun keyboard(label: String): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(InlineKeyboardButton(label))
+    }
+
+    private fun donationKeyboard(donationUrl: String): InlineKeyboardMarkup {
+        return InlineKeyboardMarkup(
+            InlineKeyboardButton("Поддержать")
+                .url(donationUrl)
+        )
     }
 
     private fun okResponse(): BaseResponse {

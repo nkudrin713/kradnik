@@ -3,10 +3,12 @@ package com.nkudrin713.kradnik.telegram
 import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.pengrad.telegrambot.TelegramBot
+import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
 import com.pengrad.telegrambot.request.BaseRequest
 import com.pengrad.telegrambot.request.EditMessageText
+import com.pengrad.telegrambot.request.PinChatMessage
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendVideo
@@ -45,6 +47,32 @@ class TelegramSender(
 
     fun sendModeMenu(chatId: Long, outputType: OutputType) {
         sendText(chatId, modeView.text(), modeView.keyboard(outputType))
+    }
+
+    fun sendDonationMessage(chatId: Long, donationUrl: String) {
+        sendText(chatId, DONATION_MESSAGE, donationKeyboard(donationUrl))
+    }
+
+    fun sendDonationPin(channelId: String, donationUrl: String): Int {
+        val response = executeTelegram(
+            SendMessage(channelId, DONATION_PIN_TEXT)
+                .replyMarkup(donationKeyboard(donationUrl))
+        )
+        val messageId = requireNotNull(response.message()).messageId()
+        pinMessage(channelId, messageId)
+        return messageId
+    }
+
+    fun updateDonationPin(
+        channelId: String,
+        messageId: Int,
+        donationUrl: String,
+    ) {
+        executeTelegram(
+            EditMessageText(channelId, messageId, DONATION_PIN_TEXT)
+                .replyMarkup(donationKeyboard(donationUrl))
+        )
+        pinMessage(channelId, messageId)
     }
 
     fun editModeMenu(chatId: Long, messageId: Int, outputType: OutputType) {
@@ -191,6 +219,20 @@ class TelegramSender(
         executeTelegram(request)
     }
 
+    private fun donationKeyboard(donationUrl: String): InlineKeyboardMarkup {
+        return InlineKeyboardMarkup(
+            InlineKeyboardButton(DONATION_BUTTON_TEXT)
+                .url(donationUrl)
+        )
+    }
+
+    private fun pinMessage(channelId: String, messageId: Int) {
+        executeTelegram(
+            PinChatMessage(channelId, messageId)
+                .disableNotification(true)
+        )
+    }
+
     private fun <T, R> executeTelegram(request: BaseRequest<T, R>): R
             where T : BaseRequest<T, R>, R : BaseResponse {
         val response = bot.execute(request)
@@ -207,6 +249,14 @@ class TelegramSender(
 
     private companion object {
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
+        private val DONATION_MESSAGE = """
+            Крадник бесплатный для людей. Для сервера эта концепция пока сложновата.
+            Поддержать проект можно здесь. Донат уйдет на хостинг, трафик и улучшения.
+
+            Спасибо. Это помогает.
+        """.trimIndent()
+        private const val DONATION_PIN_TEXT = "Поддержать кражу медиафайлов 🏴‍☠️"
+        private const val DONATION_BUTTON_TEXT = "Поддержать"
     }
 }
 
@@ -219,10 +269,10 @@ class TelegramSendException(message: String?) :
     RuntimeException("Telegram send failed: $message")
 
 enum class TelegramDownloadStatus(val text: String) {
-    QUEUED("Поставил в очередь ⏳"),
+    QUEUED("В очереди ⏳"),
     DOWNLOADING("Скачиваю ⬇️"),
     UPLOADING("Загружаю в Telegram ⬆️"),
     COMPLETED("Готово ✅"),
-    REJECTED_TOO_LARGE("Файл слишком большой для Telegram ⛔"),
+    REJECTED_TOO_LARGE("Слишком тяжелый файл 🪨 Не справлюсь"),
     ERROR("Ошибка ⛔"),
 }

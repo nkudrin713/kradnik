@@ -19,6 +19,7 @@ class TelegramCommandsInitializer(
             SetMyCommands(
                 BotCommand("start", "запустить бота"),
                 BotCommand("mode", "переключить видео/аудио"),
+                BotCommand("donate", "поддержать проект"),
             )
         )
 

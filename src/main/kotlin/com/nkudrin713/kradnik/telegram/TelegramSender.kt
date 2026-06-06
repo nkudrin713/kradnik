@@ -284,7 +284,7 @@ class TelegramSender(
             Спасибо, что помогаете боту жить.
         """.trimIndent()
         private const val DONATION_PIN_TEXT = "Поддержать проект можно нажав на кнопку. Больше инфы в /donate"
-        private const val DONATION_BUTTON_TEXT = "💸"
+        private const val DONATION_BUTTON_TEXT = "Поддержать 💸"
     }
 }
 

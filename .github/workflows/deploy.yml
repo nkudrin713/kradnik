@@ -56,6 +56,14 @@ jobs:
           name: app-jar
           path: .deploy
 
+      - name: Check latest commit before deploy
+        run: |
+          set -euo pipefail
+          latest_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          echo "Current SHA: $GITHUB_SHA"
+          echo "Latest main SHA: $latest_sha"
+          test "$latest_sha" = "$GITHUB_SHA"
+
       - name: Configure SSH
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -112,6 +120,14 @@ jobs:
             printf 'TELEGRAM_DONATION_PIN_ENABLED=%s\n' "${TELEGRAM_DONATION_PIN_ENABLED:-false}"
             printf 'TELEGRAM_DONATION_PIN_MESSAGE_ID=%s\n' "${TELEGRAM_DONATION_PIN_MESSAGE_ID:-}"
           } | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$DEPLOY_PATH/.env'"
+
+      - name: Check latest commit before restart
+        run: |
+          set -euo pipefail
+          latest_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          echo "Current SHA: $GITHUB_SHA"
+          echo "Latest main SHA: $latest_sha"
+          test "$latest_sha" = "$GITHUB_SHA"
 
       - name: Restart app
         env:

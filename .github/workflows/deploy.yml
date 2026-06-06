@@ -94,6 +94,10 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_DONATION_URL: ${{ secrets.TELEGRAM_DONATION_URL }}
+          TELEGRAM_DONATION_CHANNEL_ID: ${{ secrets.TELEGRAM_DONATION_CHANNEL_ID }}
+          TELEGRAM_DONATION_PIN_ENABLED: ${{ secrets.TELEGRAM_DONATION_PIN_ENABLED }}
+          TELEGRAM_DONATION_PIN_MESSAGE_ID: ${{ secrets.TELEGRAM_DONATION_PIN_MESSAGE_ID }}
         run: |
           set -euo pipefail
           test -n "$DEPLOY_PATH"
@@ -103,6 +107,10 @@ jobs:
             printf 'POSTGRES_USER=kradnik\n'
             printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
+            printf 'TELEGRAM_DONATION_URL=%s\n' "${TELEGRAM_DONATION_URL:-https://pay.cloudtips.ru/p/6f779a3d}"
+            printf 'TELEGRAM_DONATION_CHANNEL_ID=%s\n' "${TELEGRAM_DONATION_CHANNEL_ID:-@mediakradnik}"
+            printf 'TELEGRAM_DONATION_PIN_ENABLED=%s\n' "${TELEGRAM_DONATION_PIN_ENABLED:-false}"
+            printf 'TELEGRAM_DONATION_PIN_MESSAGE_ID=%s\n' "${TELEGRAM_DONATION_PIN_MESSAGE_ID:-}"
           } | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$DEPLOY_PATH/.env'"
 
       - name: Restart app

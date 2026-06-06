@@ -3,6 +3,13 @@ name: Clean Deploy
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: "Environment to reset"
+        required: true
+        type: choice
+        options:
+          - development
+          - production
       confirm:
         description: "Type RESET to drop server containers, images, and database volume"
         required: true
@@ -13,13 +20,14 @@ permissions:
   packages: write
 
 concurrency:
-  group: deploy-production
+  group: deploy-${{ inputs.environment }}
   cancel-in-progress: false
 
 jobs:
   checks:
     name: Tests and checks
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     if: ${{ inputs.confirm == 'RESET' }}
 
     steps:
@@ -74,6 +82,7 @@ jobs:
     name: Clean deploy to server
     runs-on: ubuntu-latest
     needs: checks
+    environment: ${{ inputs.environment }}
 
     steps:
       - name: Checkout
@@ -109,17 +118,42 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_DONATION_URL: ${{ vars.TELEGRAM_DONATION_URL || secrets.TELEGRAM_DONATION_URL }}
+          TELEGRAM_DONATION_CHANNEL_ID: ${{ vars.TELEGRAM_DONATION_CHANNEL_ID || secrets.TELEGRAM_DONATION_CHANNEL_ID }}
+          TELEGRAM_DONATION_PIN_ENABLED: ${{ vars.TELEGRAM_DONATION_PIN_ENABLED || secrets.TELEGRAM_DONATION_PIN_ENABLED }}
+          TELEGRAM_DONATION_PIN_MESSAGE_ID: ${{ vars.TELEGRAM_DONATION_PIN_MESSAGE_ID || secrets.TELEGRAM_DONATION_PIN_MESSAGE_ID }}
         run: |
           set -euo pipefail
           test -n "$DEPLOY_PATH"
           test "$DEPLOY_PATH" != "/"
           app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            app_container_name="kradnik-prod-app"
+            postgres_container_name="kradnik-prod-postgres"
+            postgres_db="kradnik_prod"
+            postgres_volume_name="kradnik-prod-postgres-data"
+            postgres_public_port="5434"
+          else
+            app_container_name="kradnik-test-app"
+            postgres_container_name="kradnik-test-postgres"
+            postgres_db="kradnik_test"
+            postgres_volume_name="kradnik-test-postgres-data"
+            postgres_public_port="5433"
+          fi
           {
             printf 'APP_IMAGE=%s\n' "$app_image"
-            printf 'POSTGRES_DB=kradnik\n'
+            printf 'APP_CONTAINER_NAME=%s\n' "$app_container_name"
+            printf 'POSTGRES_CONTAINER_NAME=%s\n' "$postgres_container_name"
+            printf 'POSTGRES_DB=%s\n' "$postgres_db"
             printf 'POSTGRES_USER=kradnik\n'
             printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
+            printf 'POSTGRES_VOLUME_NAME=%s\n' "$postgres_volume_name"
+            printf 'POSTGRES_PUBLIC_PORT=%s\n' "$postgres_public_port"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
+            printf 'TELEGRAM_DONATION_URL=%s\n' "${TELEGRAM_DONATION_URL:-https://pay.cloudtips.ru/p/6f779a3d}"
+            printf 'TELEGRAM_DONATION_CHANNEL_ID=%s\n' "${TELEGRAM_DONATION_CHANNEL_ID:-@mediakradnik}"
+            printf 'TELEGRAM_DONATION_PIN_ENABLED=%s\n' "${TELEGRAM_DONATION_PIN_ENABLED:-false}"
+            printf 'TELEGRAM_DONATION_PIN_MESSAGE_ID=%s\n' "${TELEGRAM_DONATION_PIN_MESSAGE_ID:-}"
           } | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$DEPLOY_PATH/.env'"
 
       - name: Login to GHCR on server

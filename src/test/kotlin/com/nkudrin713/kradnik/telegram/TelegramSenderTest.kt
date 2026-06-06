@@ -40,6 +40,9 @@ class TelegramSenderTest {
         bot = bot,
         modeView = modeView,
         videoMetadataProbe = videoMetadataProbe,
+        donationMessage = DONATION_MESSAGE,
+        donationPinText = DONATION_PIN_TEXT,
+        donationButtonText = DONATION_BUTTON_TEXT,
     )
 
     @Test
@@ -225,12 +228,7 @@ class TelegramSenderTest {
 
         val actual = request.captured as SendMessage
         actual.getParameters()["chat_id"] shouldBe chatId
-        actual.getParameters()["text"] shouldBe """
-            Крадник бесплатный для людей. Для сервера эта концепция пока сложновата.
-            Поддержать проект можно здесь. Донат уйдет на хостинг, трафик и улучшения.
-
-            Спасибо. Это помогает.
-        """.trimIndent()
+        actual.getParameters()["text"] shouldBe DONATION_MESSAGE
         actual.getParameters()["reply_markup"] shouldBe donationKeyboard(donationUrl)
     }
 
@@ -250,7 +248,7 @@ class TelegramSenderTest {
         actualMessageId shouldBe messageId
         val sendMessage = requests[0] as SendMessage
         sendMessage.getParameters()["chat_id"] shouldBe channelId
-        sendMessage.getParameters()["text"] shouldBe "Поддержать кражу медиафайлов 🏴‍☠️"
+        sendMessage.getParameters()["text"] shouldBe DONATION_PIN_TEXT
         sendMessage.getParameters()["reply_markup"] shouldBe donationKeyboard(donationUrl)
         val pinMessage = requests[1] as PinChatMessage
         pinMessage.getParameters()["chat_id"] shouldBe channelId
@@ -273,7 +271,7 @@ class TelegramSenderTest {
         val editMessage = requests[0] as EditMessageText
         editMessage.getParameters()["chat_id"] shouldBe channelId
         editMessage.getParameters()["message_id"] shouldBe messageId
-        editMessage.getParameters()["text"] shouldBe "Поддержать кражу медиафайлов 🏴‍☠️"
+        editMessage.getParameters()["text"] shouldBe DONATION_PIN_TEXT
         editMessage.getParameters()["reply_markup"] shouldBe donationKeyboard(donationUrl)
         val pinMessage = requests[1] as PinChatMessage
         pinMessage.getParameters()["chat_id"] shouldBe channelId
@@ -302,7 +300,7 @@ class TelegramSenderTest {
 
     private fun donationKeyboard(donationUrl: String): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
-            InlineKeyboardButton("Поддержать")
+            InlineKeyboardButton(DONATION_BUTTON_TEXT)
                 .url(donationUrl)
         )
     }
@@ -364,5 +362,8 @@ class TelegramSenderTest {
         private const val VIDEO_WIDTH = 1920
         private const val VIDEO_HEIGHT = 1080
         private const val VIDEO_DURATION_SECONDS = 60
+        private const val DONATION_MESSAGE = "donation-message"
+        private const val DONATION_PIN_TEXT = "donation-pin-text"
+        private const val DONATION_BUTTON_TEXT = "donation-button-text"
     }
 }

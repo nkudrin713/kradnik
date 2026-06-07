@@ -58,6 +58,7 @@ class VideoUrlHandler(
                 outputType = request.outputType,
                 downloadPreset = request.presetName,
                 selectedFormat = request.formatSelector,
+                downloadExtraArgs = request.extraArgs,
                 telegramStatusMessageId = statusMessageId,
             )
         )

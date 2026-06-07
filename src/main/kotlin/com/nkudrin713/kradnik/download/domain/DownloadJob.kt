@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.domain
 
 import com.nkudrin713.kradnik.download.repository.DownloadOutputTypeConverter
 import com.nkudrin713.kradnik.download.repository.DownloadJobStatusConverter
+import com.nkudrin713.kradnik.download.repository.StringListJsonConverter
 import jakarta.persistence.Column
 import jakarta.persistence.Convert
 import jakarta.persistence.Entity
@@ -66,6 +67,10 @@ class DownloadJob(
 
 	@Column(name = "selected_format")
 	var selectedFormat: String? = null,
+
+	@Convert(converter = StringListJsonConverter::class)
+	@Column(name = "download_extra_args", nullable = false)
+	var downloadExtraArgs: List<String> = emptyList(),
 
 	@Column(name = "downloaded_file_size")
 	var downloadedFileSize: Long? = null,

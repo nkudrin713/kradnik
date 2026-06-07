@@ -7,7 +7,7 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.requiredId
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
-import com.nkudrin713.kradnik.download.request.DownloadRequestFactory
+import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
@@ -23,7 +23,6 @@ import kotlin.io.path.createDirectories
 @Component
 class DownloadJobProcessor(
     private val downloadJobService: DownloadJobService,
-    private val downloadRequestFactory: DownloadRequestFactory,
     private val downloadPreflightService: DownloadPreflightService,
     private val telegramVideoPreparer: TelegramVideoPreparer,
     private val telegramFileSender: TelegramFileSender,
@@ -47,7 +46,7 @@ class DownloadJobProcessor(
                 return
             }
 
-            val request = downloadRequestFactory.create(job)
+            val request = DownloadRequest.fromJob(job)
             val metadata = ytDlpService.extractMetadata(request)
             val preflightDecision = downloadPreflightService.check(request, metadata)
             if (preflightDecision is DownloadPreflightDecision.Rejected) {

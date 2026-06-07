@@ -33,6 +33,7 @@ class DownloadJobServiceTest {
                 outputType = OutputType.AUDIO,
                 downloadPreset = "preset",
                 selectedFormat = "format",
+                downloadExtraArgs = listOf("-x", "--audio-format", "mp3"),
                 telegramStatusMessageId = 10,
             )
         )
@@ -45,6 +46,7 @@ class DownloadJobServiceTest {
         assertEquals(OutputType.AUDIO, actual.outputType)
         assertEquals("preset", actual.downloadPreset)
         assertEquals("format", actual.selectedFormat)
+        assertEquals(listOf("-x", "--audio-format", "mp3"), actual.downloadExtraArgs)
         assertEquals(10, actual.telegramStatusMessageId)
     }
 

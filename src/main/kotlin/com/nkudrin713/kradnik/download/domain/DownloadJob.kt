@@ -32,6 +32,9 @@ class DownloadJob(
 	@Column(name = "normalized_url", nullable = false)
 	var normalizedUrl: String = "",
 
+	@Column(name = "cache_key", nullable = false)
+	var cacheKey: String = "",
+
 	@Convert(converter = DownloadOutputTypeConverter::class)
 	@Column(name = "output_type", nullable = false)
 	var outputType: OutputType = OutputType.VIDEO,

@@ -134,7 +134,8 @@ jobs:
           set -euo pipefail
           test -n "$DEPLOY_PATH"
           test "$DEPLOY_PATH" != "/"
-          app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
+          image_tag="${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}"
+          app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$image_tag"
           deploy_environment="${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}"
           if [ "$deploy_environment" = "production" ]; then
             app_container_name="kradnik-prod-app"

@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   checks:
@@ -164,7 +164,7 @@ jobs:
             printf 'TELEGRAM_DONATION_CHANNEL_ID=%s\n' "${TELEGRAM_DONATION_CHANNEL_ID:-@mediakradnik}"
             printf 'TELEGRAM_DONATION_PIN_ENABLED=%s\n' "${TELEGRAM_DONATION_PIN_ENABLED:-false}"
             printf 'TELEGRAM_DONATION_PIN_MESSAGE_ID=%s\n' "${TELEGRAM_DONATION_PIN_MESSAGE_ID:-}"
-          } | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$DEPLOY_PATH/.env'"
+          } | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$DEPLOY_PATH/.env.next'"
 
       - name: Check latest commit before restart
         if: ${{ github.event_name != 'workflow_dispatch' }}
@@ -202,10 +202,28 @@ jobs:
           test -n "$DEPLOY_PATH"
           test "$DEPLOY_PATH" != "/"
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
+            set -euo pipefail && \
             cd '$DEPLOY_PATH' && \
+            test -f .env.next && \
+            if [ -f .env ]; then cp .env .env.previous; else rm -f .env.previous; fi && \
+            rollback() { \
+              status=\$?; \
+              if [ \"\$status\" -ne 0 ] && [ -f .env.previous ]; then \
+                mv .env.previous .env; \
+                DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose up -d --remove-orphans || true; \
+              fi; \
+              exit \"\$status\"; \
+            } && \
+            trap rollback EXIT && \
+            mv .env.next .env && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose pull app && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose up -d --remove-orphans && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose ps && \
-            test \"\$(docker compose ps -q app | xargs docker inspect -f '{{.State.Status}}')\" = running && \
-            docker image prune -f\
+            app_container=\$(docker compose ps -q app) && \
+            test -n \"\$app_container\" && \
+            test \"\$(docker inspect -f '{{.State.Status}}' \"\$app_container\")\" = running && \
+            sleep 15 && \
+            test \"\$(docker inspect -f '{{.State.Status}}' \"\$app_container\")\" = running && \
+            rm -f .env.previous && \
+            docker image prune -f --filter until=24h\
           "

@@ -12,8 +12,9 @@ import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSendResult
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
+import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -184,6 +185,20 @@ class DownloadJobProcessorTest {
         coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
         coVerify(exactly = 0) { telegramFileSender.send(any(), any()) }
         verify { downloadJobLifecycle.failOrRetry(job, "metadata error") }
+    }
+
+    @Test
+    fun failsAuthenticationRequiredWithoutRetry(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val request = request()
+        coEvery { ytDlpService.extractMetadata(request) } throws YtDlpAuthenticationRequiredException("auth required")
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(job)
+
+        verify { downloadJobLifecycle.failAuthenticationRequired(job, "auth required") }
+        verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any()) }
+        verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
     }
 
     @Test

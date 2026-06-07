@@ -33,9 +33,6 @@ data class YtDlpMetadataDto(
 
     val format: String?,
 
-    /**
-     * Поля для красивого SendAudio.
-     */
     val track: String?,
     val artist: String?,
     val creator: String?,
@@ -67,18 +64,7 @@ data class YtDlpFormatDto(
     val vcodec: String?,
     val acodec: String?,
 
-    /**
-     * Total bitrate, kbps.
-     */
     val tbr: BigDecimal?,
-
-    /**
-     * Video bitrate, kbps.
-     */
     val vbr: BigDecimal?,
-
-    /**
-     * Audio bitrate, kbps.
-     */
     val abr: BigDecimal?,
 )

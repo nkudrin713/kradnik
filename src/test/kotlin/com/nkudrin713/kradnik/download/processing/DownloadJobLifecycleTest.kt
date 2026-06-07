@@ -66,6 +66,18 @@ class DownloadJobLifecycleTest {
     }
 
     @Test
+    fun failsAuthenticationRequiredWithoutRetry() {
+        val job = job()
+        every { downloadJobService.markFailed(1, "auth required") } returns job
+        every { statusReporter.setStatus(any(), any()) } just runs
+
+        lifecycle.failAuthenticationRequired(job, "auth required")
+
+        verify { downloadJobService.markFailed(1, "auth required") }
+        verify { statusReporter.setStatus(job, TelegramDownloadStatus.AUTHENTICATION_REQUIRED) }
+    }
+
+    @Test
     fun completes() {
         val job = job()
         val result = DownloadedFileResult(

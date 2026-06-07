@@ -6,7 +6,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class UrlIdentityResolverTest {
-    private val resolver = UrlIdentityResolver()
+    private val youtubeResolver = YouTubeUrlIdentityResolver()
+    private val genericResolver = GenericUrlIdentityResolver()
+    private val resolver = UrlIdentityResolver(listOf(youtubeResolver, genericResolver))
 
     @Test
     fun resolvesYouTubeWatchUrl() {
@@ -94,7 +96,7 @@ class UrlIdentityResolverTest {
 
     @Test
     fun resolvesGenericUrl() {
-        val actual = resolver.resolve(
+        val actual = genericResolver.resolve(
             url = " https://Example.com:443/video?b=2&utm_source=x&a=1#fragment ",
             outputType = OutputType.VIDEO,
             presetName = "default_mobile_video",
@@ -108,11 +110,22 @@ class UrlIdentityResolverTest {
     @Test
     fun rejectsNonHttpUrl() {
         assertFailsWith<UnsupportedUrlException> {
-            resolver.resolve(
+            genericResolver.resolve(
                 url = "ftp://example.com/video",
                 outputType = OutputType.VIDEO,
                 presetName = "default_mobile_video",
             )
         }
+    }
+
+    @Test
+    fun usesGenericResolverForNonYouTubeUrl() {
+        val actual = resolver.resolve(
+            url = "https://example.com/video",
+            outputType = OutputType.VIDEO,
+            presetName = "default_mobile_video",
+        )
+
+        assertEquals("generic:video:default_mobile_video:https://example.com/video", actual.cacheKey)
     }
 }

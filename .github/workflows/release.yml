@@ -1,0 +1,206 @@
+name: Release
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+      - closed
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release PR
+    runs-on: ubuntu-latest
+    if: "${{ github.event.action != 'closed' && startsWith(github.event.pull_request.title, 'release: ') }}"
+
+    steps:
+      - name: Validate release input
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          PATCH: ${{ contains(github.event.pull_request.labels.*.name, 'release:patch') }}
+          MINOR: ${{ contains(github.event.pull_request.labels.*.name, 'release:minor') }}
+          MAJOR: ${{ contains(github.event.pull_request.labels.*.name, 'release:major') }}
+        run: |
+          set -euo pipefail
+
+          if ! printf '%s\n' "$TITLE" | grep -Eq '^release: .+'; then
+            echo "PR title must match: release: <short description>"
+            exit 1
+          fi
+
+          bump_count=0
+          if [ "$PATCH" = "true" ]; then bump_count=$((bump_count + 1)); fi
+          if [ "$MINOR" = "true" ]; then bump_count=$((bump_count + 1)); fi
+          if [ "$MAJOR" = "true" ]; then bump_count=$((bump_count + 1)); fi
+
+          if [ "$bump_count" -ne 1 ]; then
+            echo "PR must have exactly one label: release:patch, release:minor, or release:major"
+            exit 1
+          fi
+
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    if: "${{ github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'release: ') }}"
+
+    steps:
+      - name: Checkout merge commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+
+      - name: Validate release input
+        id: release_input
+        env:
+          PATCH: ${{ contains(github.event.pull_request.labels.*.name, 'release:patch') }}
+          MINOR: ${{ contains(github.event.pull_request.labels.*.name, 'release:minor') }}
+          MAJOR: ${{ contains(github.event.pull_request.labels.*.name, 'release:major') }}
+        run: |
+          set -euo pipefail
+
+          subject="$(git log -1 --pretty=%s)"
+          if ! printf '%s\n' "$subject" | grep -Eq '^release: .+'; then
+            echo "Squash commit title must match: release: <short description>"
+            exit 1
+          fi
+
+          bump_count=0
+          bump=""
+          if [ "$PATCH" = "true" ]; then bump_count=$((bump_count + 1)); bump="patch"; fi
+          if [ "$MINOR" = "true" ]; then bump_count=$((bump_count + 1)); bump="minor"; fi
+          if [ "$MAJOR" = "true" ]; then bump_count=$((bump_count + 1)); bump="major"; fi
+
+          if [ "$bump_count" -ne 1 ]; then
+            echo "PR must have exactly one label: release:patch, release:minor, or release:major"
+            exit 1
+          fi
+
+          description="${subject#release: }"
+          {
+            printf 'bump=%s\n' "$bump"
+            printf 'description=%s\n' "$description"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Calculate version
+        id: version
+        env:
+          BUMP: ${{ steps.release_input.outputs.bump }}
+        run: |
+          set -euo pipefail
+
+          latest_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+          if [ -z "$latest_tag" ]; then
+            major=0
+            minor=0
+            patch=0
+          else
+            version="${latest_tag#v}"
+            major="${version%%.*}"
+            rest="${version#*.}"
+            minor="${rest%%.*}"
+            patch="${rest#*.}"
+          fi
+
+          case "$BUMP" in
+            patch)
+              patch=$((patch + 1))
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+          esac
+
+          next_version="v${major}.${minor}.${patch}"
+          if git rev-parse "$next_version" >/dev/null 2>&1; then
+            echo "Tag already exists: $next_version"
+            exit 1
+          fi
+
+          echo "version=$next_version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Run tests and build jar
+        run: ./gradlew check bootJar
+
+      - name: Prepare Docker context
+        run: |
+          set -euo pipefail
+          mkdir -p .deploy
+          cp build/libs/app.jar .deploy/app.jar
+
+      - name: Set image name
+        run: |
+          set -euo pipefail
+          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+
+      - name: Create tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DESCRIPTION: ${{ steps.release_input.outputs.description }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "$VERSION $DESCRIPTION"
+          git push origin "$VERSION"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          DESCRIPTION: ${{ steps.release_input.outputs.description }}
+        run: |
+          set -euo pipefail
+          gh release create "$VERSION" \
+            --title "$VERSION $DESCRIPTION" \
+            --notes "Image: ghcr.io/${GITHUB_REPOSITORY,,}:$VERSION"

@@ -3,7 +3,6 @@ name: Deploy
 on:
   push:
     branches:
-      - main
       - develop
   workflow_dispatch:
     inputs:
@@ -14,6 +13,10 @@ on:
         options:
           - development
           - production
+      version:
+        description: "Image tag to deploy, for example v1.4.0"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -27,36 +30,72 @@ jobs:
   checks:
     name: Tests and checks
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}
+    if: ${{ github.event_name == 'push' }}
+    environment: development
+    outputs:
+      deployable: ${{ steps.latest_before_push.outputs.is_latest }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Check latest commit before build
+        id: latest_before_build
+        run: |
+          set -euo pipefail
+          latest_sha="$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)"
+          echo "Current SHA: $GITHUB_SHA"
+          echo "Latest $GITHUB_REF_NAME SHA: $latest_sha"
+          if [ "$latest_sha" = "$GITHUB_SHA" ]; then
+            echo "is_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up JDK
+        if: ${{ steps.latest_before_build.outputs.is_latest == 'true' }}
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
       - name: Set up Gradle
+        if: ${{ steps.latest_before_build.outputs.is_latest == 'true' }}
         uses: gradle/actions/setup-gradle@v5
 
       - name: Run tests and build jar
+        if: ${{ steps.latest_before_build.outputs.is_latest == 'true' }}
         run: ./gradlew check bootJar
 
       - name: Prepare Docker context
+        if: ${{ steps.latest_before_build.outputs.is_latest == 'true' }}
         run: |
           set -euo pipefail
           mkdir -p .deploy
           cp build/libs/app.jar .deploy/app.jar
 
       - name: Set image name
+        if: ${{ steps.latest_before_build.outputs.is_latest == 'true' }}
         run: |
           set -euo pipefail
           echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
+      - name: Check latest commit before image push
+        id: latest_before_push
+        if: ${{ steps.latest_before_build.outputs.is_latest == 'true' }}
+        run: |
+          set -euo pipefail
+          latest_sha="$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)"
+          echo "Current SHA: $GITHUB_SHA"
+          echo "Latest $GITHUB_REF_NAME SHA: $latest_sha"
+          if [ "$latest_sha" = "$GITHUB_SHA" ]; then
+            echo "is_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Login to GHCR
+        if: ${{ steps.latest_before_push.outputs.is_latest == 'true' }}
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -64,9 +103,11 @@ jobs:
           password: ${{ github.token }}
 
       - name: Set up Docker Buildx
+        if: ${{ steps.latest_before_push.outputs.is_latest == 'true' }}
         uses: docker/setup-buildx-action@v4
 
       - name: Build and push image
+        if: ${{ steps.latest_before_push.outputs.is_latest == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -75,13 +116,14 @@ jobs:
           cache-to: type=gha,mode=max
           tags: |
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ env.IMAGE_NAME }}:${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
 
   deploy:
     name: Deploy to server
     runs-on: ubuntu-latest
     needs: checks
-    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.checks.outputs.deployable == 'true') }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}
     concurrency:
       group: deploy-server
       cancel-in-progress: false
@@ -91,7 +133,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Check latest commit before deploy
-        if: ${{ github.event_name != 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'push' }}
         run: |
           set -euo pipefail
           latest_sha="$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)"
@@ -137,9 +179,9 @@ jobs:
           set -euo pipefail
           test -n "$DEPLOY_PATH"
           test "$DEPLOY_PATH" != "/"
-          image_tag="${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}"
+          image_tag="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
           app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$image_tag"
-          deploy_environment="${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}"
+          deploy_environment="${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}"
           if [ "$deploy_environment" = "production" ]; then
             app_container_name="kradnik-prod-app"
             postgres_container_name="kradnik-prod-postgres"
@@ -170,7 +212,7 @@ jobs:
           } | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$DEPLOY_PATH/.env.next'"
 
       - name: Check latest commit before restart
-        if: ${{ github.event_name != 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'push' }}
         run: |
           set -euo pipefail
           latest_sha="$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)"

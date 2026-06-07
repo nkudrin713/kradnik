@@ -7,8 +7,9 @@ import kotlin.test.assertFailsWith
 
 class UrlIdentityResolverTest {
     private val youtubeResolver = YouTubeUrlIdentityResolver()
+    private val instagramResolver = InstagramUrlIdentityResolver()
     private val genericResolver = GenericUrlIdentityResolver()
-    private val resolver = UrlIdentityResolver(listOf(youtubeResolver, genericResolver))
+    private val resolver = UrlIdentityResolver(listOf(youtubeResolver, instagramResolver, genericResolver))
 
     @Test
     fun resolvesYouTubeWatchUrl() {
@@ -92,6 +93,58 @@ class UrlIdentityResolverTest {
                 presetName = "youtube_h264_mobile",
             )
         }
+    }
+
+    @Test
+    fun resolvesInstagramReelUrl() {
+        val actual = resolver.resolve(
+            url = "https://www.instagram.com/reel/abc/?igshid=tracking",
+            outputType = OutputType.VIDEO,
+            presetName = "instagram_mobile_video",
+        )
+
+        assertEquals("https://www.instagram.com/reel/abc/?igshid=tracking", actual.originalUrl)
+        assertEquals("https://www.instagram.com/reel/abc/", actual.normalizedUrl)
+        assertEquals("instagram:reel:abc:video:instagram_mobile_video", actual.cacheKey)
+    }
+
+    @Test
+    fun resolvesInstagramPostUrl() {
+        val actual = resolver.resolve(
+            url = "https://m.instagram.com/p/abc/?utm_source=x",
+            outputType = OutputType.AUDIO,
+            presetName = "instagram_audio",
+        )
+
+        assertEquals("https://www.instagram.com/p/abc/", actual.normalizedUrl)
+        assertEquals("instagram:p:abc:audio:instagram_audio", actual.cacheKey)
+    }
+
+    @Test
+    fun resolvesInstagramStoryUrl() {
+        val actual = resolver.resolve(
+            url = "https://www.instagram.com/stories/user/123456789/",
+            outputType = OutputType.VIDEO,
+            presetName = "instagram_mobile_video",
+        )
+
+        assertEquals("https://www.instagram.com/stories/user/123456789/", actual.normalizedUrl)
+        assertEquals("instagram:story:user:123456789:video:instagram_mobile_video", actual.cacheKey)
+    }
+
+    @Test
+    fun resolvesUnknownInstagramUrlWithGenericNormalizedKey() {
+        val actual = resolver.resolve(
+            url = "https://www.instagram.com/user/?igshid=x",
+            outputType = OutputType.VIDEO,
+            presetName = "instagram_mobile_video",
+        )
+
+        assertEquals("https://www.instagram.com/user/", actual.normalizedUrl)
+        assertEquals(
+            "instagram:https://www.instagram.com/user/:video:instagram_mobile_video",
+            actual.cacheKey,
+        )
     }
 
     @Test

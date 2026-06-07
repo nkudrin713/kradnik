@@ -74,6 +74,44 @@ class PlatformResolverTest {
     }
 
     @Test
+    fun instagramHandlerSupportsExpectedHosts() {
+        val handler = InstagramDownloadHandler()
+
+        assertEquals(true, handler.supports("https://www.instagram.com/reel/abc/"))
+        assertEquals(true, handler.supports("https://m.instagram.com/p/abc/"))
+        assertEquals(false, handler.supports("https://example.com/reel/abc/"))
+    }
+
+    @Test
+    fun instagramHandlerBuildsVideoRequest() {
+        val actual = InstagramDownloadHandler().buildRequest(
+            url = "https://www.instagram.com/reel/abc/?igshid=tracking",
+            outputType = OutputType.VIDEO,
+        )
+
+        assertEquals("https://www.instagram.com/reel/abc/?igshid=tracking", actual.originalUrl)
+        assertEquals("https://www.instagram.com/reel/abc/", actual.normalizedUrl)
+        assertEquals(OutputType.VIDEO, actual.outputType)
+        assertEquals("instagram_mobile_video", actual.presetName)
+        assertEquals(listOf("--merge-output-format", "mp4"), actual.extraArgs)
+        assertEquals(true, actual.formatSelector.contains("b[height<=1280][ext=mp4]"))
+    }
+
+    @Test
+    fun instagramHandlerBuildsAudioRequest() {
+        val actual = InstagramDownloadHandler().buildRequest(
+            url = "https://www.instagram.com/p/abc/",
+            outputType = OutputType.AUDIO,
+        )
+
+        assertEquals("https://www.instagram.com/p/abc/", actual.normalizedUrl)
+        assertEquals(OutputType.AUDIO, actual.outputType)
+        assertEquals("instagram_audio", actual.presetName)
+        assertEquals("ba/bestaudio/best", actual.formatSelector)
+        assertEquals(listOf("-x", "--audio-format", "mp3"), actual.extraArgs)
+    }
+
+    @Test
     fun defaultHandlerBuildsVideoRequest() {
         val actual = DefaultYtDlpDownloadHandler().buildRequest(
             url = "https://example.com/video",

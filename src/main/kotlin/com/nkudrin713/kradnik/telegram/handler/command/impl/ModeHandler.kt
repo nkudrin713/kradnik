@@ -32,8 +32,9 @@ class ModeHandler(
             AUDIO_CALLBACK -> OutputType.AUDIO
             else -> null
         }
+        val current = downloadSettingsService.getOutputType(context.chatId)
 
-        if (selected != null) {
+        if (selected != null && selected != current) {
             downloadSettingsService.setMode(
                 DownloadSettingsDto(
                     chatId = context.chatId,
@@ -42,18 +43,20 @@ class ModeHandler(
             )
         }
 
-        val current = selected ?: downloadSettingsService.getOutputType(context.chatId)
+        val outputType = selected ?: current
         val callbackQuery = context.callbackQuery
 
         if (callbackQuery != null) {
             telegramSender.answerCallback(callbackQuery.id())
-            telegramSender.editModeMenu(
-                context.chatId,
-                requireNotNull(context.messageId),
-                current,
-            )
+            if (selected != current) {
+                telegramSender.editModeMenu(
+                    context.chatId,
+                    requireNotNull(context.messageId),
+                    outputType,
+                )
+            }
         } else {
-            telegramSender.sendModeMenu(context.chatId, current)
+            telegramSender.sendModeMenu(context.chatId, outputType)
         }
     }
 }

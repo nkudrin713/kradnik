@@ -6,20 +6,28 @@ on:
       - main
       - develop
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options:
+          - development
+          - production
 
 permissions:
   contents: read
   packages: write
 
 concurrency:
-  group: deploy-${{ github.ref_name }}
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   checks:
     name: Tests and checks
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}
 
     steps:
       - name: Checkout
@@ -67,19 +75,20 @@ jobs:
           cache-to: type=gha,mode=max
           tags: |
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
 
   deploy:
     name: Deploy to server
     runs-on: ubuntu-latest
     needs: checks
-    environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
       - name: Check latest commit before deploy
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         run: |
           set -euo pipefail
           latest_sha="$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)"
@@ -126,7 +135,8 @@ jobs:
           test -n "$DEPLOY_PATH"
           test "$DEPLOY_PATH" != "/"
           app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
-          if [ "$GITHUB_REF_NAME" = "main" ]; then
+          deploy_environment="${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}"
+          if [ "$deploy_environment" = "production" ]; then
             app_container_name="kradnik-prod-app"
             postgres_container_name="kradnik-prod-postgres"
             postgres_db="kradnik_prod"
@@ -156,6 +166,7 @@ jobs:
           } | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$DEPLOY_PATH/.env'"
 
       - name: Check latest commit before restart
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         run: |
           set -euo pipefail
           latest_sha="$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)"

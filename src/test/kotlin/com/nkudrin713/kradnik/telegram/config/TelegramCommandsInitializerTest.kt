@@ -16,7 +16,7 @@ class TelegramCommandsInitializerTest {
     private val args: ApplicationArguments = mockk()
 
     @Test
-    fun deletesCommandsBeforeSettingActualList() {
+    fun deletesCommandsBeforeSettingActualListForSupportedScopes() {
         val requests = mutableListOf<BaseRequest<*, *>>()
         every { bot.execute(capture(requests)) } returns okResponse()
 
@@ -24,6 +24,8 @@ class TelegramCommandsInitializerTest {
 
         requests[0]::class shouldBe DeleteMyCommands::class
         requests[1]::class shouldBe SetMyCommands::class
+        requests[2]::class shouldBe DeleteMyCommands::class
+        requests[3]::class shouldBe SetMyCommands::class
     }
 
     private fun okResponse(): BaseResponse {

@@ -119,11 +119,26 @@ class YtDlpService(
         }
 
         if (result.exitCode != 0) {
+            if (result.output.isAuthenticationRequiredError()) {
+                throw YtDlpAuthenticationRequiredException(
+                    "yt-dlp authentication required: ${result.output.takeLast(500)}"
+                )
+            }
+
             throw YtDlpException(
                 "yt-dlp command failed: ${result.output.takeLast(500)}"
             )
         }
     }
+
+    private fun String.isAuthenticationRequiredError(): Boolean {
+        val normalized = lowercase()
+        return normalized.contains("login required") ||
+                normalized.contains("--cookies") ||
+                normalized.contains("--cookies-from-browser")
+    }
 }
 
-class YtDlpException(message: String) : RuntimeException(message)
+open class YtDlpException(message: String) : RuntimeException(message)
+
+class YtDlpAuthenticationRequiredException(message: String) : YtDlpException(message)

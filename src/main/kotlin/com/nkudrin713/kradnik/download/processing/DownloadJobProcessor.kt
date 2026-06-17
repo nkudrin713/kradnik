@@ -7,10 +7,11 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.requiredId
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
-import com.nkudrin713.kradnik.download.request.DownloadRequestFactory
+import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.slf4j.LoggerFactory
@@ -23,7 +24,6 @@ import kotlin.io.path.createDirectories
 @Component
 class DownloadJobProcessor(
     private val downloadJobService: DownloadJobService,
-    private val downloadRequestFactory: DownloadRequestFactory,
     private val downloadPreflightService: DownloadPreflightService,
     private val telegramVideoPreparer: TelegramVideoPreparer,
     private val telegramFileSender: TelegramFileSender,
@@ -47,7 +47,7 @@ class DownloadJobProcessor(
                 return
             }
 
-            val request = downloadRequestFactory.create(job)
+            val request = DownloadRequest.fromJob(job)
             val metadata = ytDlpService.extractMetadata(request)
             val preflightDecision = downloadPreflightService.check(request, metadata)
             if (preflightDecision is DownloadPreflightDecision.Rejected) {
@@ -63,6 +63,12 @@ class DownloadJobProcessor(
             val uploadFile = prepareForUpload(uploadJob, downloadedFile, outputDir, jobId)
 
             upload(uploadJob, uploadFile)
+        } catch (error: YtDlpAuthenticationRequiredException) {
+            logger.warn("JOB[{}] requires authentication, failing without retry", jobId, error)
+            downloadJobLifecycle.failAuthenticationRequired(
+                job,
+                error.message ?: error.javaClass.simpleName,
+            )
         } catch (error: Exception) {
             logger.error("JOB[{}] processing failed", jobId, error)
             downloadJobLifecycle.failOrRetry(job, error.message ?: error.javaClass.simpleName)

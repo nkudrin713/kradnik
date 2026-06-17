@@ -115,6 +115,39 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun extractMetadataAuthenticationRequired() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = "ERROR: [Instagram] id: login required. Use --cookies-from-browser or --cookies",
+            timedOut = false,
+            exitCode = 1,
+            duration = 5.seconds,
+        )
+
+        val exception = assertFailsWith<YtDlpAuthenticationRequiredException> {
+            service.extractMetadata(testRequest())
+        }
+
+        assertTrue(exception.message!!.contains("authentication required"))
+        assertTrue(exception.message!!.contains("--cookies"))
+    }
+
+    @Test
+    fun downloadAuthenticationRequired(@TempDir tempDir: Path) = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            output = "ERROR: [Instagram] id: Requested content is not available, rate-limit reached or login required",
+            timedOut = false,
+            exitCode = 1,
+            duration = 5.seconds,
+        )
+
+        val exception = assertFailsWith<YtDlpAuthenticationRequiredException> {
+            service.download(testRequest(), tempDir)
+        }
+
+        assertTrue(exception.message!!.contains("authentication required"))
+    }
+
+    @Test
     fun extractMetadataCommandEmptyOutput() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             output = "",

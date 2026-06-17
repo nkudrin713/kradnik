@@ -29,9 +29,11 @@ class DownloadJobServiceTest {
                 telegramChatId = 2,
                 originalUrl = "https://example.com/raw",
                 normalizedUrl = "https://example.com/normalized",
+                cacheKey = "cache-key",
                 outputType = OutputType.AUDIO,
                 downloadPreset = "preset",
                 selectedFormat = "format",
+                downloadExtraArgs = listOf("-x", "--audio-format", "mp3"),
                 telegramStatusMessageId = 10,
             )
         )
@@ -40,9 +42,11 @@ class DownloadJobServiceTest {
         assertEquals(2, actual.telegramChatId)
         assertEquals("https://example.com/raw", actual.originalUrl)
         assertEquals("https://example.com/normalized", actual.normalizedUrl)
+        assertEquals("cache-key", actual.cacheKey)
         assertEquals(OutputType.AUDIO, actual.outputType)
         assertEquals("preset", actual.downloadPreset)
         assertEquals("format", actual.selectedFormat)
+        assertEquals(listOf("-x", "--audio-format", "mp3"), actual.downloadExtraArgs)
         assertEquals(10, actual.telegramStatusMessageId)
     }
 
@@ -186,10 +190,11 @@ class DownloadJobServiceTest {
     fun findsCachedJob() {
         val job = job().apply {
             normalizedUrl = "https://example.com/video"
+            cacheKey = "cache-key"
             outputType = OutputType.VIDEO
         }
         val cachedJob = job()
-        every { repository.findCachedCompletedJob("https://example.com/video", OutputType.VIDEO) } returns cachedJob
+        every { repository.findCachedCompletedJob("cache-key") } returns cachedJob
 
         val actual = service.findCachedJob(job)
 

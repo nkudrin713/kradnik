@@ -1,7 +1,6 @@
 package com.nkudrin713.kradnik.download.repository
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
-import com.nkudrin713.kradnik.download.domain.OutputType
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
@@ -74,8 +73,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 		value = """
 			SELECT *
 			FROM download_jobs
-			WHERE normalized_url = :normalizedUrl
-			  AND output_type = :#{#outputType.dbValue}
+			WHERE cache_key = :cacheKey
 			  AND status = 'completed'
 			  AND telegram_file_id IS NOT NULL
 			ORDER BY completed_at DESC
@@ -84,7 +82,6 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 		nativeQuery = true,
 	)
 	fun findCachedCompletedJob(
-		normalizedUrl: String,
-		outputType: OutputType,
+		cacheKey: String,
 	): DownloadJob?
 }

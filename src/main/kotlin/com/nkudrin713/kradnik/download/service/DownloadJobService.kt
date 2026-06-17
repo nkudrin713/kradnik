@@ -24,9 +24,11 @@ class DownloadJobService(
 				telegramChatId = command.telegramChatId,
 				originalUrl = command.originalUrl,
 				normalizedUrl = command.normalizedUrl,
+				cacheKey = command.cacheKey,
 				outputType = command.outputType,
 				downloadPreset = command.downloadPreset,
 				selectedFormat = command.selectedFormat,
+				downloadExtraArgs = command.downloadExtraArgs,
 				telegramStatusMessageId = command.telegramStatusMessageId,
 			)
 		)
@@ -66,8 +68,7 @@ class DownloadJobService(
 	fun findCachedJob(job: DownloadJob): DownloadJob? {
 		return downloadJobRepository
 			.findCachedCompletedJob(
-				normalizedUrl = job.normalizedUrl,
-				outputType = job.outputType,
+				cacheKey = job.cacheKey,
 			)
 	}
 
@@ -203,9 +204,11 @@ data class CreateDownloadJobCommand(
 	val telegramChatId: Long,
 	val originalUrl: String,
 	val normalizedUrl: String,
+	val cacheKey: String,
 	val outputType: OutputType,
-	val downloadPreset: String? = null,
-	val selectedFormat: String? = null,
+	val downloadPreset: String,
+	val selectedFormat: String,
+	val downloadExtraArgs: List<String> = emptyList(),
 	val telegramStatusMessageId: Int? = null,
 )
 

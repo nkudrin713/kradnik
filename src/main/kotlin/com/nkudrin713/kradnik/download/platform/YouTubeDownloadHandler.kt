@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component
 @Order(10)
 class YouTubeDownloadHandler : PlatformDownloadHandler {
 
+    override val platform: DownloadPlatform = DownloadPlatform.YOUTUBE
+
     override fun supports(url: String): Boolean {
         return url.contains("youtube.com") ||
                 url.contains("youtu.be")

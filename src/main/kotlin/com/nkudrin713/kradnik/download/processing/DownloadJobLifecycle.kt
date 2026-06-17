@@ -37,6 +37,14 @@ class DownloadJobLifecycle(
         statusReporter.setStatus(job, TelegramDownloadStatus.ERROR)
     }
 
+    fun failAuthenticationRequired(
+        job: DownloadJob,
+        errorMessage: String,
+    ) {
+        downloadJobService.markFailed(job.requiredId(), errorMessage)
+        statusReporter.setStatus(job, TelegramDownloadStatus.AUTHENTICATION_REQUIRED)
+    }
+
     fun complete(
         job: DownloadJob,
         result: DownloadedFileResult,

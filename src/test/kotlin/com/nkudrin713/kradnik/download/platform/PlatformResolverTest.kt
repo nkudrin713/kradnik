@@ -10,10 +10,9 @@ import kotlin.test.assertSame
 class PlatformResolverTest {
     @Test
     fun resolvesFirstSupportedHandler() {
-        val first = handler(supported = false)
-        val second = handler(supported = true)
-        val fallback = handler(supported = true)
-        val resolver = PlatformResolver(listOf(first, second, fallback))
+        val first = handler(supported = false, platform = DownloadPlatform.YOUTUBE)
+        val second = handler(supported = true, platform = DownloadPlatform.INSTAGRAM)
+        val resolver = PlatformResolver(listOf(first, second), toggles(instagramEnabled = true))
 
         val actual = resolver.resolve("https://example.com/video")
 
@@ -22,11 +21,33 @@ class PlatformResolverTest {
 
     @Test
     fun throwsWhenNoHandlerSupportsUrl() {
-        val resolver = PlatformResolver(listOf(handler(supported = false)))
+        val resolver = PlatformResolver(
+            listOf(handler(supported = false, platform = DownloadPlatform.YOUTUBE)),
+            toggles(),
+        )
 
-        assertFailsWith<IllegalStateException> {
+        assertFailsWith<UnsupportedPlatformException> {
             resolver.resolve("https://example.com/video")
         }
+    }
+
+    @Test
+    fun throwsWhenResolvedPlatformIsDisabled() {
+        val resolver = PlatformResolver(
+            listOf(
+                handler(supported = true, platform = DownloadPlatform.INSTAGRAM),
+            ),
+            toggles(instagramEnabled = false),
+        )
+
+        val exception = assertFailsWith<UnsupportedPlatformException> {
+            resolver.resolve("https://www.instagram.com/reel/abc/")
+        }
+
+        assertEquals(
+            "Платформа не поддерживается. Доступные платформы: YouTube.",
+            exception.message,
+        )
     }
 
     @Test
@@ -111,45 +132,13 @@ class PlatformResolverTest {
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.extraArgs)
     }
 
-    @Test
-    fun defaultHandlerBuildsVideoRequest() {
-        val actual = DefaultYtDlpDownloadHandler().buildRequest(
-            url = "https://example.com/video",
-            outputType = OutputType.VIDEO,
-        )
-
-        assertEquals("https://example.com/video", actual.originalUrl)
-        assertEquals("https://example.com/video", actual.normalizedUrl)
-        assertEquals(OutputType.VIDEO, actual.outputType)
-        assertEquals("default_mobile_video", actual.presetName)
-        assertEquals(listOf("--merge-output-format", "mp4"), actual.extraArgs)
-        assertEquals(true, actual.formatSelector.contains("height<=1280"))
-    }
-
-    @Test
-    fun defaultHandlerSupportsAndNormalizesAnyUrl() {
-        val handler = DefaultYtDlpDownloadHandler()
-
-        assertEquals(true, handler.supports("https://example.com/video"))
-        assertEquals("https://example.com/video", handler.normalize("https://example.com/video"))
-    }
-
-    @Test
-    fun defaultHandlerBuildsAudioRequest() {
-        val actual = DefaultYtDlpDownloadHandler().buildRequest(
-            url = "https://example.com/audio",
-            outputType = OutputType.AUDIO,
-        )
-
-        assertEquals("https://example.com/audio", actual.originalUrl)
-        assertEquals(OutputType.AUDIO, actual.outputType)
-        assertEquals("default_audio", actual.presetName)
-        assertEquals("ba/bestaudio", actual.formatSelector)
-        assertEquals(listOf("-x", "--audio-format", "mp3"), actual.extraArgs)
-    }
-
-    private fun handler(supported: Boolean): PlatformDownloadHandler {
+    private fun handler(
+        supported: Boolean,
+        platform: DownloadPlatform,
+    ): PlatformDownloadHandler {
         return object : PlatformDownloadHandler {
+            override val platform: DownloadPlatform = platform
+
             override fun supports(url: String): Boolean = supported
 
             override fun normalize(url: String): String = url
@@ -167,5 +156,15 @@ class PlatformResolverTest {
                 )
             }
         }
+    }
+
+    private fun toggles(
+        youtubeEnabled: Boolean = true,
+        instagramEnabled: Boolean = false,
+    ): PlatformFeatureToggles {
+        return PlatformFeatureToggles(
+            youtubeEnabled = youtubeEnabled,
+            instagramEnabled = instagramEnabled,
+        )
     }
 }

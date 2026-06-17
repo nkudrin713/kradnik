@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component
 @Order(20)
 class InstagramDownloadHandler : PlatformDownloadHandler {
 
+    override val platform: DownloadPlatform = DownloadPlatform.INSTAGRAM
+
     override fun supports(url: String): Boolean {
         val uri = parseUrlOrNull(url.trim()) ?: return false
         return isInstagramHost(uri.host)

@@ -8,8 +8,7 @@ import kotlin.test.assertFailsWith
 class UrlIdentityResolverTest {
     private val youtubeResolver = YouTubeUrlIdentityResolver()
     private val instagramResolver = InstagramUrlIdentityResolver()
-    private val genericResolver = GenericUrlIdentityResolver()
-    private val resolver = UrlIdentityResolver(listOf(youtubeResolver, instagramResolver, genericResolver))
+    private val resolver = UrlIdentityResolver(listOf(youtubeResolver, instagramResolver))
 
     @Test
     fun resolvesYouTubeWatchUrl() {
@@ -148,37 +147,13 @@ class UrlIdentityResolverTest {
     }
 
     @Test
-    fun resolvesGenericUrl() {
-        val actual = genericResolver.resolve(
-            url = " https://Example.com:443/video?b=2&utm_source=x&a=1#fragment ",
-            outputType = OutputType.VIDEO,
-            presetName = "default_mobile_video",
-        )
-
-        assertEquals("https://Example.com:443/video?b=2&utm_source=x&a=1#fragment", actual.originalUrl)
-        assertEquals("https://example.com/video?a=1&b=2", actual.normalizedUrl)
-        assertEquals("generic:video:default_mobile_video:https://example.com/video?a=1&b=2", actual.cacheKey)
-    }
-
-    @Test
-    fun rejectsNonHttpUrl() {
+    fun rejectsUnsupportedUrl() {
         assertFailsWith<UnsupportedUrlException> {
-            genericResolver.resolve(
-                url = "ftp://example.com/video",
+            resolver.resolve(
+                url = "https://example.com/video",
                 outputType = OutputType.VIDEO,
                 presetName = "default_mobile_video",
             )
         }
-    }
-
-    @Test
-    fun usesGenericResolverForNonYouTubeUrl() {
-        val actual = resolver.resolve(
-            url = "https://example.com/video",
-            outputType = OutputType.VIDEO,
-            presetName = "default_mobile_video",
-        )
-
-        assertEquals("generic:video:default_mobile_video:https://example.com/video", actual.cacheKey)
     }
 }

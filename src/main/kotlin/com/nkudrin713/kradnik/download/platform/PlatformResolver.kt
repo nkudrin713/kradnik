@@ -5,10 +5,24 @@ import org.springframework.stereotype.Service
 @Service
 class PlatformResolver(
     private val handlers: List<PlatformDownloadHandler>,
+    private val platformFeatureToggles: PlatformFeatureToggles,
 ) {
 
     fun resolve(url: String): PlatformDownloadHandler {
-        return handlers.firstOrNull { it.supports(url) }
-            ?: throw IllegalStateException("No download handler for url")
+        val handler = handlers.firstOrNull { it.supports(url) }
+            ?: throw UnsupportedPlatformException(unsupportedPlatformMessage())
+
+        if (!platformFeatureToggles.isEnabled(handler.platform)) {
+            throw UnsupportedPlatformException(unsupportedPlatformMessage())
+        }
+
+        return handler
+    }
+
+    private fun unsupportedPlatformMessage(): String {
+        val platforms = platformFeatureToggles.enabledPlatformNames()
+            .joinToString(", ")
+            .ifBlank { "нет" }
+        return "Платформа не поддерживается. Доступные платформы: $platforms."
     }
 }

@@ -54,12 +54,13 @@ class DownloadJobProcessor(
                 downloadJobLifecycle.rejectTooLarge(job, preflightDecision.reason)
                 return
             }
+            val downloadRequest = (preflightDecision as DownloadPreflightDecision.Allowed).request
 
             downloadJobLifecycle.markDownloading(job)
 
             val uploadJob = markMetadata(jobId, metadata)
 
-            val downloadedFile = ytDlpService.download(request, outputDir)
+            val downloadedFile = ytDlpService.download(downloadRequest, outputDir)
             val uploadFile = prepareForUpload(uploadJob, downloadedFile, outputDir, jobId)
 
             upload(uploadJob, uploadFile)

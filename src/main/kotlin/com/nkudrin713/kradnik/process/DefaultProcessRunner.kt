@@ -39,9 +39,13 @@ class DefaultProcessRunner : ProcessRunner {
 
         val exitCode = if (finished) process.exitValue() else null
         val duration = start.elapsedNow()
-        val output = withTimeoutOrNull(2000.milliseconds) {
+        val output = if (finished) {
             outputDeferred.await()
-        } ?: ""
+        } else {
+            withTimeoutOrNull(2000.milliseconds) {
+                outputDeferred.await()
+            } ?: ""
+        }
 
         ProcessExecutionResult(
             timedOut = !finished,

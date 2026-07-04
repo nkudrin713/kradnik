@@ -202,6 +202,6 @@ jobs:
             docker compose up -d --remove-orphans && \
             docker compose ps && \
             test \"\$(docker compose ps -q app | xargs docker inspect -f '{{.State.Status}}')\" = running && \
-            docker compose exec -T postgres sh -c 'PGPASSWORD=\"\$POSTGRES_PASSWORD\" psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -v analytics_password=\"\$METABASE_ANALYTICS_DB_PASSWORD\" -c \"ALTER ROLE kradnik_analytics_reader WITH LOGIN PASSWORD :'\\''analytics_password'\\'';\"' && \
+            docker compose exec -T postgres sh -c 'printf \"%s\n\" \"ALTER ROLE kradnik_analytics_reader WITH LOGIN PASSWORD :'\\''analytics_password'\\'';\" | PGPASSWORD=\"\$POSTGRES_PASSWORD\" psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -v analytics_password=\"\$METABASE_ANALYTICS_DB_PASSWORD\"' && \
             docker image prune -f\
           "

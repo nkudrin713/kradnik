@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik
 
+import com.nkudrin713.kradnik.analytics.AnalyticsEventRepository
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import com.nkudrin713.kradnik.process.ProcessRunner
 import com.nkudrin713.kradnik.settings.DownloadSettingsRepository
@@ -8,10 +9,12 @@ import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
+import org.springframework.transaction.PlatformTransactionManager
 
 @SpringBootTest(
 	properties = [
 		"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
+		"app.environment=test",
 		"telegram.bot.token=test-token",
 		"download.worker.enabled=false",
 	]
@@ -24,6 +27,9 @@ class KradnikApplicationTests {
 	@TestConfiguration
 	class Mocks {
 		@Bean
+		fun analyticsEventRepository(): AnalyticsEventRepository = mockk(relaxed = true)
+
+		@Bean
 		fun downloadJobRepository(): DownloadJobRepository = mockk(relaxed = true)
 
 		@Bean
@@ -31,6 +37,9 @@ class KradnikApplicationTests {
 
 		@Bean
 		fun processRunner(): ProcessRunner = mockk(relaxed = true)
+
+		@Bean
+		fun platformTransactionManager(): PlatformTransactionManager = mockk(relaxed = true)
 	}
 
 }

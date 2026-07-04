@@ -117,6 +117,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          METABASE_ANALYTICS_DB_PASSWORD: ${{ secrets.METABASE_ANALYTICS_DB_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_DONATION_URL: ${{ vars.TELEGRAM_DONATION_URL || secrets.TELEGRAM_DONATION_URL }}
           TELEGRAM_DONATION_CHANNEL_ID: ${{ vars.TELEGRAM_DONATION_CHANNEL_ID || secrets.TELEGRAM_DONATION_CHANNEL_ID }}
@@ -129,21 +130,31 @@ jobs:
           test -n "$DEPLOY_PATH"
           test "$DEPLOY_PATH" != "/"
           app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
+          metabase_analytics_db_password="${METABASE_ANALYTICS_DB_PASSWORD:-$POSTGRES_PASSWORD}"
           if [ "${{ inputs.environment }}" = "production" ]; then
+            app_environment="prod"
             app_container_name="kradnik-prod-app"
             postgres_container_name="kradnik-prod-postgres"
             postgres_db="kradnik_prod"
             postgres_volume_name="kradnik-prod-postgres-data"
             postgres_public_port="5434"
+            metabase_container_name="kradnik-prod-metabase"
+            metabase_volume_name="kradnik-prod-metabase-data"
+            metabase_public_port="3001"
           else
+            app_environment="test"
             app_container_name="kradnik-test-app"
             postgres_container_name="kradnik-test-postgres"
             postgres_db="kradnik_test"
             postgres_volume_name="kradnik-test-postgres-data"
             postgres_public_port="5433"
+            metabase_container_name="kradnik-test-metabase"
+            metabase_volume_name="kradnik-test-metabase-data"
+            metabase_public_port="3000"
           fi
           {
             printf 'APP_IMAGE=%s\n' "$app_image"
+            printf 'APP_ENV=%s\n' "$app_environment"
             printf 'APP_CONTAINER_NAME=%s\n' "$app_container_name"
             printf 'POSTGRES_CONTAINER_NAME=%s\n' "$postgres_container_name"
             printf 'POSTGRES_DB=%s\n' "$postgres_db"
@@ -151,6 +162,10 @@ jobs:
             printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
             printf 'POSTGRES_VOLUME_NAME=%s\n' "$postgres_volume_name"
             printf 'POSTGRES_PUBLIC_PORT=%s\n' "$postgres_public_port"
+            printf 'METABASE_CONTAINER_NAME=%s\n' "$metabase_container_name"
+            printf 'METABASE_VOLUME_NAME=%s\n' "$metabase_volume_name"
+            printf 'METABASE_PUBLIC_PORT=%s\n' "$metabase_public_port"
+            printf 'METABASE_ANALYTICS_DB_PASSWORD=%s\n' "$metabase_analytics_db_password"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
             printf 'TELEGRAM_DONATION_URL=%s\n' "${TELEGRAM_DONATION_URL:-https://pay.cloudtips.ru/p/6f779a3d}"
             printf 'TELEGRAM_DONATION_CHANNEL_ID=%s\n' "${TELEGRAM_DONATION_CHANNEL_ID:-@mediakradnik}"
@@ -187,5 +202,6 @@ jobs:
             docker compose up -d --remove-orphans && \
             docker compose ps && \
             test \"\$(docker compose ps -q app | xargs docker inspect -f '{{.State.Status}}')\" = running && \
+            docker compose exec -T postgres sh -c 'PGPASSWORD=\"\$POSTGRES_PASSWORD\" psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -v analytics_password=\"\$METABASE_ANALYTICS_DB_PASSWORD\" -c \"ALTER ROLE kradnik_analytics_reader WITH LOGIN PASSWORD :'\\''analytics_password'\\'';\"' && \
             docker image prune -f\
           "

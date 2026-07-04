@@ -145,9 +145,29 @@ The database stores:
 - source metadata;
 - Telegram upload metadata;
 - per-chat mode settings;
-- cache keys for Telegram file reuse.
+- cache keys for Telegram file reuse;
+- analytics events and dashboard views.
 
 Schema changes are managed through Flyway migrations.
+
+## Analytics
+
+Runtime analytics are stored in PostgreSQL in `analytics_events`.
+
+Metabase is started by Docker Compose as a separate service:
+
+- development/test port: `3000`;
+- production port: `3001`.
+
+Connect Metabase to PostgreSQL with the read-only role:
+
+- host: `postgres`;
+- port: `5432`;
+- database: current `POSTGRES_DB`;
+- user: `kradnik_analytics_reader`;
+- password: `METABASE_ANALYTICS_DB_PASSWORD`.
+
+Use the `analytics_*` views for dashboards. The role has `SELECT` access only.
 
 ## Deployment
 

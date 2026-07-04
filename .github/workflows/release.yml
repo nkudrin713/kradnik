@@ -12,6 +12,30 @@ on:
       - labeled
       - unlabeled
       - closed
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: "Commit, branch, or tag to release"
+        required: true
+        default: "main"
+        type: string
+      version:
+        description: "Explicit version, for example v1.4.0. Leave empty to auto-increment."
+        required: false
+        type: string
+      bump:
+        description: "Version bump when version is empty"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      description:
+        description: "Release description"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -25,7 +49,7 @@ jobs:
   validate:
     name: Validate release PR
     runs-on: ubuntu-latest
-    if: "${{ github.event.action != 'closed' && startsWith(github.event.pull_request.title, 'release: ') }}"
+    if: "${{ github.event_name == 'pull_request' && github.event.action != 'closed' && startsWith(github.event.pull_request.title, 'release: ') }}"
 
     steps:
       - name: Validate release input
@@ -55,44 +79,71 @@ jobs:
   release:
     name: Create release
     runs-on: ubuntu-latest
-    if: "${{ github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'release: ') }}"
+    if: "${{ github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'release: ')) }}"
 
     steps:
-      - name: Checkout merge commit
+      - name: Checkout release target
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.target_ref || github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
 
-      - name: Validate release input
+      - name: Resolve release input
         id: release_input
         env:
-          PATCH: ${{ contains(github.event.pull_request.labels.*.name, 'release:patch') }}
-          MINOR: ${{ contains(github.event.pull_request.labels.*.name, 'release:minor') }}
-          MAJOR: ${{ contains(github.event.pull_request.labels.*.name, 'release:major') }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_TITLE: ${{ github.event_name == 'pull_request' && github.event.pull_request.title || '' }}
+          PATCH: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release:patch') || false }}
+          MINOR: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release:minor') || false }}
+          MAJOR: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release:major') || false }}
+          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
+          INPUT_BUMP: ${{ github.event_name == 'workflow_dispatch' && inputs.bump || '' }}
+          INPUT_DESCRIPTION: ${{ github.event_name == 'workflow_dispatch' && inputs.description || '' }}
         run: |
           set -euo pipefail
 
-          subject="$(git log -1 --pretty=%s)"
-          if ! printf '%s\n' "$subject" | grep -Eq '^release: .+'; then
-            echo "Squash commit title must match: release: <short description>"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            bump="$INPUT_BUMP"
+            version="$INPUT_VERSION"
+            description="$INPUT_DESCRIPTION"
+          else
+            if ! printf '%s\n' "$PR_TITLE" | grep -Eq '^release: .+'; then
+              echo "PR title must match: release: <short description>"
+              exit 1
+            fi
+
+            bump_count=0
+            bump=""
+            if [ "$PATCH" = "true" ]; then bump_count=$((bump_count + 1)); bump="patch"; fi
+            if [ "$MINOR" = "true" ]; then bump_count=$((bump_count + 1)); bump="minor"; fi
+            if [ "$MAJOR" = "true" ]; then bump_count=$((bump_count + 1)); bump="major"; fi
+
+            if [ "$bump_count" -ne 1 ]; then
+              echo "PR must have exactly one label: release:patch, release:minor, or release:major"
+              exit 1
+            fi
+
+            version=""
+            description="${PR_TITLE#release: }"
+          fi
+
+          if [ -z "$description" ]; then
+            echo "Release description must not be empty"
             exit 1
           fi
 
-          bump_count=0
-          bump=""
-          if [ "$PATCH" = "true" ]; then bump_count=$((bump_count + 1)); bump="patch"; fi
-          if [ "$MINOR" = "true" ]; then bump_count=$((bump_count + 1)); bump="minor"; fi
-          if [ "$MAJOR" = "true" ]; then bump_count=$((bump_count + 1)); bump="major"; fi
+          case "$bump" in
+            patch|minor|major)
+              ;;
+            *)
+              echo "Version bump must be one of: patch, minor, major"
+              exit 1
+              ;;
+          esac
 
-          if [ "$bump_count" -ne 1 ]; then
-            echo "PR must have exactly one label: release:patch, release:minor, or release:major"
-            exit 1
-          fi
-
-          description="${subject#release: }"
           {
             printf 'bump=%s\n' "$bump"
+            printf 'version=%s\n' "$version"
             printf 'description=%s\n' "$description"
           } >> "$GITHUB_OUTPUT"
 
@@ -100,44 +151,64 @@ jobs:
         id: version
         env:
           BUMP: ${{ steps.release_input.outputs.bump }}
+          VERSION_INPUT: ${{ steps.release_input.outputs.version }}
         run: |
           set -euo pipefail
 
-          latest_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
-          if [ -z "$latest_tag" ]; then
-            major=0
-            minor=0
-            patch=0
+          if [ -n "$VERSION_INPUT" ]; then
+            if ! printf '%s\n' "$VERSION_INPUT" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "Version must match: v<major>.<minor>.<patch>"
+              exit 1
+            fi
+            next_version="$VERSION_INPUT"
           else
-            version="${latest_tag#v}"
-            major="${version%%.*}"
-            rest="${version#*.}"
-            minor="${rest%%.*}"
-            patch="${rest#*.}"
-          fi
-
-          case "$BUMP" in
-            patch)
-              patch=$((patch + 1))
-              ;;
-            minor)
-              minor=$((minor + 1))
-              patch=0
-              ;;
-            major)
-              major=$((major + 1))
+            latest_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+            if [ -z "$latest_tag" ]; then
+              major=0
               minor=0
               patch=0
-              ;;
-          esac
+            else
+              version="${latest_tag#v}"
+              major="${version%%.*}"
+              rest="${version#*.}"
+              minor="${rest%%.*}"
+              patch="${rest#*.}"
+            fi
 
-          next_version="v${major}.${minor}.${patch}"
-          if git rev-parse "$next_version" >/dev/null 2>&1; then
-            echo "Tag already exists: $next_version"
-            exit 1
+            case "$BUMP" in
+              patch)
+                patch=$((patch + 1))
+                ;;
+              minor)
+                minor=$((minor + 1))
+                patch=0
+                ;;
+              major)
+                major=$((major + 1))
+                minor=0
+                patch=0
+                ;;
+            esac
+
+            next_version="v${major}.${minor}.${patch}"
           fi
 
-          echo "version=$next_version" >> "$GITHUB_OUTPUT"
+          target_sha="$(git rev-parse HEAD)"
+          tag_exists=false
+          if git rev-parse -q --verify "refs/tags/$next_version" >/dev/null; then
+            tag_exists=true
+            tag_sha="$(git rev-list -n 1 "$next_version")"
+            if [ "$tag_sha" != "$target_sha" ]; then
+              echo "Tag $next_version already points to $tag_sha, not $target_sha"
+              exit 1
+            fi
+          fi
+
+          {
+            printf 'version=%s\n' "$next_version"
+            printf 'target_sha=%s\n' "$target_sha"
+            printf 'tag_exists=%s\n' "$tag_exists"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK
         uses: actions/setup-java@v5
@@ -180,27 +251,60 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.target_sha }}
             ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
 
-      - name: Create tag
+      - name: Verify image
+        env:
+          IMAGE: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
+              echo "Image is available: $IMAGE"
+              exit 0
+            fi
+            sleep $((attempt * 3))
+          done
+
+          echo "Image is not available after push: $IMAGE"
+          exit 1
+
+      - name: Create or verify tag
         env:
           VERSION: ${{ steps.version.outputs.version }}
           DESCRIPTION: ${{ steps.release_input.outputs.description }}
+          TAG_EXISTS: ${{ steps.version.outputs.tag_exists }}
         run: |
           set -euo pipefail
+          if [ "$TAG_EXISTS" = "true" ]; then
+            echo "Tag already exists on this commit: $VERSION"
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$VERSION" -m "$VERSION $DESCRIPTION"
           git push origin "$VERSION"
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
           DESCRIPTION: ${{ steps.release_input.outputs.description }}
+          TARGET_SHA: ${{ steps.version.outputs.target_sha }}
         run: |
           set -euo pipefail
-          gh release create "$VERSION" \
-            --title "$VERSION $DESCRIPTION" \
-            --notes "Image: ghcr.io/${GITHUB_REPOSITORY,,}:$VERSION"
+
+          notes="$(printf 'Image: ghcr.io/%s:%s\nCommit: %s\n' "${GITHUB_REPOSITORY,,}" "$VERSION" "$TARGET_SHA")"
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release edit "$VERSION" \
+              --title "$VERSION $DESCRIPTION" \
+              --notes "$notes" \
+              --latest
+          else
+            gh release create "$VERSION" \
+              --title "$VERSION $DESCRIPTION" \
+              --notes "$notes" \
+              --latest
+          fi

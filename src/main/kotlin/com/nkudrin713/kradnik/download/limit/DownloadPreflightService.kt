@@ -8,19 +8,31 @@ import org.springframework.stereotype.Service
 import java.util.Locale
 
 @Service
-class DownloadPreflightService {
+class DownloadPreflightService(
+    private val audioUploadPlanner: AudioUploadPlanner,
+) {
     fun check(
         request: DownloadRequest,
         metadata: YtDlpMetadataDto,
     ): DownloadPreflightDecision {
-        val selectedSize = selectedSize(metadata) ?: return DownloadPreflightDecision.Allowed
+        if (request.outputType == OutputType.AUDIO) {
+            when (val plan = audioUploadPlanner.plan(metadata)) {
+                is AudioUploadPlan.Allowed -> return DownloadPreflightDecision.Allowed(
+                    request = request.withAudioQuality(plan.audioQuality),
+                )
+                is AudioUploadPlan.Rejected -> return DownloadPreflightDecision.Rejected(plan.reason)
+                AudioUploadPlan.Unavailable -> Unit
+            }
+        }
+
+        val selectedSize = selectedSize(metadata) ?: return DownloadPreflightDecision.Allowed(request)
 
         if (selectedSize <= TelegramUploadLimits.MAX_UPLOAD_BYTES) {
-            return DownloadPreflightDecision.Allowed
+            return DownloadPreflightDecision.Allowed(request)
         }
 
         if (request.outputType == OutputType.VIDEO && metadata.isVertical()) {
-            return DownloadPreflightDecision.Allowed
+            return DownloadPreflightDecision.Allowed(request)
         }
 
         return DownloadPreflightDecision.Rejected(
@@ -65,7 +77,9 @@ class DownloadPreflightService {
 }
 
 sealed interface DownloadPreflightDecision {
-    data object Allowed : DownloadPreflightDecision
+    data class Allowed(
+        val request: DownloadRequest,
+    ) : DownloadPreflightDecision
 
     data class Rejected(
         val reason: String,

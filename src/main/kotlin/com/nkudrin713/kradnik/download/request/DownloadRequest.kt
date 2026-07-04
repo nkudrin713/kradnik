@@ -11,6 +11,14 @@ data class DownloadRequest(
     val extraArgs: List<String> = emptyList(),
     val presetName: String,
 ) {
+    fun withAudioQuality(audioQuality: String): DownloadRequest {
+        val args = extraArgs
+            .withoutAudioQuality()
+            .plus(listOf(AUDIO_QUALITY_ARG, audioQuality))
+
+        return copy(extraArgs = args)
+    }
+
     companion object {
         fun fromJob(job: DownloadJob): DownloadRequest {
             val selectedFormat = requireNotNull(job.selectedFormat?.takeIf { it.isNotBlank() }) {
@@ -25,6 +33,23 @@ data class DownloadRequest(
                 extraArgs = job.downloadExtraArgs,
                 presetName = job.downloadPreset ?: "default",
             )
+        }
+
+        private const val AUDIO_QUALITY_ARG = "--audio-quality"
+
+        private fun List<String>.withoutAudioQuality(): List<String> {
+            val result = mutableListOf<String>()
+            var index = 0
+            while (index < size) {
+                if (this[index] == AUDIO_QUALITY_ARG) {
+                    index += 2
+                } else {
+                    result += this[index]
+                    index += 1
+                }
+            }
+
+            return result
         }
     }
 }

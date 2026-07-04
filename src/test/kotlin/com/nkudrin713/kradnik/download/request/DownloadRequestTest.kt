@@ -29,6 +29,24 @@ class DownloadRequestTest {
     }
 
     @Test
+    fun addsAudioQuality() {
+        val actual = request(
+            extraArgs = listOf("-x", "--audio-format", "mp3"),
+        ).withAudioQuality("40K")
+
+        assertEquals(listOf("-x", "--audio-format", "mp3", "--audio-quality", "40K"), actual.extraArgs)
+    }
+
+    @Test
+    fun replacesAudioQuality() {
+        val actual = request(
+            extraArgs = listOf("-x", "--audio-format", "mp3", "--audio-quality", "96K"),
+        ).withAudioQuality("40K")
+
+        assertEquals(listOf("-x", "--audio-format", "mp3", "--audio-quality", "40K"), actual.extraArgs)
+    }
+
+    @Test
     fun failsWhenSelectedFormatIsMissing() {
         assertFailsWith<IllegalArgumentException> {
             DownloadRequest.fromJob(
@@ -40,5 +58,16 @@ class DownloadRequestTest {
                 )
             )
         }
+    }
+
+    private fun request(extraArgs: List<String>): DownloadRequest {
+        return DownloadRequest(
+            originalUrl = "https://example.com/raw",
+            normalizedUrl = "https://example.com/normalized",
+            outputType = OutputType.AUDIO,
+            formatSelector = "format",
+            extraArgs = extraArgs,
+            presetName = "preset",
+        )
     }
 }

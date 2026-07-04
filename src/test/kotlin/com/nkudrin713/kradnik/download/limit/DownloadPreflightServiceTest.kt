@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class DownloadPreflightServiceTest {
-    private val service = DownloadPreflightService()
+    private val service = DownloadPreflightService(AudioUploadPlanner())
 
     @Test
     fun allowsUnknownSize() {
@@ -20,8 +20,43 @@ class DownloadPreflightServiceTest {
     }
 
     @Test
-    fun rejectsLargeAudio() {
-        val actual = service.check(audioRequest(), metadata(filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1))
+    fun rejectsLargeAudioWhenDurationIsUnknown() {
+        val actual = service.check(
+            audioRequest(),
+            metadata(
+                durationSeconds = null,
+                filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+            ),
+        )
+
+        assertIs<DownloadPreflightDecision.Rejected>(actual)
+    }
+
+    @Test
+    fun allowsLargeSourceAudioWithAdaptiveQuality() {
+        val actual = service.check(
+            audioRequest(extraArgs = listOf("-x", "--audio-format", "mp3")),
+            metadata(
+                durationSeconds = 8604,
+                filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+            ),
+        )
+
+        assertEquals(
+            listOf("-x", "--audio-format", "mp3", "--audio-quality", "40K"),
+            assertIs<DownloadPreflightDecision.Allowed>(actual).request.extraArgs,
+        )
+    }
+
+    @Test
+    fun rejectsLargeSourceAudioWhenAdaptiveQualityCannotFitLimit() {
+        val actual = service.check(
+            audioRequest(extraArgs = listOf("-x", "--audio-format", "mp3")),
+            metadata(
+                durationSeconds = 4 * 60 * 60,
+                filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+            ),
+        )
 
         assertIs<DownloadPreflightDecision.Rejected>(actual)
     }
@@ -38,6 +73,7 @@ class DownloadPreflightServiceTest {
         val actual = service.check(
             audioRequest(),
             metadata(
+                durationSeconds = null,
                 filesize = null,
                 filesizeApprox = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
             ),
@@ -204,6 +240,7 @@ class DownloadPreflightServiceTest {
         val actual = service.check(
             audioRequest(),
             metadata(
+                durationSeconds = null,
                 filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
             ),
         )
@@ -219,6 +256,7 @@ class DownloadPreflightServiceTest {
         filesizeApprox: Long? = null,
         width: Int? = 1920,
         height: Int? = 1080,
+        durationSeconds: Long? = 120,
         requestedFormats: List<YtDlpFormatDto>? = null,
     ): YtDlpMetadataDto {
         return YtDlpMetadataDto(
@@ -227,7 +265,7 @@ class DownloadPreflightServiceTest {
             extractor = "youtube",
             webpageUrl = "https://example.com",
             thumbnail = null,
-            duration = BigDecimal.valueOf(120),
+            duration = durationSeconds?.let { BigDecimal.valueOf(it) },
             ext = "mp4",
             width = width,
             height = height,
@@ -280,12 +318,20 @@ class DownloadPreflightServiceTest {
         return request(OutputType.AUDIO)
     }
 
-    private fun request(outputType: OutputType): DownloadRequest {
+    private fun audioRequest(extraArgs: List<String>): DownloadRequest {
+        return request(OutputType.AUDIO, extraArgs)
+    }
+
+    private fun request(
+        outputType: OutputType,
+        extraArgs: List<String> = emptyList(),
+    ): DownloadRequest {
         return DownloadRequest(
             originalUrl = "https://example.com",
             normalizedUrl = "https://example.com",
             outputType = outputType,
             formatSelector = "format",
+            extraArgs = extraArgs,
             presetName = "preset",
         )
     }

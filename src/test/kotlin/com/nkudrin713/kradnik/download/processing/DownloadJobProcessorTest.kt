@@ -81,7 +81,7 @@ class DownloadJobProcessorTest {
         val preparedFile = DownloadedFile(tempDir.resolve("prepared.mp4"), 90)
         val metadata = metadata()
         every { downloadJobService.findCachedJob(job) } returns null
-        every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed
+        every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed(request)
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
         every { downloadJobService.markMetadata(1, any()) } returns job
@@ -155,19 +155,23 @@ class DownloadJobProcessorTest {
             sourceDurationSeconds = 120
         }
         val request = request(outputType = OutputType.AUDIO)
+        val downloadRequest = request.copy(
+            extraArgs = listOf("-x", "--audio-format", "mp3", "--audio-quality", "40K"),
+        )
         val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp3"), 100)
         val metadata = metadata()
-        every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed
+        every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed(downloadRequest)
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
         every { downloadJobService.markMetadata(1, any()) } returns markedJob
-        coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
+        coEvery { ytDlpService.download(downloadRequest, tempDir.resolve("1")) } returns downloadedFile
         coEvery { telegramFileSender.send(markedJob, downloadedFile) } returns telegramResult()
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(job)
 
         coVerify(exactly = 0) { telegramVideoPreparer.prepare(any(), any(), any()) }
+        coVerify { ytDlpService.download(downloadRequest, tempDir.resolve("1")) }
         coVerify { telegramFileSender.send(markedJob, downloadedFile) }
     }
 
@@ -207,7 +211,7 @@ class DownloadJobProcessorTest {
         val request = request()
         val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
         val metadata = metadata(duration = null)
-        every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed
+        every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed(request)
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata(durationSeconds = null)
         every { downloadJobService.markMetadata(1, any()) } returns job

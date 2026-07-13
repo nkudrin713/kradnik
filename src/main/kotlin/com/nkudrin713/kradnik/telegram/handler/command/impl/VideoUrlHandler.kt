@@ -1,7 +1,6 @@
 package com.nkudrin713.kradnik.telegram.handler.command.impl
 
 import com.nkudrin713.kradnik.analytics.DownloadAnalytics
-import com.nkudrin713.kradnik.download.identity.UrlIdentityResolver
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
@@ -21,7 +20,6 @@ class VideoUrlHandler(
     private val downloadJobService: DownloadJobService,
     private val downloadSettingsService: DownloadSettingsService,
     private val platformResolver: PlatformResolver,
-    private val urlIdentityResolver: UrlIdentityResolver,
     private val telegramSender: TelegramSender,
     private val downloadAnalytics: DownloadAnalytics,
 ) : TelegramCommandHandler {
@@ -34,23 +32,17 @@ class VideoUrlHandler(
     override fun handle(context: TelegramUpdateContext) {
         val message = requireNotNull(context.message)
         val outputType = downloadSettingsService.getOutputType(context.chatId)
-        val handler = try {
-            platformResolver.resolve(context.text)
+        val resolvedDownload = try {
+            platformResolver.resolve(context.text, outputType)
         } catch (error: UnsupportedPlatformException) {
             telegramSender.sendMessage(context.chatId, error.message ?: "Платформа не поддерживается")
             return
-        }
-        val request = handler.buildRequest(context.text, outputType)
-        val identity = try {
-            urlIdentityResolver.resolve(
-                url = context.text,
-                outputType = outputType,
-                presetName = request.presetName,
-            )
         } catch (error: UnsupportedUrlException) {
             telegramSender.sendMessage(context.chatId, error.message ?: "Ссылка не поддерживается")
             return
         }
+        val request = resolvedDownload.request
+        val identity = resolvedDownload.identity
         val statusMessageId = telegramSender.sendStatus(
             context.chatId,
             TelegramDownloadStatus.QUEUED,

@@ -13,6 +13,7 @@ import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.Instant
+import java.util.UUID
 
 @Entity
 @Table(name = "download_jobs")
@@ -109,4 +110,10 @@ class DownloadJob(
 
 	@Column(name = "completed_at")
 	var completedAt: Instant? = null,
+
+	@Column(name = "lease_token")
+	var leaseToken: UUID? = null,
+
+	@Column(name = "lease_expires_at")
+	var leaseExpiresAt: Instant? = null,
 )

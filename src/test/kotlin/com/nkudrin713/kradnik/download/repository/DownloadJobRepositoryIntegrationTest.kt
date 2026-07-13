@@ -20,6 +20,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 import java.time.Instant
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotEquals
@@ -42,18 +43,18 @@ class DownloadJobRepositoryIntegrationTest(
     }
 
     @Test
-    fun appliesFlywayMigrationsIncludingTelegramUpdateId() {
+    fun appliesFlywayMigrationsIncludingProcessingLease() {
         val columnCount = jdbcTemplate.queryForObject(
             """
                 SELECT COUNT(*)
                 FROM information_schema.columns
                 WHERE table_name = 'download_jobs'
-                  AND column_name = 'telegram_update_id'
+                  AND column_name IN ('telegram_update_id', 'lease_token', 'lease_expires_at')
             """.trimIndent(),
             Int::class.java,
         )
 
-        assertEquals(1, columnCount)
+        assertEquals(3, columnCount)
     }
 
     @Test
@@ -86,7 +87,8 @@ class DownloadJobRepositoryIntegrationTest(
         jdbcTemplate.update(
             """
                 UPDATE download_jobs
-                SET status = 'processing', attempts = 1, updated_at = now() - INTERVAL '2 hours'
+                SET status = 'processing', attempts = 1,
+                    lease_token = gen_random_uuid(), lease_expires_at = now() - INTERVAL '2 hours'
                 WHERE id = ?
             """.trimIndent(),
             retryable.id,
@@ -94,15 +96,16 @@ class DownloadJobRepositoryIntegrationTest(
         jdbcTemplate.update(
             """
                 UPDATE download_jobs
-                SET status = 'uploading', attempts = 3, updated_at = now() - INTERVAL '2 hours'
+                SET status = 'uploading', attempts = 3,
+                    lease_token = gen_random_uuid(), lease_expires_at = now() - INTERVAL '2 hours'
                 WHERE id = ?
             """.trimIndent(),
             exhausted.id,
         )
 
         transactionTemplate.executeWithoutResult {
-            repository.requeueStaleInProgressJobs(Instant.now().minusSeconds(3600), 3)
-            repository.failStaleInProgressJobs(Instant.now().minusSeconds(3600), 3)
+            repository.requeueStaleInProgressJobs(Instant.now(), 3)
+            repository.failStaleInProgressJobs(Instant.now(), 3)
         }
 
         assertEquals(DownloadJobStatus.QUEUED, repository.findById(retryable.id!!).orElseThrow().status)
@@ -133,7 +136,15 @@ class DownloadJobRepositoryIntegrationTest(
     }
 
     private fun claimNextJob(): DownloadJob {
-        return requireNotNull(transactionTemplate.execute { repository.claimNextQueuedJob(3) })
+        return requireNotNull(
+            transactionTemplate.execute {
+                repository.claimNextQueuedJob(
+                    maxAttempts = 3,
+                    leaseToken = UUID.randomUUID(),
+                    leaseExpiresAt = Instant.now().plusSeconds(3600),
+                )
+            }
+        )
     }
 
     private fun job(cacheKey: String): DownloadJob {

@@ -23,6 +23,7 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
 import io.mockk.verify
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
 import java.math.BigDecimal
@@ -232,6 +233,20 @@ class DownloadJobProcessorTest {
         processor(tempDir).process(job)
 
         verify { downloadJobLifecycle.failAuthenticationRequired(job, "auth required") }
+        verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any()) }
+        verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
+    }
+
+    @Test
+    fun propagatesCancellationWithoutChangingJobState(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        coEvery { ytDlpService.extractMetadata(request()) } throws CancellationException("lease lost")
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        assertFailsWith<CancellationException> {
+            processor(tempDir).process(job)
+        }
+
         verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any()) }
         verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
     }

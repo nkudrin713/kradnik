@@ -10,6 +10,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import java.time.Instant
 import java.util.Optional
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -233,34 +234,47 @@ class DownloadJobServiceTest {
     @Test
     fun claimsNextQueuedJob() {
         val job = job()
-        every { repository.claimNextQueuedJob(3) } returns job
+        val leaseToken = UUID.randomUUID()
+        val leaseExpiresAt = Instant.parse("2026-01-01T01:00:00Z")
+        every { repository.claimNextQueuedJob(3, leaseToken, leaseExpiresAt) } returns job
 
-        val actual = service.claimNextQueuedJob()
+        val actual = service.claimNextQueuedJob(leaseToken, leaseExpiresAt)
 
         assertEquals(job, actual)
     }
 
     @Test
-    fun recoversStaleJobs() {
-        val staleBefore = Instant.parse("2026-01-01T00:00:00Z")
-        every { repository.requeueStaleInProgressJobs(staleBefore, 3) } returns 2
-        every { repository.failStaleInProgressJobs(staleBefore, 3) } returns 1
+    fun renewsOwnedLease() {
+        val leaseToken = UUID.randomUUID()
+        val leaseExpiresAt = Instant.parse("2026-01-01T01:00:00Z")
+        every { repository.renewLease(1, leaseToken, leaseExpiresAt) } returns 1
 
-        val actual = service.recoverStaleInProgressJobs(staleBefore)
+        val renewed = service.renewLease(1, leaseToken, leaseExpiresAt)
 
-        assertEquals(2, actual.requeued)
-        assertEquals(1, actual.failed)
-        verify { repository.requeueStaleInProgressJobs(staleBefore, 3) }
-        verify { repository.failStaleInProgressJobs(staleBefore, 3) }
+        assertTrue(renewed)
     }
 
     @Test
-    fun recoversNoStaleJobs() {
-        val staleBefore = Instant.parse("2026-01-01T00:00:00Z")
-        every { repository.requeueStaleInProgressJobs(staleBefore, 3) } returns 0
-        every { repository.failStaleInProgressJobs(staleBefore, 3) } returns 0
+    fun recoversExpiredLeases() {
+        val expiredBefore = Instant.parse("2026-01-01T00:00:00Z")
+        every { repository.requeueStaleInProgressJobs(expiredBefore, 3) } returns 2
+        every { repository.failStaleInProgressJobs(expiredBefore, 3) } returns 1
 
-        val actual = service.recoverStaleInProgressJobs(staleBefore)
+        val actual = service.recoverExpiredLeases(expiredBefore)
+
+        assertEquals(2, actual.requeued)
+        assertEquals(1, actual.failed)
+        verify { repository.requeueStaleInProgressJobs(expiredBefore, 3) }
+        verify { repository.failStaleInProgressJobs(expiredBefore, 3) }
+    }
+
+    @Test
+    fun recoversNoExpiredLeases() {
+        val expiredBefore = Instant.parse("2026-01-01T00:00:00Z")
+        every { repository.requeueStaleInProgressJobs(expiredBefore, 3) } returns 0
+        every { repository.failStaleInProgressJobs(expiredBefore, 3) } returns 0
+
+        val actual = service.recoverExpiredLeases(expiredBefore)
 
         assertEquals(0, actual.requeued)
         assertEquals(0, actual.failed)

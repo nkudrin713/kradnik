@@ -16,31 +16,31 @@ class DownloadQueueWorkerTest {
     @Test
     fun processesClaimedJob() {
         val job = DownloadJob(id = 1)
-        every { downloadJobService.recoverStaleInProgressJobs(any()) } returns DownloadJobRecoveryResult(0, 0)
-        every { downloadJobService.claimNextQueuedJob() } returns job
+        every { downloadJobService.recoverExpiredLeases(any()) } returns DownloadJobRecoveryResult(0, 0)
+        every { downloadJobService.claimNextQueuedJob(any(), any()) } returns job
         coEveryProcess(job)
 
         worker().processNextJob()
 
-        verify { downloadJobService.claimNextQueuedJob() }
+        verify { downloadJobService.claimNextQueuedJob(any(), any()) }
         coVerify { downloadJobProcessor.process(job) }
     }
 
     @Test
     fun returnsWhenQueueIsEmpty() {
-        every { downloadJobService.recoverStaleInProgressJobs(any()) } returns DownloadJobRecoveryResult(0, 0)
-        every { downloadJobService.claimNextQueuedJob() } returns null
+        every { downloadJobService.recoverExpiredLeases(any()) } returns DownloadJobRecoveryResult(0, 0)
+        every { downloadJobService.claimNextQueuedJob(any(), any()) } returns null
 
         worker().processNextJob()
 
-        verify { downloadJobService.claimNextQueuedJob() }
+        verify { downloadJobService.claimNextQueuedJob(any(), any()) }
     }
 
     private fun worker(): DownloadQueueWorker {
         return DownloadQueueWorker(
             downloadJobService = downloadJobService,
             downloadJobProcessor = downloadJobProcessor,
-            workerStaleTimeoutMs = 1000,
+            workerLeaseDurationMs = 1000,
         )
     }
 

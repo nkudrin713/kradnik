@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
+import java.util.UUID
 
 @Service
 class DownloadJobService(
@@ -40,18 +41,34 @@ class DownloadJobService(
 	}
 
 	@Transactional
-	fun claimNextQueuedJob(): DownloadJob? {
-		return downloadJobRepository.claimNextQueuedJob(MAX_ATTEMPTS)
+	fun claimNextQueuedJob(
+		leaseToken: UUID,
+		leaseExpiresAt: Instant,
+	): DownloadJob? {
+		return downloadJobRepository.claimNextQueuedJob(
+			maxAttempts = MAX_ATTEMPTS,
+			leaseToken = leaseToken,
+			leaseExpiresAt = leaseExpiresAt,
+		)
 	}
 
 	@Transactional
-	fun recoverStaleInProgressJobs(staleBefore: Instant): DownloadJobRecoveryResult {
+	fun renewLease(
+		jobId: Long,
+		leaseToken: UUID,
+		leaseExpiresAt: Instant,
+	): Boolean {
+		return downloadJobRepository.renewLease(jobId, leaseToken, leaseExpiresAt) == 1
+	}
+
+	@Transactional
+	fun recoverExpiredLeases(expiredBefore: Instant): DownloadJobRecoveryResult {
 		val requeued = downloadJobRepository.requeueStaleInProgressJobs(
-			staleBefore = staleBefore,
+			expiredBefore = expiredBefore,
 			maxAttempts = MAX_ATTEMPTS,
 		)
 		val failed = downloadJobRepository.failStaleInProgressJobs(
-			staleBefore = staleBefore,
+			expiredBefore = expiredBefore,
 			maxAttempts = MAX_ATTEMPTS,
 		)
 
@@ -122,6 +139,8 @@ class DownloadJobService(
 		job.telegramFileSize = result.telegramFileSize
 
 		job.errorMessage = null
+		job.leaseToken = null
+		job.leaseExpiresAt = null
 		job.downloadedAt = result.downloadedAt ?: Instant.now()
 		job.completedAt = Instant.now()
 
@@ -143,6 +162,8 @@ class DownloadJobService(
 		val job = getJobInternal(jobId)
 
 		job.errorMessage = errorMessage.take(1000)
+		job.leaseToken = null
+		job.leaseExpiresAt = null
 
 		if (job.attempts >= MAX_ATTEMPTS) {
 			job.status = DownloadJobStatus.FAILED
@@ -177,6 +198,8 @@ class DownloadJobService(
 		job.status = DownloadJobStatus.FAILED
 		job.errorMessage = errorMessage.take(1000)
 		job.completedAt = Instant.now()
+		job.leaseToken = null
+		job.leaseExpiresAt = null
 
 		logger.warn(
 			"CHAT[{}] JOB[{}] failed: status={}, attempts={}, error={}",

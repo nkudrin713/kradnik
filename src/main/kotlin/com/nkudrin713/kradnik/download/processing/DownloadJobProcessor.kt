@@ -15,6 +15,7 @@ import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -71,6 +72,8 @@ class DownloadJobProcessor(
                 job,
                 error.message ?: error.javaClass.simpleName,
             )
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             logger.error("JOB[{}] processing failed", jobId, error)
             downloadJobLifecycle.failOrRetry(job, error.message ?: error.javaClass.simpleName)

@@ -18,10 +18,15 @@ class DownloadJobService(
 
 	@Transactional
 	fun createJob(command: CreateDownloadJobCommand): DownloadJob {
+		command.telegramUpdateId?.let { telegramUpdateId ->
+			downloadJobRepository.findByTelegramUpdateId(telegramUpdateId)?.let { return it }
+		}
+
 		return downloadJobRepository.save(
 			DownloadJob(
 				telegramUserId = command.telegramUserId,
 				telegramChatId = command.telegramChatId,
+				telegramUpdateId = command.telegramUpdateId,
 				originalUrl = command.originalUrl,
 				normalizedUrl = command.normalizedUrl,
 				cacheKey = command.cacheKey,
@@ -206,6 +211,7 @@ class DownloadJobNotFoundException(jobId: Long) :
 data class CreateDownloadJobCommand(
 	val telegramUserId: Long,
 	val telegramChatId: Long,
+	val telegramUpdateId: Int? = null,
 	val originalUrl: String,
 	val normalizedUrl: String,
 	val cacheKey: String,

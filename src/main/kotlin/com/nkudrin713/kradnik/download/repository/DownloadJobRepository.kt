@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query
 import java.time.Instant
 
 interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
+	fun findByTelegramUpdateId(telegramUpdateId: Int): DownloadJob?
 
 	@Query(
 		value = """

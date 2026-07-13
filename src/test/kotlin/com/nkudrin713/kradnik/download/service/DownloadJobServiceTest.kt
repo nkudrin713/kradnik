@@ -22,12 +22,14 @@ class DownloadJobServiceTest {
 
     @Test
     fun createsJob() {
+        every { repository.findByTelegramUpdateId(3) } returns null
         every { repository.save(any()) } answers { firstArg() }
 
         val actual = service.createJob(
             CreateDownloadJobCommand(
                 telegramUserId = 1,
                 telegramChatId = 2,
+                telegramUpdateId = 3,
                 originalUrl = "https://example.com/raw",
                 normalizedUrl = "https://example.com/normalized",
                 cacheKey = "cache-key",
@@ -41,6 +43,7 @@ class DownloadJobServiceTest {
 
         assertEquals(1, actual.telegramUserId)
         assertEquals(2, actual.telegramChatId)
+        assertEquals(3, actual.telegramUpdateId)
         assertEquals("https://example.com/raw", actual.originalUrl)
         assertEquals("https://example.com/normalized", actual.normalizedUrl)
         assertEquals("cache-key", actual.cacheKey)
@@ -49,6 +52,29 @@ class DownloadJobServiceTest {
         assertEquals("format", actual.selectedFormat)
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.downloadExtraArgs)
         assertEquals(10, actual.telegramStatusMessageId)
+    }
+
+    @Test
+    fun returnsExistingJobForRepeatedTelegramUpdate() {
+        val existing = job().apply { telegramUpdateId = 3 }
+        every { repository.findByTelegramUpdateId(3) } returns existing
+
+        val actual = service.createJob(
+            CreateDownloadJobCommand(
+                telegramUserId = 1,
+                telegramChatId = 2,
+                telegramUpdateId = 3,
+                originalUrl = "https://example.com/raw",
+                normalizedUrl = "https://example.com/normalized",
+                cacheKey = "cache-key",
+                outputType = OutputType.VIDEO,
+                downloadPreset = "preset",
+                selectedFormat = "format",
+            )
+        )
+
+        assertEquals(existing, actual)
+        verify(exactly = 0) { repository.save(any()) }
     }
 
     @Test

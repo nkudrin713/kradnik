@@ -58,6 +58,7 @@ class VideoUrlHandler(
             CreateDownloadJobCommand(
                 telegramUserId = message.from().id(),
                 telegramChatId = context.chatId,
+                telegramUpdateId = context.update.updateId(),
                 originalUrl = identity.originalUrl,
                 normalizedUrl = identity.normalizedUrl,
                 cacheKey = identity.cacheKey,

@@ -10,6 +10,7 @@ enum class AnalyticsEventType(val dbValue: String) {
     DOWNLOAD_STARTED("download_started"),
     UPLOAD_STARTED("upload_started"),
     DOWNLOAD_COMPLETED("download_completed"),
+    DOWNLOAD_RETRY_SCHEDULED("download_retry_scheduled"),
     DOWNLOAD_FAILED("download_failed"),
     DOWNLOAD_REJECTED("download_rejected"),
 }

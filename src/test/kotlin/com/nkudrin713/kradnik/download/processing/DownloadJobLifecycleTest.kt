@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.service.DownloadFailureResolution
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.service.DownloadedFileResult
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
@@ -54,14 +55,27 @@ class DownloadJobLifecycleTest {
     }
 
     @Test
-    fun failsOrRetries() {
+    fun reportsQueuedStatusWhenRetryIsScheduled() {
         val job = job()
-        every { downloadJobService.markFailedOrRetry(1, "error") } returns job
+        every { downloadJobService.markFailedOrRetry(1, "error") } returns
+                DownloadFailureResolution.RetryScheduled(job)
         every { statusReporter.setStatus(any(), any()) } just runs
 
         lifecycle.failOrRetry(job, "error")
 
         verify { downloadJobService.markFailedOrRetry(1, "error") }
+        verify { statusReporter.setStatus(job, TelegramDownloadStatus.QUEUED) }
+    }
+
+    @Test
+    fun reportsErrorStatusWhenAttemptsAreExhausted() {
+        val job = job()
+        every { downloadJobService.markFailedOrRetry(1, "error") } returns
+                DownloadFailureResolution.TerminalFailure(job)
+        every { statusReporter.setStatus(any(), any()) } just runs
+
+        lifecycle.failOrRetry(job, "error")
+
         verify { statusReporter.setStatus(job, TelegramDownloadStatus.ERROR) }
     }
 

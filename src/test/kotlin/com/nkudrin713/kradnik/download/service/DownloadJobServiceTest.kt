@@ -14,6 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class DownloadJobServiceTest {
     private val repository: DownloadJobRepository = mockk()
@@ -99,8 +100,9 @@ class DownloadJobServiceTest {
 
         val actual = service.markFailedOrRetry(1, "failure")
 
-        assertEquals(DownloadJobStatus.QUEUED, actual.status)
-        assertEquals("failure", actual.errorMessage)
+        assertTrue(actual is DownloadFailureResolution.RetryScheduled)
+        assertEquals(DownloadJobStatus.QUEUED, actual.job.status)
+        assertEquals("failure", actual.job.errorMessage)
     }
 
     @Test
@@ -110,9 +112,10 @@ class DownloadJobServiceTest {
 
         val actual = service.markFailedOrRetry(1, "failure")
 
-        assertEquals(DownloadJobStatus.FAILED, actual.status)
-        assertEquals("failure", actual.errorMessage)
-        assertNotNull(actual.completedAt)
+        assertTrue(actual is DownloadFailureResolution.TerminalFailure)
+        assertEquals(DownloadJobStatus.FAILED, actual.job.status)
+        assertEquals("failure", actual.job.errorMessage)
+        assertNotNull(actual.job.completedAt)
     }
 
     @Test

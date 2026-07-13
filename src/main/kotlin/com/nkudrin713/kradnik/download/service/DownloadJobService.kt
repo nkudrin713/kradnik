@@ -134,7 +134,7 @@ class DownloadJobService(
 	fun markFailedOrRetry(
 		jobId: Long,
 		errorMessage: String,
-	): DownloadJob {
+	): DownloadFailureResolution {
 		val job = getJobInternal(jobId)
 
 		job.errorMessage = errorMessage.take(1000)
@@ -155,7 +155,11 @@ class DownloadJobService(
 			job.errorMessage,
 		)
 
-		return job
+		return if (job.status == DownloadJobStatus.QUEUED) {
+			DownloadFailureResolution.RetryScheduled(job)
+		} else {
+			DownloadFailureResolution.TerminalFailure(job)
+		}
 	}
 
 	@Transactional
@@ -223,3 +227,15 @@ data class DownloadJobRecoveryResult(
 	val requeued: Int,
 	val failed: Int,
 )
+
+sealed interface DownloadFailureResolution {
+	val job: DownloadJob
+
+	data class RetryScheduled(
+		override val job: DownloadJob,
+	) : DownloadFailureResolution
+
+	data class TerminalFailure(
+		override val job: DownloadJob,
+	) : DownloadFailureResolution
+}

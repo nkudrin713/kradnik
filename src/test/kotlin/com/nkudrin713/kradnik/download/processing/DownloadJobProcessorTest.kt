@@ -12,6 +12,7 @@ import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSendResult
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
+import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -56,6 +57,36 @@ class DownloadJobProcessorTest {
         verify { downloadJobLifecycle.markUploading(job) }
         verify { downloadJobLifecycle.complete(job, any()) }
         verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
+    }
+
+    @Test
+    fun downloadsSourceWhenCachedTelegramFileIsInvalid(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val cachedJob = job().apply {
+            telegramFileId = "invalid-file-id"
+            downloadedFileSize = 100
+        }
+        val request = request()
+        val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
+        val metadata = metadata()
+        every { downloadJobService.findCachedJob(job) } returns cachedJob
+        every {
+            telegramFileSender.sendCached(job, "invalid-file-id", 100)
+        } throws TelegramSendException(400, "Bad Request: wrong file identifier")
+        coEvery { ytDlpService.extractMetadata(request) } returns metadata
+        every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
+        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
+        every { downloadJobService.markMetadata(1, any()) } returns job
+        coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
+        coEvery { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) } returns downloadedFile
+        coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir, telegramFileCacheEnabled = true).process(job)
+
+        coVerify { ytDlpService.download(request, tempDir.resolve("1")) }
+        coVerify { telegramFileSender.send(job, downloadedFile) }
+        verify { downloadJobLifecycle.complete(job, any()) }
     }
 
     @Test

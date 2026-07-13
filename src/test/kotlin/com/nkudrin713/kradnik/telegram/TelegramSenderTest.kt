@@ -346,6 +346,7 @@ class TelegramSenderTest {
     private fun failedResponse(description: String): BaseResponse {
         return mockk {
             every { isOk } returns false
+            every { errorCode() } returns 400
             every { description() } returns description
         }
     }

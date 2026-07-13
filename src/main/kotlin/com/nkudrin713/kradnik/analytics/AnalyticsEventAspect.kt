@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.domain.requiredId
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
+import com.nkudrin713.kradnik.download.service.DownloadFailureResolution
 import com.nkudrin713.kradnik.download.service.DownloadedFileResult
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -187,15 +188,28 @@ class AnalyticsEventAspect(
         )
     }
 
-    @AfterReturning("execution(* com.nkudrin713.kradnik.download.processing.DownloadJobLifecycle.failOrRetry(..)) && args(job, errorMessage)")
+    @AfterReturning(
+        pointcut = "execution(* com.nkudrin713.kradnik.download.processing.DownloadJobLifecycle.failOrRetry(..)) && args(job, errorMessage)",
+        returning = "resolution",
+    )
     fun recordRetryableFailure(
         job: DownloadJob,
         errorMessage: String,
+        resolution: DownloadFailureResolution,
     ) {
-        recordDownloadFailed(
-            job = job,
-            errorCode = "processing_failed",
-            errorMessage = errorMessage,
+        analyticsEventService.record(
+            job.toRecordCommand(
+                eventType = when (resolution) {
+                    is DownloadFailureResolution.RetryScheduled -> AnalyticsEventType.DOWNLOAD_RETRY_SCHEDULED
+                    is DownloadFailureResolution.TerminalFailure -> AnalyticsEventType.DOWNLOAD_FAILED
+                },
+                success = false,
+                errorCode = "processing_failed",
+                properties = mapOf(
+                    "errorMessage" to errorMessage.take(MAX_PROPERTY_VALUE_LENGTH),
+                    "attempts" to resolution.job.attempts,
+                ),
+            )
         )
     }
 

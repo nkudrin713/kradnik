@@ -11,6 +11,7 @@ import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
+import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -112,14 +113,21 @@ class DownloadJobProcessor(
         val cachedJob = downloadJobService.findCachedJob(job) ?: return false
         val fileId = cachedJob.telegramFileId ?: return false
 
+        val telegramResult = try {
+            telegramFileSender.sendCached(
+                job = job,
+                fileId = fileId,
+                downloadedFileSize = cachedJob.downloadedFileSize,
+            )
+        } catch (error: TelegramSendException) {
+            if (!error.isInvalidCachedFile()) {
+                throw error
+            }
+            logger.warn("JOB[{}] cached Telegram file is invalid, downloading source", job.requiredId())
+            return false
+        }
+
         downloadJobLifecycle.markUploading(job)
-
-        val telegramResult = telegramFileSender.sendCached(
-            job = job,
-            fileId = fileId,
-            downloadedFileSize = cachedJob.downloadedFileSize,
-        )
-
         downloadJobLifecycle.complete(job, telegramResult.toDownloadedFileResult())
 
         return true

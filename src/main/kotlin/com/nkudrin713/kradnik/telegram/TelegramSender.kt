@@ -110,7 +110,10 @@ class TelegramSender(
         }
 
         if (!response.isOk) {
-            throw TelegramSendException("${response.description()} (sizeMb=${formatMegabytes(fileSize)})")
+            throw TelegramSendException(
+                errorCode = response.errorCode(),
+                description = "${response.description()} (sizeMb=${formatMegabytes(fileSize)})",
+            )
         }
 
         val video = response.message()?.video()
@@ -129,7 +132,7 @@ class TelegramSender(
         )
 
         if (!response.isOk) {
-            throw TelegramSendException(response.description())
+            throw TelegramSendException(response.errorCode(), response.description())
         }
 
         val video = response.message()?.video()
@@ -167,7 +170,10 @@ class TelegramSender(
         }
 
         if (!response.isOk) {
-            throw TelegramSendException("${response.description()} (sizeMb=${formatMegabytes(fileSize)})")
+            throw TelegramSendException(
+                errorCode = response.errorCode(),
+                description = "${response.description()} (sizeMb=${formatMegabytes(fileSize)})",
+            )
         }
 
         val audio = response.message()?.audio()
@@ -183,7 +189,7 @@ class TelegramSender(
         val response = bot.execute(SendAudio(chatId, fileId))
 
         if (!response.isOk) {
-            throw TelegramSendException(response.description())
+            throw TelegramSendException(response.errorCode(), response.description())
         }
 
         val audio = response.message()?.audio()
@@ -261,7 +267,7 @@ class TelegramSender(
             where T : BaseRequest<T, R>, R : BaseResponse {
         val response = bot.execute(request)
         if (!response.isOk) {
-            throw TelegramSendException(response.description())
+            throw TelegramSendException(response.errorCode(), response.description())
         }
 
         return response
@@ -293,8 +299,22 @@ data class TelegramSendResult(
     val fileSize: Long?,
 )
 
-class TelegramSendException(message: String?) :
-    RuntimeException("Telegram send failed: $message")
+class TelegramSendException(
+    val errorCode: Int?,
+    val description: String?,
+) : RuntimeException("Telegram send failed: $description") {
+    constructor(description: String?) : this(null, description)
+
+    fun isInvalidCachedFile(): Boolean {
+        if (errorCode != 400) {
+            return false
+        }
+
+        val normalized = description?.lowercase() ?: return false
+        return normalized.contains("wrong file identifier") ||
+                normalized.contains("file_id") && normalized.contains("invalid")
+    }
+}
 
 enum class TelegramDownloadStatus(val text: String) {
     QUEUED("В очереди ⏳"),

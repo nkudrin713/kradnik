@@ -4,10 +4,10 @@ import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.boot.SpringBootConfiguration
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration
 import org.springframework.boot.persistence.autoconfigure.EntityScan
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.DynamicPropertyRegistry
@@ -174,7 +174,7 @@ class DownloadJobRepositoryIntegrationTest(
     }
 }
 
-@SpringBootConfiguration
+@TestConfiguration
 @EnableAutoConfiguration
 @EntityScan(basePackageClasses = [DownloadJob::class])
 @EnableJpaRepositories(basePackageClasses = [DownloadJobRepository::class])

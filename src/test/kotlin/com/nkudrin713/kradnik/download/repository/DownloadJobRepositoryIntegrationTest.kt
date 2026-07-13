@@ -4,14 +4,16 @@ import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration
 import org.springframework.boot.persistence.autoconfigure.EntityScan
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
+import org.springframework.test.context.TestPropertySource
+import org.springframework.test.context.junit.jupiter.SpringJUnitConfig
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import org.testcontainers.junit.jupiter.Container
@@ -26,11 +28,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNotEquals
 
 @Testcontainers(disabledWithoutDocker = true)
-@SpringBootTest(
-    classes = [DownloadJobRepositoryTestApplication::class],
-    properties = ["spring.jpa.hibernate.ddl-auto=validate"],
-)
-class DownloadJobRepositoryIntegrationTest(
+@SpringJUnitConfig(DownloadJobRepositoryTestApplication::class)
+@TestPropertySource(properties = ["spring.jpa.hibernate.ddl-auto=validate"])
+class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     private val repository: DownloadJobRepository,
     private val jdbcTemplate: JdbcTemplate,
     transactionManager: PlatformTransactionManager,

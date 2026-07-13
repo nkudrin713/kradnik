@@ -6,6 +6,9 @@ import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.requiredId
+import com.nkudrin713.kradnik.download.instagram.InstagramEmbedDownloader
+import com.nkudrin713.kradnik.download.instagram.InstagramEmbedException
+import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.request.DownloadRequest
@@ -30,6 +33,7 @@ class DownloadJobProcessor(
     private val downloadPreflightService: DownloadPreflightService,
     private val telegramVideoPreparer: TelegramVideoPreparer,
     private val telegramFileSender: TelegramFileSender,
+    private val instagramEmbedDownloader: InstagramEmbedDownloader,
     private val ytDlpService: YtDlpService,
     private val mediaMetadataMapper: MediaMetadataMapper,
     private val downloadJobLifecycle: DownloadJobLifecycle,
@@ -52,7 +56,8 @@ class DownloadJobProcessor(
             }
 
             val request = DownloadRequest.fromJob(job)
-            val metadata = ytDlpService.extractMetadata(request)
+            val instagramDownload = prepareInstagramDownload(request, jobId)
+            val metadata = instagramDownload?.metadata ?: ytDlpService.extractMetadata(request)
             val preflightDecision = downloadPreflightService.check(request, metadata)
             downloadAnalytics.recordPreflightDecision(request, metadata, preflightDecision)
             if (preflightDecision is DownloadPreflightDecision.Rejected) {
@@ -65,7 +70,11 @@ class DownloadJobProcessor(
 
             val uploadJob = markMetadata(jobId, metadata)
 
-            val downloadedFile = ytDlpService.download(downloadRequest, outputDir)
+            val downloadedFile = if (instagramDownload != null) {
+                instagramEmbedDownloader.download(instagramDownload, outputDir)
+            } else {
+                ytDlpService.download(downloadRequest, outputDir)
+            }
             val uploadFile = prepareForUpload(uploadJob, downloadedFile, outputDir, jobId)
 
             upload(uploadJob, uploadFile)
@@ -82,6 +91,22 @@ class DownloadJobProcessor(
             downloadJobLifecycle.failOrRetry(job, error.message ?: error.javaClass.simpleName)
         } finally {
             workDirCleaner.deleteRecursively(outputDir)
+        }
+    }
+
+    private suspend fun prepareInstagramDownload(
+        request: DownloadRequest,
+        jobId: Long,
+    ): InstagramPreparedDownload? {
+        if (!instagramEmbedDownloader.supports(request)) {
+            return null
+        }
+
+        return try {
+            instagramEmbedDownloader.prepare(request)
+        } catch (error: InstagramEmbedException) {
+            logger.warn("JOB[{}] Instagram embed extraction failed, falling back to yt-dlp", jobId, error)
+            null
         }
     }
 

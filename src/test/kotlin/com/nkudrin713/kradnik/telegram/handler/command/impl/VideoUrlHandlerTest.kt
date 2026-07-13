@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram.handler.command.impl
 
+import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
@@ -24,12 +25,14 @@ class VideoUrlHandlerTest {
     private val platformResolver: PlatformResolver = mockk()
     private val urlIdentityResolver: UrlIdentityResolver = mockk()
     private val telegramSender: TelegramSender = mockk()
+    private val downloadAnalytics: DownloadAnalytics = mockk(relaxed = true)
     private val handler = VideoUrlHandler(
         downloadJobService = downloadJobService,
         downloadSettingsService = downloadSettingsService,
         platformResolver = platformResolver,
         urlIdentityResolver = urlIdentityResolver,
         telegramSender = telegramSender,
+        downloadAnalytics = downloadAnalytics,
     )
 
     @Test

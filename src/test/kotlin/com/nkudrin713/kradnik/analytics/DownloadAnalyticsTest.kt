@@ -18,9 +18,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 
-class AnalyticsEventAspectTest {
+class DownloadAnalyticsTest {
     private val analyticsEventService: AnalyticsEventService = mockk()
-    private val aspect = AnalyticsEventAspect(analyticsEventService)
+    private val analytics = DownloadAnalytics(analyticsEventService)
 
     @BeforeEach
     fun setUp() {
@@ -41,7 +41,7 @@ class AnalyticsEventAspectTest {
             selectedFormat = "best",
         )
 
-        aspect.recordDownloadRequested(
+        analytics.recordDownloadRequested(
             command = command,
             job = job(),
         )
@@ -60,11 +60,11 @@ class AnalyticsEventAspectTest {
         val commands = mutableListOf<RecordAnalyticsEventCommand>()
         every { analyticsEventService.record(capture(commands)) } just Runs
 
-        aspect.recordTelegramCacheLookup(
+        analytics.recordTelegramCacheLookup(
             job = job(),
             cachedJob = job(id = 10),
         )
-        aspect.recordTelegramCacheLookup(
+        analytics.recordTelegramCacheLookup(
             job = job(),
             cachedJob = null,
         )
@@ -80,7 +80,7 @@ class AnalyticsEventAspectTest {
     fun `records rejected preflight event`() {
         val commandSlot = slot<RecordAnalyticsEventCommand>()
 
-        aspect.recordPreflightDecision(
+        analytics.recordPreflightDecision(
             request = DownloadRequest(
                 originalUrl = "https://youtu.be/source",
                 normalizedUrl = "https://youtu.be/source",
@@ -106,7 +106,7 @@ class AnalyticsEventAspectTest {
     fun `records completed lifecycle event`() {
         val commandSlot = slot<RecordAnalyticsEventCommand>()
 
-        aspect.recordDownloadCompleted(
+        analytics.recordDownloadCompleted(
             job = job(),
             result = DownloadedFileResult(
                 telegramFileId = "file-id",
@@ -126,7 +126,7 @@ class AnalyticsEventAspectTest {
     fun `records authentication failure lifecycle event`() {
         val commandSlot = slot<RecordAnalyticsEventCommand>()
 
-        aspect.recordAuthenticationRequiredFailure(
+        analytics.recordAuthenticationRequiredFailure(
             job = job(),
             errorMessage = "yt-dlp authentication required",
         )

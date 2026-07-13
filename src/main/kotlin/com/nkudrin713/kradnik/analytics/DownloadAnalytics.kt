@@ -9,19 +9,12 @@ import com.nkudrin713.kradnik.download.service.DownloadFailureResolution
 import com.nkudrin713.kradnik.download.service.DownloadedFileResult
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
-import org.aspectj.lang.annotation.AfterReturning
-import org.aspectj.lang.annotation.Aspect
 import org.springframework.stereotype.Component
 
-@Aspect
 @Component
-class AnalyticsEventAspect(
+class DownloadAnalytics(
     private val analyticsEventService: AnalyticsEventService,
 ) {
-    @AfterReturning(
-        pointcut = "execution(* com.nkudrin713.kradnik.download.service.DownloadJobService.createJob(..)) && args(command)",
-        returning = "job",
-    )
     fun recordDownloadRequested(
         command: CreateDownloadJobCommand,
         job: DownloadJob,
@@ -42,10 +35,6 @@ class AnalyticsEventAspect(
         )
     }
 
-    @AfterReturning(
-        pointcut = "execution(* com.nkudrin713.kradnik.download.service.DownloadJobService.findCachedJob(..)) && args(job)",
-        returning = "cachedJob",
-    )
     fun recordTelegramCacheLookup(
         job: DownloadJob,
         cachedJob: DownloadJob?,
@@ -65,10 +54,6 @@ class AnalyticsEventAspect(
         )
     }
 
-    @AfterReturning(
-        pointcut = "execution(* com.nkudrin713.kradnik.download.service.DownloadJobService.markMetadata(..)) && args(jobId, metadata)",
-        returning = "job",
-    )
     fun recordMetadataExtracted(
         jobId: Long,
         metadata: MediaMetadata,
@@ -91,10 +76,6 @@ class AnalyticsEventAspect(
         )
     }
 
-    @AfterReturning(
-        pointcut = "execution(* com.nkudrin713.kradnik.download.limit.DownloadPreflightService.check(..)) && args(request, metadata)",
-        returning = "decision",
-    )
     fun recordPreflightDecision(
         request: DownloadRequest,
         metadata: YtDlpMetadataDto,
@@ -126,7 +107,6 @@ class AnalyticsEventAspect(
         )
     }
 
-    @AfterReturning("execution(* com.nkudrin713.kradnik.download.processing.DownloadJobLifecycle.markDownloading(..)) && args(job)")
     fun recordDownloadStarted(job: DownloadJob) {
         analyticsEventService.record(
             job.toRecordCommand(
@@ -136,7 +116,6 @@ class AnalyticsEventAspect(
         )
     }
 
-    @AfterReturning("execution(* com.nkudrin713.kradnik.download.processing.DownloadJobLifecycle.markUploading(..)) && args(job)")
     fun recordUploadStarted(job: DownloadJob) {
         analyticsEventService.record(
             job.toRecordCommand(
@@ -146,7 +125,6 @@ class AnalyticsEventAspect(
         )
     }
 
-    @AfterReturning("execution(* com.nkudrin713.kradnik.download.processing.DownloadJobLifecycle.complete(..)) && args(job, result)")
     fun recordDownloadCompleted(
         job: DownloadJob,
         result: DownloadedFileResult,
@@ -161,7 +139,6 @@ class AnalyticsEventAspect(
         )
     }
 
-    @AfterReturning("execution(* com.nkudrin713.kradnik.download.processing.DownloadJobLifecycle.rejectTooLarge(..)) && args(job, reason)")
     fun recordDownloadRejected(
         job: DownloadJob,
         reason: String,
@@ -176,7 +153,6 @@ class AnalyticsEventAspect(
         )
     }
 
-    @AfterReturning("execution(* com.nkudrin713.kradnik.download.processing.DownloadJobLifecycle.failAuthenticationRequired(..)) && args(job, errorMessage)")
     fun recordAuthenticationRequiredFailure(
         job: DownloadJob,
         errorMessage: String,
@@ -188,10 +164,6 @@ class AnalyticsEventAspect(
         )
     }
 
-    @AfterReturning(
-        pointcut = "execution(* com.nkudrin713.kradnik.download.processing.DownloadJobLifecycle.failOrRetry(..)) && args(job, errorMessage)",
-        returning = "resolution",
-    )
     fun recordRetryableFailure(
         job: DownloadJob,
         errorMessage: String,

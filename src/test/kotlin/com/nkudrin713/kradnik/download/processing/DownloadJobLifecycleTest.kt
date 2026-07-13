@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadFailureResolution
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -15,9 +16,11 @@ import kotlin.test.Test
 class DownloadJobLifecycleTest {
     private val downloadJobService: DownloadJobService = mockk()
     private val statusReporter: DownloadStatusReporter = mockk()
+    private val downloadAnalytics: DownloadAnalytics = mockk(relaxed = true)
     private val lifecycle = DownloadJobLifecycle(
         downloadJobService = downloadJobService,
         statusReporter = statusReporter,
+        downloadAnalytics = downloadAnalytics,
     )
 
     @Test

@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram.handler.command.impl
 
+import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.identity.UrlIdentityResolver
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
@@ -22,6 +23,7 @@ class VideoUrlHandler(
     private val platformResolver: PlatformResolver,
     private val urlIdentityResolver: UrlIdentityResolver,
     private val telegramSender: TelegramSender,
+    private val downloadAnalytics: DownloadAnalytics,
 ) : TelegramCommandHandler {
 
     override fun supports(context: TelegramUpdateContext): Boolean {
@@ -54,20 +56,20 @@ class VideoUrlHandler(
             TelegramDownloadStatus.QUEUED,
         )
 
-        downloadJobService.createJob(
-            CreateDownloadJobCommand(
-                telegramUserId = message.from().id(),
-                telegramChatId = context.chatId,
-                telegramUpdateId = context.update.updateId(),
-                originalUrl = identity.originalUrl,
-                normalizedUrl = identity.normalizedUrl,
-                cacheKey = identity.cacheKey,
-                outputType = request.outputType,
-                downloadPreset = request.presetName,
-                selectedFormat = request.formatSelector,
-                downloadExtraArgs = request.extraArgs,
-                telegramStatusMessageId = statusMessageId,
-            )
+        val command = CreateDownloadJobCommand(
+            telegramUserId = message.from().id(),
+            telegramChatId = context.chatId,
+            telegramUpdateId = context.update.updateId(),
+            originalUrl = identity.originalUrl,
+            normalizedUrl = identity.normalizedUrl,
+            cacheKey = identity.cacheKey,
+            outputType = request.outputType,
+            downloadPreset = request.presetName,
+            selectedFormat = request.formatSelector,
+            downloadExtraArgs = request.extraArgs,
+            telegramStatusMessageId = statusMessageId,
         )
+        val job = downloadJobService.createJob(command)
+        downloadAnalytics.recordDownloadRequested(command, job)
     }
 }

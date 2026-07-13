@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
@@ -39,6 +40,7 @@ class DownloadJobProcessorTest {
     private val ytDlpService: YtDlpService = mockk()
     private val mediaMetadataMapper: MediaMetadataMapper = mockk()
     private val downloadJobLifecycle: DownloadJobLifecycle = mockk(relaxed = true)
+    private val downloadAnalytics: DownloadAnalytics = mockk(relaxed = true)
     private val workDirCleaner: WorkDirCleaner = mockk()
 
     @Test
@@ -301,6 +303,7 @@ class DownloadJobProcessorTest {
             ytDlpService = ytDlpService,
             mediaMetadataMapper = mediaMetadataMapper,
             downloadJobLifecycle = downloadJobLifecycle,
+            downloadAnalytics = downloadAnalytics,
             workDirCleaner = workDirCleaner,
             workDir = workDir.toString(),
             telegramFileCacheEnabled = telegramFileCacheEnabled,

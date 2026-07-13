@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
@@ -32,6 +33,7 @@ class DownloadJobProcessor(
     private val ytDlpService: YtDlpService,
     private val mediaMetadataMapper: MediaMetadataMapper,
     private val downloadJobLifecycle: DownloadJobLifecycle,
+    private val downloadAnalytics: DownloadAnalytics,
     private val workDirCleaner: WorkDirCleaner,
     @Value("\${download.work-dir:/tmp/kradnik-downloads}")
     private val workDir: String,
@@ -52,6 +54,7 @@ class DownloadJobProcessor(
             val request = DownloadRequest.fromJob(job)
             val metadata = ytDlpService.extractMetadata(request)
             val preflightDecision = downloadPreflightService.check(request, metadata)
+            downloadAnalytics.recordPreflightDecision(request, metadata, preflightDecision)
             if (preflightDecision is DownloadPreflightDecision.Rejected) {
                 downloadJobLifecycle.rejectTooLarge(job, preflightDecision.reason)
                 return
@@ -113,7 +116,9 @@ class DownloadJobProcessor(
             return false
         }
 
-        val cachedJob = downloadJobService.findCachedJob(job) ?: return false
+        val cachedJob = downloadJobService.findCachedJob(job)
+        downloadAnalytics.recordTelegramCacheLookup(job, cachedJob)
+        cachedJob ?: return false
         val fileId = cachedJob.telegramFileId ?: return false
 
         val telegramResult = try {
@@ -140,10 +145,13 @@ class DownloadJobProcessor(
         jobId: Long,
         metadata: YtDlpMetadataDto,
     ): DownloadJob {
-        return downloadJobService.markMetadata(
+        val mappedMetadata = mediaMetadataMapper.toMediaMetadata(metadata)
+        val job = downloadJobService.markMetadata(
             jobId,
-            mediaMetadataMapper.toMediaMetadata(metadata),
+            mappedMetadata,
         )
+        downloadAnalytics.recordMetadataExtracted(jobId, mappedMetadata, job)
+        return job
     }
 
     private fun formatMegabytes(bytes: Long): String {

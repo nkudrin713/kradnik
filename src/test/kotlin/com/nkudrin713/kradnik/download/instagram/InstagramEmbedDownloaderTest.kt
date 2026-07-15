@@ -30,7 +30,7 @@ class InstagramEmbedDownloaderTest {
         assertTrue(downloader.supports(request("https://instagram.com/p/ABC-123?utm_source=test")))
         assertFalse(downloader.supports(request("https://www.instagram.com/stories/user/123/")))
         assertFalse(downloader.supports(request("https://example.com/reel/ABC_123/")))
-        assertFalse(
+        assertTrue(
             downloader.supports(
                 request(
                     url = "https://www.instagram.com/reel/ABC_123/",
@@ -56,6 +56,19 @@ class InstagramEmbedDownloaderTest {
         assertEquals(1280, prepared.metadata.height)
         assertEquals("owner", prepared.metadata.uploader)
         assertEquals(THUMBNAIL_URL, prepared.metadata.thumbnail)
+    }
+
+    @Test
+    fun preparesVideoWithoutMediaUrlForYtDlpDownload() = runTest {
+        val request = request("https://www.instagram.com/reel/ABC_123/")
+        val embedUri = URI.create("https://www.instagram.com/p/ABC_123/embed/captioned/")
+        coEvery { httpClient.getText(embedUri) } returns embedHtml(mediaUrl = null)
+
+        val prepared = downloader.prepare(request)
+
+        assertEquals(null, prepared.mediaUri)
+        assertEquals("ABC_123", prepared.shortcode)
+        assertEquals(BigDecimal("12.5"), prepared.metadata.duration)
     }
 
     @Test
@@ -90,17 +103,34 @@ class InstagramEmbedDownloaderTest {
         }
     }
 
+    @Test
+    fun rejectsEmbedPayloadWithoutVideo() = runTest {
+        val embedUri = URI.create("https://www.instagram.com/p/ABC_123/embed/captioned/")
+        coEvery { httpClient.getText(embedUri) } returns embedHtml(
+            mediaUrl = null,
+            isVideo = false,
+        )
+
+        assertFailsWith<InstagramEmbedException> {
+            downloader.prepare(request("https://www.instagram.com/reel/ABC_123/"))
+        }
+    }
+
     private suspend fun InstagramEmbedDownloader.prepareWithStubbedPayload(): InstagramPreparedDownload {
         val embedUri = URI.create("https://www.instagram.com/p/ABC_123/embed/captioned/")
         coEvery { httpClient.getText(embedUri) } returns embedHtml()
         return prepare(request("https://www.instagram.com/reel/ABC_123/"))
     }
 
-    private fun embedHtml(mediaUrl: String = MEDIA_URL): String {
+    private fun embedHtml(
+        mediaUrl: String? = MEDIA_URL,
+        isVideo: Boolean = true,
+    ): String {
         val contextJson = jacksonObjectMapper().writeValueAsString(
             mapOf(
                 "media" to mapOf(
                     "video_url" to mediaUrl,
+                    "is_video" to isVideo,
                     "video_duration" to 12.5,
                     "original_width" to 720,
                     "original_height" to 1280,

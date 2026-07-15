@@ -3,7 +3,6 @@ package com.nkudrin713.kradnik.download.instagram
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments
 import com.nkudrin713.kradnik.download.request.DownloadRequest
@@ -25,10 +24,6 @@ class InstagramEmbedDownloader(
     }
 
     fun supports(request: DownloadRequest): Boolean {
-        if (request.outputType != OutputType.VIDEO) {
-            return false
-        }
-
         return extractShortcode(request.originalUrl) != null
     }
 
@@ -44,10 +39,10 @@ class InstagramEmbedDownloader(
             throw InstagramEmbedException("Instagram embed request failed", error)
         }
         val context = extractContext(html)
-        val mediaUri = context
-            .findFirstText(VIDEO_URL)
-            ?.let(::parseMediaUri)
-            ?: throw InstagramEmbedException("Instagram embed response does not contain video URL")
+        val mediaUri = context.findFirstText(VIDEO_URL)?.let(::parseMediaUri)
+        if (mediaUri == null && context.findFirstBoolean(IS_VIDEO) != true) {
+            throw InstagramEmbedException("Instagram embed response does not contain video")
+        }
 
         return InstagramPreparedDownload(
             shortcode = shortcode,
@@ -83,8 +78,11 @@ class InstagramEmbedDownloader(
         preparedDownload: InstagramPreparedDownload,
         outputDir: Path,
     ): DownloadedFile {
+        val mediaUri = requireNotNull(preparedDownload.mediaUri) {
+            "Instagram prepared download does not contain media URL"
+        }
         return httpClient.download(
-            uri = preparedDownload.mediaUri,
+            uri = mediaUri,
             outputFile = outputDir.resolve("instagram-${preparedDownload.shortcode}.mp4"),
         )
     }
@@ -175,6 +173,18 @@ class InstagramEmbedDownloader(
         return null
     }
 
+    private fun JsonNode.findFirstBoolean(fieldName: String): Boolean? {
+        if (isObject) {
+            path(fieldName).takeIf(JsonNode::isBoolean)?.booleanValue()?.let { return it }
+        }
+
+        val children = elements()
+        while (children.hasNext()) {
+            children.next().findFirstBoolean(fieldName)?.let { return it }
+        }
+        return null
+    }
+
     private fun isInstagramHost(host: String?): Boolean {
         return when (host?.lowercase()) {
             "instagram.com", "www.instagram.com", "m.instagram.com" -> true
@@ -198,6 +208,7 @@ class InstagramEmbedDownloader(
         private val SUPPORTED_PATH_PREFIXES = setOf("p", "reel", "reels", "tv")
         private const val CONTEXT_JSON = "contextJSON"
         private const val VIDEO_URL = "video_url"
+        private const val IS_VIDEO = "is_video"
         private const val VIDEO_DURATION = "video_duration"
         private const val ORIGINAL_WIDTH = "original_width"
         private const val ORIGINAL_HEIGHT = "original_height"
@@ -211,7 +222,7 @@ class InstagramEmbedDownloader(
 
 data class InstagramPreparedDownload(
     val shortcode: String,
-    val mediaUri: URI,
+    val mediaUri: URI?,
     val metadata: YtDlpMetadataDto,
 )
 

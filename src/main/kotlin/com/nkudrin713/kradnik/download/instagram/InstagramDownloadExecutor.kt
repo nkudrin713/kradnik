@@ -1,11 +1,13 @@
 package com.nkudrin713.kradnik.download.instagram
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadExecutor
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
 import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -16,6 +18,7 @@ import java.nio.file.Path
 class InstagramDownloadExecutor(
     private val embedDownloader: InstagramEmbedDownloader,
     private val rateLimiter: InstagramRateLimiter,
+    private val ytDlpService: YtDlpService,
 ) : DownloadExecutor {
     override fun supports(request: DownloadRequest): Boolean {
         return embedDownloader.isInstagramRequest(request)
@@ -69,7 +72,11 @@ class InstagramDownloadExecutor(
             request: DownloadRequest,
             outputDir: Path,
         ): DownloadedFile {
-            return embedDownloader.download(prepared, outputDir)
+            return if (request.outputType == OutputType.VIDEO && prepared.mediaUri != null) {
+                embedDownloader.download(prepared, outputDir)
+            } else {
+                ytDlpService.download(request, outputDir)
+            }
         }
     }
 

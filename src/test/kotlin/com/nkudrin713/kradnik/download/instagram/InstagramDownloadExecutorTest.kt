@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
 import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -24,7 +25,8 @@ import kotlin.test.assertIs
 class InstagramDownloadExecutorTest {
     private val embedDownloader: InstagramEmbedDownloader = mockk()
     private val rateLimiter: InstagramRateLimiter = mockk()
-    private val executor = InstagramDownloadExecutor(embedDownloader, rateLimiter)
+    private val ytDlpService: YtDlpService = mockk()
+    private val executor = InstagramDownloadExecutor(embedDownloader, rateLimiter, ytDlpService)
 
     @Test
     fun returnsNotReadyWithoutCallingInstagramWhenPermitIsDeferred() = runTest {
@@ -56,6 +58,46 @@ class InstagramDownloadExecutorTest {
         assertEquals(prepared.metadata, result.session.metadata)
         assertEquals(downloaded, result.session.download(request, outputDir))
         verify(exactly = 1) { rateLimiter.recordSuccess() }
+        coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
+    }
+
+    @Test
+    fun downloadsVideoWithYtDlpWhenEmbedHasNoMediaUrl() = runTest {
+        val request = request()
+        val prepared = preparedDownload(mediaUri = null)
+        val outputDir = Path.of("/tmp/output")
+        val downloaded = DownloadedFile(outputDir.resolve("video.mp4"), 100)
+        every { embedDownloader.supports(request) } returns true
+        every { rateLimiter.acquire() } returns RateLimitDecision.Granted
+        coEvery { embedDownloader.prepare(request) } returns prepared
+        every { rateLimiter.recordSuccess() } returns Unit
+        coEvery { ytDlpService.download(request, outputDir) } returns downloaded
+
+        val result = assertIs<DownloadPreparation.Ready>(executor.prepare(request))
+
+        assertEquals(prepared.metadata, result.session.metadata)
+        assertEquals(downloaded, result.session.download(request, outputDir))
+        coVerify(exactly = 0) { embedDownloader.download(any(), any()) }
+        coVerify(exactly = 1) { ytDlpService.download(request, outputDir) }
+    }
+
+    @Test
+    fun downloadsInstagramAudioWithYtDlp() = runTest {
+        val request = request(outputType = OutputType.AUDIO)
+        val prepared = preparedDownload()
+        val outputDir = Path.of("/tmp/output")
+        val downloaded = DownloadedFile(outputDir.resolve("audio.mp3"), 100)
+        every { embedDownloader.supports(request) } returns true
+        every { rateLimiter.acquire() } returns RateLimitDecision.Granted
+        coEvery { embedDownloader.prepare(request) } returns prepared
+        every { rateLimiter.recordSuccess() } returns Unit
+        coEvery { ytDlpService.download(request, outputDir) } returns downloaded
+
+        val result = assertIs<DownloadPreparation.Ready>(executor.prepare(request))
+
+        assertEquals(downloaded, result.session.download(request, outputDir))
+        coVerify(exactly = 0) { embedDownloader.download(any(), any()) }
+        coVerify(exactly = 1) { ytDlpService.download(request, outputDir) }
     }
 
     @Test
@@ -80,7 +122,7 @@ class InstagramDownloadExecutorTest {
 
     @Test
     fun rejectsUnsupportedInstagramRequestBeforeLimiter() = runTest {
-        val request = request(outputType = OutputType.AUDIO)
+        val request = request(url = "https://www.instagram.com/stories/user/123/")
         every { embedDownloader.supports(request) } returns false
 
         assertIs<DownloadPreparation.TerminalFailure>(executor.prepare(request))
@@ -88,20 +130,25 @@ class InstagramDownloadExecutorTest {
         verify(exactly = 0) { rateLimiter.acquire() }
     }
 
-    private fun request(outputType: OutputType = OutputType.VIDEO): DownloadRequest {
+    private fun request(
+        outputType: OutputType = OutputType.VIDEO,
+        url: String = "https://www.instagram.com/reel/ABC_123/",
+    ): DownloadRequest {
         return DownloadRequest(
-            originalUrl = "https://www.instagram.com/reel/ABC_123/",
-            normalizedUrl = "https://www.instagram.com/reel/ABC_123/",
+            originalUrl = url,
+            normalizedUrl = url,
             outputType = outputType,
             formatSelector = "format",
             presetName = "instagram",
         )
     }
 
-    private fun preparedDownload(): InstagramPreparedDownload {
+    private fun preparedDownload(
+        mediaUri: URI? = URI.create("https://scontent-test.cdninstagram.com/video.mp4"),
+    ): InstagramPreparedDownload {
         return InstagramPreparedDownload(
             shortcode = "ABC_123",
-            mediaUri = URI.create("https://scontent-test.cdninstagram.com/video.mp4"),
+            mediaUri = mediaUri,
             metadata = mockk<YtDlpMetadataDto>(),
         )
     }

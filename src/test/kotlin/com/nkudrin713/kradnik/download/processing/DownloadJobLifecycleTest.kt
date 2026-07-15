@@ -145,12 +145,12 @@ class DownloadJobLifecycleTest {
             downloadedFileSize = 100,
         )
         every { downloadJobService.markCompleted(1, result) } returns job
-        every { statusReporter.setStatus(any(), any()) } just runs
+        every { statusReporter.deleteStatus(job) } just runs
 
         lifecycle.complete(job, result)
 
         verify { downloadJobService.markCompleted(1, result) }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.COMPLETED) }
+        verify { statusReporter.deleteStatus(job) }
     }
 
     private fun job(): DownloadJob {

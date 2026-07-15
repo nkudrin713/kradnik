@@ -63,12 +63,12 @@ class DownloadJobProcessorTest {
             downloadedFileSize = 100
         }
         every { downloadJobService.findCachedJob(job) } returns cachedJob
-        every { telegramFileSender.sendCached(job, "cached-file-id", 100) } returns telegramResult()
+        coEvery { telegramFileSender.sendCached(job, "cached-file-id", 100) } returns telegramResult()
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir, telegramFileCacheEnabled = true).process(job)
 
-        verify { telegramFileSender.sendCached(job, "cached-file-id", 100) }
+        coVerify { telegramFileSender.sendCached(job, "cached-file-id", 100) }
         verify { downloadJobLifecycle.markUploading(job) }
         verify { downloadJobLifecycle.complete(job, any()) }
         verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
@@ -85,7 +85,7 @@ class DownloadJobProcessorTest {
         val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
         val metadata = metadata()
         every { downloadJobService.findCachedJob(job) } returns cachedJob
-        every {
+        coEvery {
             telegramFileSender.sendCached(job, "invalid-file-id", 100)
         } throws TelegramSendException(400, "Bad Request: wrong file identifier")
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
@@ -102,6 +102,42 @@ class DownloadJobProcessorTest {
         coVerify { ytDlpService.download(request, tempDir.resolve("1")) }
         coVerify { telegramFileSender.send(job, downloadedFile) }
         verify { downloadJobLifecycle.complete(job, any()) }
+    }
+
+    @Test
+    fun failsTerminallyWhenTelegramRejectsRequest(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val cachedJob = job().apply {
+            telegramFileId = "cached-file-id"
+        }
+        every { downloadJobService.findCachedJob(job) } returns cachedJob
+        coEvery {
+            telegramFileSender.sendCached(job, "cached-file-id", null)
+        } throws TelegramSendException(403, "Forbidden: bot was blocked by the user")
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir, telegramFileCacheEnabled = true).process(job)
+
+        verify { downloadJobLifecycle.failTerminal(job, any()) }
+        verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any()) }
+    }
+
+    @Test
+    fun retriesWhenTelegramIsTemporarilyUnavailable(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val cachedJob = job().apply {
+            telegramFileId = "cached-file-id"
+        }
+        every { downloadJobService.findCachedJob(job) } returns cachedJob
+        coEvery {
+            telegramFileSender.sendCached(job, "cached-file-id", null)
+        } throws TelegramSendException(429, "Too Many Requests")
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir, telegramFileCacheEnabled = true).process(job)
+
+        verify { downloadJobLifecycle.failOrRetry(job, any()) }
+        verify(exactly = 0) { downloadJobLifecycle.failTerminal(any(), any()) }
     }
 
     @Test

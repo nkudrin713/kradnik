@@ -96,6 +96,14 @@ class DownloadJobProcessor(
             )
         } catch (error: CancellationException) {
             throw error
+        } catch (error: TelegramSendException) {
+            logger.error("JOB[{}] Telegram send failed", jobId, error)
+            val errorMessage = error.message ?: error.javaClass.simpleName
+            if (error.isRetryable()) {
+                downloadJobLifecycle.failOrRetry(job, errorMessage)
+            } else {
+                downloadJobLifecycle.failTerminal(job, errorMessage)
+            }
         } catch (error: Exception) {
             logger.error("JOB[{}] processing failed", jobId, error)
             downloadJobLifecycle.failOrRetry(job, error.message ?: error.javaClass.simpleName)
@@ -130,7 +138,7 @@ class DownloadJobProcessor(
         downloadJobLifecycle.complete(job, telegramResult.toDownloadedFileResult())
     }
 
-    private fun sendCached(job: DownloadJob): Boolean {
+    private suspend fun sendCached(job: DownloadJob): Boolean {
         if (!telegramFileCacheEnabled) {
             return false
         }

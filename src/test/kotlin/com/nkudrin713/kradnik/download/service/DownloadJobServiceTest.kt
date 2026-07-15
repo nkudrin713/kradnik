@@ -42,17 +42,18 @@ class DownloadJobServiceTest {
             )
         )
 
-        assertEquals(1, actual.telegramUserId)
-        assertEquals(2, actual.telegramChatId)
-        assertEquals(3, actual.telegramUpdateId)
-        assertEquals("https://example.com/raw", actual.originalUrl)
-        assertEquals("https://example.com/normalized", actual.normalizedUrl)
-        assertEquals("cache-key", actual.cacheKey)
-        assertEquals(OutputType.AUDIO, actual.outputType)
-        assertEquals("preset", actual.downloadPreset)
-        assertEquals("format", actual.selectedFormat)
-        assertEquals(listOf("-x", "--audio-format", "mp3"), actual.downloadExtraArgs)
-        assertEquals(10, actual.telegramStatusMessageId)
+        assertTrue(actual is CreateDownloadJobResult.Created)
+        assertEquals(1, actual.job.telegramUserId)
+        assertEquals(2, actual.job.telegramChatId)
+        assertEquals(3, actual.job.telegramUpdateId)
+        assertEquals("https://example.com/raw", actual.job.originalUrl)
+        assertEquals("https://example.com/normalized", actual.job.normalizedUrl)
+        assertEquals("cache-key", actual.job.cacheKey)
+        assertEquals(OutputType.AUDIO, actual.job.outputType)
+        assertEquals("preset", actual.job.downloadPreset)
+        assertEquals("format", actual.job.selectedFormat)
+        assertEquals(listOf("-x", "--audio-format", "mp3"), actual.job.downloadExtraArgs)
+        assertEquals(10, actual.job.telegramStatusMessageId)
     }
 
     @Test
@@ -74,7 +75,8 @@ class DownloadJobServiceTest {
             )
         )
 
-        assertEquals(existing, actual)
+        assertTrue(actual is CreateDownloadJobResult.Existing)
+        assertEquals(existing, actual.job)
         verify(exactly = 0) { repository.save(any()) }
     }
 

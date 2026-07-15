@@ -5,12 +5,14 @@ import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
+import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.settings.DownloadSettingsService
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.handler.TelegramUpdateContext
 import com.nkudrin713.kradnik.telegram.handler.command.TelegramCommandHandler
+import org.slf4j.LoggerFactory
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 
@@ -23,6 +25,7 @@ class VideoUrlHandler(
     private val telegramSender: TelegramSender,
     private val downloadAnalytics: DownloadAnalytics,
 ) : TelegramCommandHandler {
+    private val logger = LoggerFactory.getLogger(javaClass)
 
     override fun supports(context: TelegramUpdateContext): Boolean {
         return context.text.startsWith("http://") ||
@@ -61,7 +64,29 @@ class VideoUrlHandler(
             downloadExtraArgs = request.extraArgs,
             telegramStatusMessageId = statusMessageId,
         )
-        val job = downloadJobService.createJob(command)
-        downloadAnalytics.recordDownloadRequested(command, job)
+        val result = try {
+            downloadJobService.createJob(command)
+        } catch (error: Exception) {
+            deleteStatusBestEffort(context.chatId, statusMessageId)
+            throw error
+        }
+
+        when (result) {
+            is CreateDownloadJobResult.Created -> downloadAnalytics.recordDownloadRequested(command, result.job)
+            is CreateDownloadJobResult.Existing -> deleteStatusBestEffort(context.chatId, statusMessageId)
+        }
+    }
+
+    private fun deleteStatusBestEffort(chatId: Long, messageId: Int) {
+        runCatching {
+            telegramSender.deleteMessage(chatId, messageId)
+        }.onFailure {
+            logger.warn(
+                "Duplicate or failed job status message deletion failed: chatId={}, messageId={}",
+                chatId,
+                messageId,
+                it,
+            )
+        }
     }
 }

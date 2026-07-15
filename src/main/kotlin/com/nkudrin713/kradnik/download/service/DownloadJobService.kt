@@ -18,12 +18,14 @@ class DownloadJobService(
 	private val logger = LoggerFactory.getLogger(javaClass)
 
 	@Transactional
-	fun createJob(command: CreateDownloadJobCommand): DownloadJob {
+	fun createJob(command: CreateDownloadJobCommand): CreateDownloadJobResult {
 		command.telegramUpdateId?.let { telegramUpdateId ->
-			downloadJobRepository.findByTelegramUpdateId(telegramUpdateId)?.let { return it }
+			downloadJobRepository.findByTelegramUpdateId(telegramUpdateId)?.let {
+				return CreateDownloadJobResult.Existing(it)
+			}
 		}
 
-		return downloadJobRepository.save(
+		val job = downloadJobRepository.save(
 			DownloadJob(
 				telegramUserId = command.telegramUserId,
 				telegramChatId = command.telegramChatId,
@@ -38,6 +40,7 @@ class DownloadJobService(
 				telegramStatusMessageId = command.telegramStatusMessageId,
 			)
 		)
+		return CreateDownloadJobResult.Created(job)
 	}
 
 	@Transactional
@@ -286,6 +289,18 @@ data class CreateDownloadJobCommand(
 	val downloadExtraArgs: List<String> = emptyList(),
 	val telegramStatusMessageId: Int? = null,
 )
+
+sealed interface CreateDownloadJobResult {
+	val job: DownloadJob
+
+	data class Created(
+		override val job: DownloadJob,
+	) : CreateDownloadJobResult
+
+	data class Existing(
+		override val job: DownloadJob,
+	) : CreateDownloadJobResult
+}
 
 data class DownloadedFileResult(
 	val telegramFileId: String,

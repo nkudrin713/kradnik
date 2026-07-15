@@ -97,7 +97,7 @@ class DownloadJobLifecycle(
         result: DownloadedFileResult,
     ) {
         downloadJobService.markCompleted(job.requiredId(), result)
-        statusReporter.setStatus(job, TelegramDownloadStatus.COMPLETED)
+        statusReporter.deleteStatus(job)
         downloadAnalytics.recordDownloadCompleted(job, result)
     }
 }

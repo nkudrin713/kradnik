@@ -164,6 +164,17 @@ class DownloadAnalytics(
         )
     }
 
+    fun recordTerminalFailure(
+        job: DownloadJob,
+        errorMessage: String,
+    ) {
+        recordDownloadFailed(
+            job = job,
+            errorCode = "terminal_failure",
+            errorMessage = errorMessage,
+        )
+    }
+
     fun recordRetryableFailure(
         job: DownloadJob,
         errorMessage: String,

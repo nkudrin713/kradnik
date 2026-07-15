@@ -13,6 +13,9 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.time.Duration
+import java.time.Instant
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 interface InstagramHttpClient {
     suspend fun getText(uri: URI): String
@@ -42,7 +45,11 @@ class JdkInstagramHttpClient : InstagramHttpClient {
         )
 
         if (response.statusCode() !in SUCCESS_STATUS_CODES) {
-            throw InstagramEmbedException("Instagram embed request failed: status=${response.statusCode()}")
+            throw InstagramHttpException(
+                stage = InstagramRequestStage.EMBED,
+                statusCode = response.statusCode(),
+                retryAfter = parseRetryAfter(response),
+            )
         }
 
         response.body()
@@ -65,7 +72,11 @@ class JdkInstagramHttpClient : InstagramHttpClient {
 
         if (response.statusCode() !in SUCCESS_STATUS_CODES) {
             response.body().close()
-            throw InstagramEmbedException("Instagram media download failed: status=${response.statusCode()}")
+            throw InstagramHttpException(
+                stage = InstagramRequestStage.MEDIA,
+                statusCode = response.statusCode(),
+                retryAfter = parseRetryAfter(response),
+            )
         }
 
         val contentType = response.headers()
@@ -86,6 +97,18 @@ class JdkInstagramHttpClient : InstagramHttpClient {
         )
     }
 
+    private fun parseRetryAfter(response: HttpResponse<*>): Duration? {
+        val value = response.headers().firstValue("Retry-After").orElse(null) ?: return null
+        value.toLongOrNull()?.let { seconds ->
+            return Duration.ofSeconds(seconds.coerceAtLeast(0))
+        }
+
+        return runCatching {
+            val retryAt = ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()
+            Duration.between(Instant.now(), retryAt).coerceAtLeast(Duration.ZERO)
+        }.getOrNull()
+    }
+
     private companion object {
         private val CONNECT_TIMEOUT = Duration.ofSeconds(10)
         private val METADATA_TIMEOUT = Duration.ofSeconds(30)
@@ -94,3 +117,14 @@ class JdkInstagramHttpClient : InstagramHttpClient {
         private const val USER_AGENT = "Mozilla/5.0"
     }
 }
+
+enum class InstagramRequestStage {
+    EMBED,
+    MEDIA,
+}
+
+class InstagramHttpException(
+    val stage: InstagramRequestStage,
+    val statusCode: Int,
+    val retryAfter: Duration?,
+) : InstagramEmbedException("Instagram ${stage.name.lowercase()} request failed: status=$statusCode")

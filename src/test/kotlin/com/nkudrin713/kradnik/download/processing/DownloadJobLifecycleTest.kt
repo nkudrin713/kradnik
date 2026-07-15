@@ -11,6 +11,7 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
 import io.mockk.verify
+import java.time.Instant
 import kotlin.test.Test
 
 class DownloadJobLifecycleTest {
@@ -80,6 +81,47 @@ class DownloadJobLifecycleTest {
         lifecycle.failOrRetry(job, "error")
 
         verify { statusReporter.setStatus(job, TelegramDownloadStatus.ERROR) }
+    }
+
+    @Test
+    fun defersBeforeAttemptAndKeepsQueuedStatus() {
+        val job = job()
+        val retryAt = Instant.parse("2026-01-01T01:00:00Z")
+        every { downloadJobService.deferBeforeAttempt(1, retryAt, "rate limited") } returns job
+        every { statusReporter.setStatus(any(), any()) } just runs
+
+        lifecycle.deferBeforeAttempt(job, retryAt, "rate limited")
+
+        verify { downloadJobService.deferBeforeAttempt(1, retryAt, "rate limited") }
+        verify { statusReporter.setStatus(job, TelegramDownloadStatus.QUEUED) }
+    }
+
+    @Test
+    fun schedulesRetryAtRequestedTime() {
+        val job = job()
+        val retryAt = Instant.parse("2026-01-01T01:00:00Z")
+        val resolution = DownloadFailureResolution.RetryScheduled(job)
+        every { downloadJobService.retryAt(1, "throttled", retryAt) } returns resolution
+        every { statusReporter.setStatus(any(), any()) } just runs
+
+        lifecycle.retryAt(job, retryAt, "throttled")
+
+        verify { downloadJobService.retryAt(1, "throttled", retryAt) }
+        verify { statusReporter.setStatus(job, TelegramDownloadStatus.QUEUED) }
+        verify { downloadAnalytics.recordRetryableFailure(job, "throttled", resolution) }
+    }
+
+    @Test
+    fun failsTerminallyWithoutRetry() {
+        val job = job()
+        every { downloadJobService.markFailed(1, "unsupported") } returns job
+        every { statusReporter.setStatus(any(), any()) } just runs
+
+        lifecycle.failTerminal(job, "unsupported")
+
+        verify { downloadJobService.markFailed(1, "unsupported") }
+        verify { statusReporter.setStatus(job, TelegramDownloadStatus.ERROR) }
+        verify { downloadAnalytics.recordTerminalFailure(job, "unsupported") }
     }
 
     @Test

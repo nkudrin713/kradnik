@@ -8,6 +8,7 @@ import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.service.DownloadedFileResult
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import org.springframework.stereotype.Component
+import java.time.Instant
 
 @Component
 class DownloadJobLifecycle(
@@ -47,6 +48,39 @@ class DownloadJobLifecycle(
         statusReporter.setStatus(job, status)
         downloadAnalytics.recordRetryableFailure(job, errorMessage, resolution)
         return resolution
+    }
+
+    fun deferBeforeAttempt(
+        job: DownloadJob,
+        retryAt: Instant,
+        reason: String,
+    ) {
+        downloadJobService.deferBeforeAttempt(job.requiredId(), retryAt, reason)
+        statusReporter.setStatus(job, TelegramDownloadStatus.QUEUED)
+    }
+
+    fun retryAt(
+        job: DownloadJob,
+        retryAt: Instant,
+        errorMessage: String,
+    ): DownloadFailureResolution {
+        val resolution = downloadJobService.retryAt(job.requiredId(), errorMessage, retryAt)
+        val status = when (resolution) {
+            is DownloadFailureResolution.RetryScheduled -> TelegramDownloadStatus.QUEUED
+            is DownloadFailureResolution.TerminalFailure -> TelegramDownloadStatus.ERROR
+        }
+        statusReporter.setStatus(job, status)
+        downloadAnalytics.recordRetryableFailure(job, errorMessage, resolution)
+        return resolution
+    }
+
+    fun failTerminal(
+        job: DownloadJob,
+        errorMessage: String,
+    ) {
+        downloadJobService.markFailed(job.requiredId(), errorMessage)
+        statusReporter.setStatus(job, TelegramDownloadStatus.ERROR)
+        downloadAnalytics.recordTerminalFailure(job, errorMessage)
     }
 
     fun failAuthenticationRequired(

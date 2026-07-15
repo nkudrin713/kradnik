@@ -9,6 +9,7 @@ import java.net.InetSocketAddress
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -75,12 +76,17 @@ class JdkInstagramHttpClientTest {
     @Test
     fun rejectsFailedTextResponse() = runTest {
         server.createContext("/failed") { exchange ->
+            exchange.responseHeaders.add("Retry-After", "60")
             exchange.sendResponseHeaders(429, -1)
             exchange.close()
         }
 
-        assertFailsWith<InstagramEmbedException> {
+        val error = assertFailsWith<InstagramHttpException> {
             client.getText(baseUri.resolve("/failed"))
         }
+
+        assertEquals(InstagramRequestStage.EMBED, error.stage)
+        assertEquals(429, error.statusCode)
+        assertEquals(Duration.ofSeconds(60), error.retryAfter)
     }
 }

@@ -133,6 +133,42 @@ class DownloadJobServiceTest {
     }
 
     @Test
+    fun schedulesRetryAtRequestedTime() {
+        val job = job(attempts = 1)
+        val retryAt = Instant.parse("2026-01-01T01:00:00Z")
+        every { repository.findById(1) } returns Optional.of(job)
+
+        val actual = service.retryAt(1, "throttled", retryAt)
+
+        assertTrue(actual is DownloadFailureResolution.RetryScheduled)
+        assertEquals(DownloadJobStatus.QUEUED, actual.job.status)
+        assertEquals(1, actual.job.attempts)
+        assertEquals(retryAt, actual.job.nextAttemptAt)
+        assertEquals("throttled", actual.job.errorMessage)
+    }
+
+    @Test
+    fun defersWithoutConsumingAttempt() {
+        val leaseToken = UUID.randomUUID()
+        val retryAt = Instant.parse("2026-01-01T01:00:00Z")
+        val job = job(attempts = 1).apply {
+            status = DownloadJobStatus.PROCESSING
+            this.leaseToken = leaseToken
+            leaseExpiresAt = retryAt
+        }
+        every { repository.findById(1) } returns Optional.of(job)
+
+        val actual = service.deferBeforeAttempt(1, retryAt, "rate limited")
+
+        assertEquals(DownloadJobStatus.QUEUED, actual.status)
+        assertEquals(0, actual.attempts)
+        assertEquals(retryAt, actual.nextAttemptAt)
+        assertEquals("rate limited", actual.errorMessage)
+        assertEquals(null, actual.leaseToken)
+        assertEquals(null, actual.leaseExpiresAt)
+    }
+
+    @Test
     fun failsJobWhenAttemptsExhausted() {
         val job = job(attempts = 3)
         every { repository.findById(1) } returns Optional.of(job)

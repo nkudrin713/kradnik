@@ -6,9 +6,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.requiredId
-import com.nkudrin713.kradnik.download.instagram.InstagramEmbedDownloader
-import com.nkudrin713.kradnik.download.instagram.InstagramEmbedException
-import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
+import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
+import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.request.DownloadRequest
@@ -17,7 +16,6 @@ import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
@@ -33,8 +31,7 @@ class DownloadJobProcessor(
     private val downloadPreflightService: DownloadPreflightService,
     private val telegramVideoPreparer: TelegramVideoPreparer,
     private val telegramFileSender: TelegramFileSender,
-    private val instagramEmbedDownloader: InstagramEmbedDownloader,
-    private val ytDlpService: YtDlpService,
+    private val downloadExecutorResolver: DownloadExecutorResolver,
     private val mediaMetadataMapper: MediaMetadataMapper,
     private val downloadJobLifecycle: DownloadJobLifecycle,
     private val downloadAnalytics: DownloadAnalytics,
@@ -56,8 +53,25 @@ class DownloadJobProcessor(
             }
 
             val request = DownloadRequest.fromJob(job)
-            val instagramDownload = prepareInstagramDownload(request, jobId)
-            val metadata = instagramDownload?.metadata ?: ytDlpService.extractMetadata(request)
+            val preparation = downloadExecutorResolver.resolve(request).prepare(request)
+            val session = when (preparation) {
+                is DownloadPreparation.Ready -> preparation.session
+                is DownloadPreparation.NotReady -> {
+                    downloadJobLifecycle.deferBeforeAttempt(job, preparation.retryAt, preparation.reason)
+                    return
+                }
+
+                is DownloadPreparation.RetryableFailure -> {
+                    downloadJobLifecycle.retryAt(job, preparation.retryAt, preparation.reason)
+                    return
+                }
+
+                is DownloadPreparation.TerminalFailure -> {
+                    downloadJobLifecycle.failTerminal(job, preparation.reason)
+                    return
+                }
+            }
+            val metadata = session.metadata
             val preflightDecision = downloadPreflightService.check(request, metadata)
             downloadAnalytics.recordPreflightDecision(request, metadata, preflightDecision)
             if (preflightDecision is DownloadPreflightDecision.Rejected) {
@@ -70,11 +84,7 @@ class DownloadJobProcessor(
 
             val uploadJob = markMetadata(jobId, metadata)
 
-            val downloadedFile = if (instagramDownload != null) {
-                instagramEmbedDownloader.download(instagramDownload, outputDir)
-            } else {
-                ytDlpService.download(downloadRequest, outputDir)
-            }
+            val downloadedFile = session.download(downloadRequest, outputDir)
             val uploadFile = prepareForUpload(uploadJob, downloadedFile, outputDir, jobId)
 
             upload(uploadJob, uploadFile)
@@ -91,22 +101,6 @@ class DownloadJobProcessor(
             downloadJobLifecycle.failOrRetry(job, error.message ?: error.javaClass.simpleName)
         } finally {
             workDirCleaner.deleteRecursively(outputDir)
-        }
-    }
-
-    private suspend fun prepareInstagramDownload(
-        request: DownloadRequest,
-        jobId: Long,
-    ): InstagramPreparedDownload? {
-        if (!instagramEmbedDownloader.supports(request)) {
-            return null
-        }
-
-        return try {
-            instagramEmbedDownloader.prepare(request)
-        } catch (error: InstagramEmbedException) {
-            logger.warn("JOB[{}] Instagram embed extraction failed, falling back to yt-dlp", jobId, error)
-            null
         }
     }
 

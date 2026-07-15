@@ -24,6 +24,8 @@ class InstagramEmbedDownloaderTest {
 
     @Test
     fun supportsPublicInstagramVideoUrls() {
+        assertTrue(downloader.isInstagramRequest(request("https://www.instagram.com/stories/user/123/")))
+        assertFalse(downloader.isInstagramRequest(request("https://example.com/reel/ABC_123/")))
         assertTrue(downloader.supports(request("https://www.instagram.com/reel/ABC_123/")))
         assertTrue(downloader.supports(request("https://instagram.com/p/ABC-123?utm_source=test")))
         assertFalse(downloader.supports(request("https://www.instagram.com/stories/user/123/")))

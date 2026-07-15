@@ -160,7 +160,48 @@ class DownloadJobService(
 		errorMessage: String,
 	): DownloadFailureResolution {
 		val job = getJobInternal(jobId)
+		return resolveFailure(job, errorMessage, Instant.now())
+	}
 
+	@Transactional
+	fun retryAt(
+		jobId: Long,
+		errorMessage: String,
+		retryAt: Instant,
+	): DownloadFailureResolution {
+		val job = getJobInternal(jobId)
+		return resolveFailure(job, errorMessage, retryAt)
+	}
+
+	@Transactional
+	fun deferBeforeAttempt(
+		jobId: Long,
+		retryAt: Instant,
+		reason: String,
+	): DownloadJob {
+		val job = getJobInternal(jobId)
+		job.status = DownloadJobStatus.QUEUED
+		job.attempts = (job.attempts - 1).coerceAtLeast(0)
+		job.nextAttemptAt = retryAt
+		job.errorMessage = reason.take(1000)
+		job.leaseToken = null
+		job.leaseExpiresAt = null
+
+		logger.info(
+			"CHAT[{}] JOB[{}] deferred before request: retryAt={}",
+			job.telegramChatId,
+			jobId,
+			retryAt,
+		)
+
+		return job
+	}
+
+	private fun resolveFailure(
+		job: DownloadJob,
+		errorMessage: String,
+		retryAt: Instant,
+	): DownloadFailureResolution {
 		job.errorMessage = errorMessage.take(1000)
 		job.leaseToken = null
 		job.leaseExpiresAt = null
@@ -170,12 +211,13 @@ class DownloadJobService(
 			job.completedAt = Instant.now()
 		} else {
 			job.status = DownloadJobStatus.QUEUED
+			job.nextAttemptAt = retryAt
 		}
 
 		logger.warn(
 			"CHAT[{}] JOB[{}] failed: status={}, attempts={}, error={}",
 			job.telegramChatId,
-			jobId,
+			requireNotNull(job.id),
 			job.status,
 			job.attempts,
 			job.errorMessage,

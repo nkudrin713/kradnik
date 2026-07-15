@@ -1,0 +1,36 @@
+package com.nkudrin713.kradnik.download.executor
+
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
+import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import org.springframework.core.annotation.Order
+import org.springframework.stereotype.Component
+import java.nio.file.Path
+
+@Component
+@Order(1000)
+class YtDlpDownloadExecutor(
+    private val ytDlpService: YtDlpService,
+) : DownloadExecutor {
+    override fun supports(request: DownloadRequest): Boolean = true
+
+    override suspend fun prepare(request: DownloadRequest): DownloadPreparation {
+        return DownloadPreparation.Ready(
+            YtDlpPreparedDownloadSession(
+                metadata = ytDlpService.extractMetadata(request),
+            )
+        )
+    }
+
+    private inner class YtDlpPreparedDownloadSession(
+        override val metadata: YtDlpMetadataDto,
+    ) : PreparedDownloadSession {
+        override suspend fun download(
+            request: DownloadRequest,
+            outputDir: Path,
+        ): DownloadedFile {
+            return ytDlpService.download(request, outputDir)
+        }
+    }
+}

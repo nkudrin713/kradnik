@@ -111,6 +111,9 @@ class DownloadJob(
 	@Column(name = "completed_at")
 	var completedAt: Instant? = null,
 
+	@Column(name = "next_attempt_at", nullable = false)
+	var nextAttemptAt: Instant = Instant.EPOCH,
+
 	@Column(name = "lease_token")
 	var leaseToken: UUID? = null,
 

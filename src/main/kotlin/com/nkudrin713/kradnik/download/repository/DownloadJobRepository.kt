@@ -17,6 +17,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
                 FROM download_jobs
                 WHERE status = 'queued'
                   AND attempts < :maxAttempts
+                  AND next_attempt_at <= now()
                 ORDER BY created_at
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1

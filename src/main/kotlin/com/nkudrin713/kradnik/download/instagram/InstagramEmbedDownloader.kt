@@ -19,6 +19,11 @@ class InstagramEmbedDownloader(
 ) {
     private val objectMapper = jacksonObjectMapper()
 
+    fun isInstagramRequest(request: DownloadRequest): Boolean {
+        val uri = parseUrlOrNull(request.originalUrl.trim()) ?: return false
+        return isInstagramHost(uri.host)
+    }
+
     fun supports(request: DownloadRequest): Boolean {
         if (request.outputType != OutputType.VIDEO) {
             return false
@@ -210,7 +215,7 @@ data class InstagramPreparedDownload(
     val metadata: YtDlpMetadataDto,
 )
 
-class InstagramEmbedException : RuntimeException {
+open class InstagramEmbedException : RuntimeException {
     constructor(message: String) : super(message)
 
     constructor(message: String, cause: Throwable) : super(message, cause)

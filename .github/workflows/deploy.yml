@@ -214,6 +214,7 @@ jobs:
             metabase_container_name="kradnik-prod-metabase"
             metabase_volume_name="kradnik-prod-metabase-data"
             metabase_public_port="3001"
+            metabase_site_url="https://analytics.nkudrin.dev"
           else
             app_environment="test"
             app_container_name="kradnik-test-app"
@@ -224,6 +225,7 @@ jobs:
             metabase_container_name="kradnik-test-metabase"
             metabase_volume_name="kradnik-test-metabase-data"
             metabase_public_port="3000"
+            metabase_site_url="https://analytics-test.nkudrin.dev"
           fi
           {
             printf 'APP_IMAGE=%s\n' "$app_image"
@@ -238,6 +240,7 @@ jobs:
             printf 'METABASE_CONTAINER_NAME=%s\n' "$metabase_container_name"
             printf 'METABASE_VOLUME_NAME=%s\n' "$metabase_volume_name"
             printf 'METABASE_PUBLIC_PORT=%s\n' "$metabase_public_port"
+            printf 'METABASE_SITE_URL=%s\n' "$metabase_site_url"
             printf 'METABASE_ANALYTICS_DB_PASSWORD=%s\n' "$metabase_analytics_db_password"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
             printf 'TELEGRAM_DONATION_URL=%s\n' "${TELEGRAM_DONATION_URL:-https://pay.cloudtips.ru/p/6f779a3d}"

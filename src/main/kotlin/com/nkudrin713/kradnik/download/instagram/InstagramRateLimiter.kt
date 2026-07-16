@@ -4,6 +4,7 @@ import com.nkudrin713.kradnik.download.ratelimit.RateLimitBucketKey
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitCoordinator
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitPolicy
+import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
 import com.nkudrin713.kradnik.download.ratelimit.RateLimiter
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -40,11 +41,11 @@ class InstagramRateLimiter(
     )
     override fun acquire(): RateLimitDecision = coordinator.acquire(key, policy)
 
-    override fun recordSuccess() {
-        coordinator.recordSuccess(key)
+    override fun recordSuccess(permit: RateLimitPermit) {
+        coordinator.recordSuccess(key, permit)
     }
 
-    override fun recordThrottle(retryAfter: Duration?): Instant {
-        return coordinator.recordThrottle(key, policy, retryAfter)
+    override fun recordThrottle(permit: RateLimitPermit, retryAfter: Duration?): Instant {
+        return coordinator.recordThrottle(key, policy, permit, retryAfter)
     }
 }

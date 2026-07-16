@@ -6,6 +6,7 @@ import com.nkudrin713.kradnik.download.executor.DownloadExecutor
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
+import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -29,8 +30,8 @@ class InstagramDownloadExecutor(
             return DownloadPreparation.TerminalFailure(UNSUPPORTED_MESSAGE)
         }
 
-        when (val decision = rateLimiter.acquire()) {
-            RateLimitDecision.Granted -> Unit
+        val permit = when (val decision = rateLimiter.acquire()) {
+            is RateLimitDecision.Granted -> decision.permit
             is RateLimitDecision.Deferred -> return DownloadPreparation.NotReady(
                 retryAt = decision.retryAt,
                 reason = RATE_LIMIT_MESSAGE,
@@ -39,22 +40,25 @@ class InstagramDownloadExecutor(
 
         return try {
             val prepared = embedDownloader.prepare(request)
-            rateLimiter.recordSuccess()
+            rateLimiter.recordSuccess(permit)
             DownloadPreparation.Ready(
                 InstagramPreparedDownloadSession(prepared)
             )
         } catch (error: InstagramHttpException) {
-            classifyHttpError(error)
+            classifyHttpError(error, permit)
         } catch (error: InstagramEmbedException) {
             DownloadPreparation.TerminalFailure(error.message ?: error.javaClass.simpleName)
         }
     }
 
-    private fun classifyHttpError(error: InstagramHttpException): DownloadPreparation {
+    private fun classifyHttpError(
+        error: InstagramHttpException,
+        permit: RateLimitPermit,
+    ): DownloadPreparation {
         val reason = error.message ?: error.javaClass.simpleName
         return when (error.statusCode) {
             403, 429 -> DownloadPreparation.RetryableFailure(
-                retryAt = rateLimiter.recordThrottle(error.retryAfter),
+                retryAt = rateLimiter.recordThrottle(permit, error.retryAfter),
                 reason = reason,
             )
 

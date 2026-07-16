@@ -4,6 +4,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
+import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -48,16 +49,16 @@ class InstagramDownloadExecutorTest {
         val outputDir = Path.of("/tmp/output")
         val downloaded = DownloadedFile(outputDir.resolve("video.mp4"), 100)
         every { embedDownloader.supports(request) } returns true
-        every { rateLimiter.acquire() } returns RateLimitDecision.Granted
+        every { rateLimiter.acquire() } returns RateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } returns prepared
-        every { rateLimiter.recordSuccess() } returns Unit
+        every { rateLimiter.recordSuccess(PERMIT) } returns Unit
         coEvery { embedDownloader.download(prepared, outputDir) } returns downloaded
 
         val result = assertIs<DownloadPreparation.Ready>(executor.prepare(request))
 
         assertEquals(prepared.metadata, result.session.metadata)
         assertEquals(downloaded, result.session.download(request, outputDir))
-        verify(exactly = 1) { rateLimiter.recordSuccess() }
+        verify(exactly = 1) { rateLimiter.recordSuccess(PERMIT) }
         coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
     }
 
@@ -68,9 +69,9 @@ class InstagramDownloadExecutorTest {
         val outputDir = Path.of("/tmp/output")
         val downloaded = DownloadedFile(outputDir.resolve("video.mp4"), 100)
         every { embedDownloader.supports(request) } returns true
-        every { rateLimiter.acquire() } returns RateLimitDecision.Granted
+        every { rateLimiter.acquire() } returns RateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } returns prepared
-        every { rateLimiter.recordSuccess() } returns Unit
+        every { rateLimiter.recordSuccess(PERMIT) } returns Unit
         coEvery { ytDlpService.download(request, outputDir) } returns downloaded
 
         val result = assertIs<DownloadPreparation.Ready>(executor.prepare(request))
@@ -88,9 +89,9 @@ class InstagramDownloadExecutorTest {
         val outputDir = Path.of("/tmp/output")
         val downloaded = DownloadedFile(outputDir.resolve("audio.mp3"), 100)
         every { embedDownloader.supports(request) } returns true
-        every { rateLimiter.acquire() } returns RateLimitDecision.Granted
+        every { rateLimiter.acquire() } returns RateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } returns prepared
-        every { rateLimiter.recordSuccess() } returns Unit
+        every { rateLimiter.recordSuccess(PERMIT) } returns Unit
         coEvery { ytDlpService.download(request, outputDir) } returns downloaded
 
         val result = assertIs<DownloadPreparation.Ready>(executor.prepare(request))
@@ -110,14 +111,14 @@ class InstagramDownloadExecutorTest {
             retryAfter = Duration.ofMinutes(10),
         )
         every { embedDownloader.supports(request) } returns true
-        every { rateLimiter.acquire() } returns RateLimitDecision.Granted
+        every { rateLimiter.acquire() } returns RateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } throws error
-        every { rateLimiter.recordThrottle(Duration.ofMinutes(10)) } returns retryAt
+        every { rateLimiter.recordThrottle(PERMIT, Duration.ofMinutes(10)) } returns retryAt
 
         val result = assertIs<DownloadPreparation.RetryableFailure>(executor.prepare(request))
 
         assertEquals(retryAt, result.retryAt)
-        verify { rateLimiter.recordThrottle(Duration.ofMinutes(10)) }
+        verify { rateLimiter.recordThrottle(PERMIT, Duration.ofMinutes(10)) }
     }
 
     @Test
@@ -151,5 +152,9 @@ class InstagramDownloadExecutorTest {
             mediaUri = mediaUri,
             metadata = mockk<YtDlpMetadataDto>(),
         )
+    }
+
+    private companion object {
+        val PERMIT = RateLimitPermit(Instant.parse("2026-07-15T10:00:00Z"))
     }
 }

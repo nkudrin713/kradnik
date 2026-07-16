@@ -26,36 +26,54 @@ class RateLimitCoordinatorTest {
 
     @Test
     fun grantsFirstRequestAndDefersNextRequest() {
-        assertEquals(RateLimitDecision.Granted, coordinator.acquire(key, policy))
+        val granted = assertIs<RateLimitDecision.Granted>(coordinator.acquire(key, policy))
 
         val deferred = assertIs<RateLimitDecision.Deferred>(coordinator.acquire(key, policy))
 
+        assertEquals(now, granted.permit.acquiredAt)
         assertEquals(now.plusSeconds(30), deferred.retryAt)
     }
 
     @Test
     fun increasesCooldownAfterConsecutiveThrottles() {
-        assertEquals(now.plus(Duration.ofMinutes(30)), coordinator.recordThrottle(key, policy, null))
-        assertEquals(now.plus(Duration.ofHours(1)), coordinator.recordThrottle(key, policy, null))
+        val permit = RateLimitPermit(now)
+
+        assertEquals(now.plus(Duration.ofMinutes(30)), coordinator.recordThrottle(key, policy, permit, null))
+        assertEquals(now.plus(Duration.ofHours(1)), coordinator.recordThrottle(key, policy, permit, null))
     }
 
     @Test
     fun respectsLongerRetryAfter() {
-        val retryAt = coordinator.recordThrottle(key, policy, Duration.ofHours(2))
+        val retryAt = coordinator.recordThrottle(key, policy, RateLimitPermit(now), Duration.ofHours(2))
 
         assertEquals(now.plus(Duration.ofHours(2)), retryAt)
     }
 
     @Test
     fun successResetsThrottleState() {
-        coordinator.recordThrottle(key, policy, null)
+        coordinator.recordThrottle(key, policy, RateLimitPermit(now.minusSeconds(1)), null)
+        val successfulPermit = RateLimitPermit(now.plusSeconds(1))
 
-        coordinator.recordSuccess(key)
+        coordinator.recordSuccess(key, successfulPermit)
 
         val state = store.state(key)
         assertEquals(0, state.consecutiveThrottles)
         assertEquals(null, state.cooldownUntil)
         assertEquals(now, state.lastSuccessAt)
+    }
+
+    @Test
+    fun staleSuccessDoesNotClearNewerThrottle() {
+        val stalePermit = RateLimitPermit(now.minusSeconds(1))
+        val currentPermit = RateLimitPermit(now)
+        coordinator.recordThrottle(key, policy, currentPermit, null)
+
+        coordinator.recordSuccess(key, stalePermit)
+
+        val state = store.state(key)
+        assertEquals(1, state.consecutiveThrottles)
+        assertEquals(now.plus(Duration.ofMinutes(30)), state.cooldownUntil)
+        assertEquals(null, state.lastSuccessAt)
     }
 
     private class InMemoryRateLimitBucketStore : RateLimitBucketStore {

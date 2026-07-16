@@ -25,13 +25,19 @@ class RateLimitCoordinator(
             state.nextAllowedAt = now.plus(policy.minInterval).plus(randomJitter(policy.maxJitter))
             state.lastRequestAt = now
             state.updatedAt = now
-            RateLimitDecision.Granted
+            RateLimitDecision.Granted(RateLimitPermit(now))
         }
     }
 
-    fun recordSuccess(key: RateLimitBucketKey) {
+    fun recordSuccess(
+        key: RateLimitBucketKey,
+        permit: RateLimitPermit,
+    ) {
         store.update(key) { state ->
             val now = clock.instant()
+            if (state.lastThrottleAt?.isBefore(permit.acquiredAt) == false) {
+                return@update
+            }
             state.cooldownUntil = null
             state.consecutiveThrottles = 0
             state.lastSuccessAt = now
@@ -42,6 +48,7 @@ class RateLimitCoordinator(
     fun recordThrottle(
         key: RateLimitBucketKey,
         policy: RateLimitPolicy,
+        permit: RateLimitPermit,
         retryAfter: Duration?,
     ): Instant {
         return store.update(key) { state ->
@@ -52,7 +59,7 @@ class RateLimitCoordinator(
             val cooldown = maxOf(configuredCooldown, retryAfterCooldown)
             val cooldownUntil = now.plus(cooldown)
             state.cooldownUntil = maxOf(state.cooldownUntil ?: Instant.EPOCH, cooldownUntil)
-            state.lastThrottleAt = now
+            state.lastThrottleAt = maxOf(state.lastThrottleAt ?: Instant.EPOCH, permit.acquiredAt, now)
             state.updatedAt = now
             requireNotNull(state.cooldownUntil)
         }

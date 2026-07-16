@@ -6,18 +6,27 @@ import java.time.Instant
 interface RateLimiter {
     fun acquire(): RateLimitDecision
 
-    fun recordSuccess()
+    fun recordSuccess(permit: RateLimitPermit)
 
-    fun recordThrottle(retryAfter: Duration? = null): Instant
+    fun recordThrottle(
+        permit: RateLimitPermit,
+        retryAfter: Duration? = null,
+    ): Instant
 }
 
 sealed interface RateLimitDecision {
-    data object Granted : RateLimitDecision
+    data class Granted(
+        val permit: RateLimitPermit,
+    ) : RateLimitDecision
 
     data class Deferred(
         val retryAt: Instant,
     ) : RateLimitDecision
 }
+
+data class RateLimitPermit(
+    val acquiredAt: Instant,
+)
 
 data class RateLimitBucketKey(
     val provider: String,

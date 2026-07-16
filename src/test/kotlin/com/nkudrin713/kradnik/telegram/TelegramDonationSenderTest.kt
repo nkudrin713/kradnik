@@ -86,6 +86,7 @@ class TelegramDonationSenderTest {
             every { isOk } returns false
             every { errorCode() } returns errorCode
             every { description() } returns description
+            every { parameters() } returns null
         }
     }
 }

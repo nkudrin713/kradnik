@@ -2,12 +2,16 @@ package com.nkudrin713.kradnik.download.repository
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.ratelimit.PostgresRateLimitBucketStore
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitBucketKey
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitBucketStore
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitCoordinator
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitPolicy
+import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
+import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
+import com.nkudrin713.kradnik.download.service.DownloadJobService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -44,6 +48,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     private val repository: DownloadJobRepository,
     private val jdbcTemplate: JdbcTemplate,
     private val rateLimitBucketStore: RateLimitBucketStore,
+    private val downloadJobService: DownloadJobService,
     transactionManager: PlatformTransactionManager,
 ) {
     private val transactionTemplate = TransactionTemplate(transactionManager)
@@ -130,6 +135,64 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     }
 
     @Test
+    fun createsOnlyOneJobForConcurrentTelegramUpdate() {
+        val command = CreateDownloadJobCommand(
+            telegramUserId = 1,
+            telegramChatId = 2,
+            telegramUpdateId = 123,
+            originalUrl = "https://example.com/raw",
+            normalizedUrl = "https://example.com/normalized",
+            cacheKey = "same-update",
+            outputType = OutputType.VIDEO,
+            downloadPreset = "preset",
+            selectedFormat = "format",
+        )
+        val executor = Executors.newFixedThreadPool(2)
+
+        val results = try {
+            executor.invokeAll(
+                listOf(
+                    Callable { downloadJobService.createJob(command) },
+                    Callable { downloadJobService.createJob(command) },
+                )
+            ).map { it.get() }
+        } finally {
+            executor.shutdownNow()
+        }
+
+        assertEquals(1, results.count { it is CreateDownloadJobResult.Created })
+        assertEquals(1, results.count { it is CreateDownloadJobResult.Existing })
+        assertEquals(1, repository.count())
+    }
+
+    @Test
+    fun rejectsStateTransitionFromStaleLeaseOwner() {
+        val saved = repository.saveAndFlush(job("lease-fencing"))
+        val staleToken = UUID.randomUUID()
+        val currentToken = UUID.randomUUID()
+        jdbcTemplate.update(
+            """
+                UPDATE download_jobs
+                SET status = 'processing', lease_token = ?, lease_expires_at = now() + INTERVAL '5 minutes'
+                WHERE id = ?
+            """.trimIndent(),
+            currentToken,
+            saved.id,
+        )
+
+        val staleUpdate = transactionTemplate.execute {
+            repository.markOwnedUploading(requireNotNull(saved.id), staleToken)
+        }
+        val ownedUpdate = transactionTemplate.execute {
+            repository.markOwnedUploading(requireNotNull(saved.id), currentToken)
+        }
+
+        assertEquals(0, staleUpdate)
+        assertEquals(1, ownedUpdate)
+        assertEquals(DownloadJobStatus.UPLOADING, repository.findById(saved.id!!).orElseThrow().status)
+    }
+
+    @Test
     fun claimsDifferentJobsConcurrently() {
         repository.saveAllAndFlush(listOf(job("first"), job("second")))
         val executor = Executors.newFixedThreadPool(2)
@@ -176,8 +239,8 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         )
 
         transactionTemplate.executeWithoutResult {
-            repository.requeueStaleInProgressJobs(Instant.now(), 3)
-            repository.failStaleInProgressJobs(Instant.now(), 3)
+            repository.requeueStaleInProgressJobs(3)
+            repository.failStaleInProgressJobs(3)
         }
 
         assertEquals(DownloadJobStatus.QUEUED, repository.findById(retryable.id!!).orElseThrow().status)
@@ -213,7 +276,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 repository.claimNextQueuedJob(
                     maxAttempts = 3,
                     leaseToken = UUID.randomUUID(),
-                    leaseExpiresAt = Instant.now().plusSeconds(3600),
+                    leaseDurationMs = 3_600_000,
                 )
             }
         )
@@ -250,5 +313,5 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 @EnableAutoConfiguration
 @EntityScan(basePackageClasses = [DownloadJob::class])
 @EnableJpaRepositories(basePackageClasses = [DownloadJobRepository::class])
-@Import(PostgresRateLimitBucketStore::class)
+@Import(PostgresRateLimitBucketStore::class, DownloadJobService::class)
 class DownloadJobRepositoryTestApplication

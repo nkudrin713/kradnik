@@ -1,17 +1,17 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.download.service.DownloadJobLeaseLostException
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
-import java.time.Instant
 import java.util.UUID
 import kotlin.math.max
 
@@ -24,7 +24,7 @@ import kotlin.math.max
 class DownloadQueueWorker(
     private val downloadJobService: DownloadJobService,
     private val downloadJobProcessor: DownloadJobProcessor,
-    @Value("\${download.worker-lease-duration-ms:3600000}")
+    @Value("\${download.worker-lease-duration-ms:300000}")
     private val workerLeaseDurationMs: Long,
 ) {
     init {
@@ -36,9 +36,9 @@ class DownloadQueueWorker(
         recoverExpiredLeases()
 
         val leaseToken = UUID.randomUUID()
-        val job = downloadJobService.claimNextQueuedJob(
+        val attempt = downloadJobService.claimNextQueuedJob(
             leaseToken = leaseToken,
-            leaseExpiresAt = nextLeaseExpiration(),
+            leaseDurationMs = workerLeaseDurationMs,
         ) ?: return
 
         runBlocking {
@@ -46,17 +46,17 @@ class DownloadQueueWorker(
                 while (isActive) {
                     delay(heartbeatIntervalMs())
                     val renewed = downloadJobService.renewLease(
-                        jobId = requireNotNull(job.id),
+                        jobId = attempt.requiredId(),
                         leaseToken = leaseToken,
-                        leaseExpiresAt = nextLeaseExpiration(),
+                        leaseDurationMs = workerLeaseDurationMs,
                     )
                     if (!renewed) {
-                        throw DownloadLeaseLostException(requireNotNull(job.id))
+                        throw DownloadJobLeaseLostException(attempt.requiredId())
                     }
                 }
             }
             try {
-                downloadJobProcessor.process(job)
+                downloadJobProcessor.process(attempt)
             } finally {
                 heartbeat.cancelAndJoin()
             }
@@ -64,17 +64,10 @@ class DownloadQueueWorker(
     }
 
     private fun recoverExpiredLeases() {
-        downloadJobService.recoverExpiredLeases(Instant.now())
-    }
-
-    private fun nextLeaseExpiration(): Instant {
-        return Instant.now().plusMillis(workerLeaseDurationMs)
+        downloadJobService.recoverExpiredLeases()
     }
 
     private fun heartbeatIntervalMs(): Long {
         return max(1, workerLeaseDurationMs / 3)
     }
 }
-
-private class DownloadLeaseLostException(jobId: Long) :
-    RuntimeException("Download job lease lost: $jobId")

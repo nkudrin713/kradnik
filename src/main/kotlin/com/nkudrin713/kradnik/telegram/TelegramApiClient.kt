@@ -6,6 +6,7 @@ import com.pengrad.telegrambot.response.BaseResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.springframework.stereotype.Component
+import java.time.Duration
 
 @Component
 class TelegramApiClient(
@@ -22,6 +23,10 @@ class TelegramApiClient(
             throw TelegramSendException(
                 errorCode = response.errorCode(),
                 description = description,
+                retryAfter = response.parameters()
+                    ?.retryAfter()
+                    ?.toLong()
+                    ?.let(Duration::ofSeconds),
             )
         }
 
@@ -41,6 +46,7 @@ class TelegramApiClient(
 class TelegramSendException(
     val errorCode: Int?,
     val description: String?,
+    val retryAfter: Duration? = null,
     val kind: TelegramSendFailureKind = TelegramSendFailureKind.from(errorCode, description),
 ) : RuntimeException("Telegram send failed: code=$errorCode, description=$description") {
     constructor(description: String?) : this(null, description)

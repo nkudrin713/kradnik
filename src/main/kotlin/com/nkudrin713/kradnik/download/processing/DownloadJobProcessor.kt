@@ -11,6 +11,7 @@ import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
@@ -43,12 +44,16 @@ class DownloadJobProcessor(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    suspend fun process(job: DownloadJob) {
+    suspend fun process(attempt: ClaimedDownloadJob) {
+        val job = attempt.job
         val jobId = requireNotNull(job.id)
-        val outputDir = Path.of(workDir).resolve(jobId.toString()).createDirectories()
+        val outputDir = Path.of(workDir)
+            .resolve(jobId.toString())
+            .resolve(attempt.leaseToken.toString())
+            .createDirectories()
 
         try {
-            if (sendCached(job)) {
+            if (sendCached(attempt)) {
                 return
             }
 
@@ -57,17 +62,17 @@ class DownloadJobProcessor(
             val session = when (preparation) {
                 is DownloadPreparation.Ready -> preparation.session
                 is DownloadPreparation.NotReady -> {
-                    downloadJobLifecycle.deferBeforeAttempt(job, preparation.retryAt, preparation.reason)
+                    downloadJobLifecycle.deferBeforeAttempt(attempt, preparation.retryAt, preparation.reason)
                     return
                 }
 
                 is DownloadPreparation.RetryableFailure -> {
-                    downloadJobLifecycle.retryAt(job, preparation.retryAt, preparation.reason)
+                    downloadJobLifecycle.retryAt(attempt, preparation.retryAt, preparation.reason)
                     return
                 }
 
                 is DownloadPreparation.TerminalFailure -> {
-                    downloadJobLifecycle.failTerminal(job, preparation.reason)
+                    downloadJobLifecycle.failTerminal(attempt, preparation.reason)
                     return
                 }
             }
@@ -75,23 +80,23 @@ class DownloadJobProcessor(
             val preflightDecision = downloadPreflightService.check(request, metadata)
             downloadAnalytics.recordPreflightDecision(request, metadata, preflightDecision)
             if (preflightDecision is DownloadPreflightDecision.Rejected) {
-                downloadJobLifecycle.rejectTooLarge(job, preflightDecision.reason)
+                downloadJobLifecycle.rejectTooLarge(attempt, preflightDecision.reason)
                 return
             }
             val downloadRequest = (preflightDecision as DownloadPreflightDecision.Allowed).request
 
-            downloadJobLifecycle.markDownloading(job)
+            downloadJobLifecycle.markDownloading(attempt)
 
-            val uploadJob = markMetadata(jobId, metadata)
+            val uploadJob = markMetadata(attempt, metadata)
 
             val downloadedFile = session.download(downloadRequest, outputDir)
             val uploadFile = prepareForUpload(uploadJob, downloadedFile, outputDir, jobId)
 
-            upload(uploadJob, uploadFile)
+            upload(attempt, uploadJob, uploadFile)
         } catch (error: YtDlpAuthenticationRequiredException) {
             logger.warn("JOB[{}] requires authentication, failing without retry", jobId, error)
             downloadJobLifecycle.failAuthenticationRequired(
-                job,
+                attempt,
                 error.message ?: error.javaClass.simpleName,
             )
         } catch (error: CancellationException) {
@@ -100,13 +105,13 @@ class DownloadJobProcessor(
             logger.error("JOB[{}] Telegram send failed", jobId, error)
             val errorMessage = error.message ?: error.javaClass.simpleName
             if (error.isRetryable()) {
-                downloadJobLifecycle.failOrRetry(job, errorMessage)
+                downloadJobLifecycle.failOrRetry(attempt, errorMessage, error.retryAfter)
             } else {
-                downloadJobLifecycle.failTerminal(job, errorMessage)
+                downloadJobLifecycle.failTerminal(attempt, errorMessage)
             }
         } catch (error: Exception) {
             logger.error("JOB[{}] processing failed", jobId, error)
-            downloadJobLifecycle.failOrRetry(job, error.message ?: error.javaClass.simpleName)
+            downloadJobLifecycle.failOrRetry(attempt, error.message ?: error.javaClass.simpleName)
         } finally {
             workDirCleaner.deleteRecursively(outputDir)
         }
@@ -124,8 +129,12 @@ class DownloadJobProcessor(
         }
     }
 
-    private suspend fun upload(job: DownloadJob, uploadFile: DownloadedFile) {
-        downloadJobLifecycle.markUploading(job)
+    private suspend fun upload(
+        attempt: ClaimedDownloadJob,
+        job: DownloadJob,
+        uploadFile: DownloadedFile,
+    ) {
+        downloadJobLifecycle.markUploading(attempt)
         logger.info(
             "JOB[{}] uploading to Telegram: type={}, sizeMb={}",
             job.requiredId(),
@@ -135,10 +144,11 @@ class DownloadJobProcessor(
 
         val telegramResult = telegramFileSender.send(job, uploadFile)
 
-        downloadJobLifecycle.complete(job, telegramResult.toDownloadedFileResult())
+        downloadJobLifecycle.complete(attempt, telegramResult.toDownloadedFileResult())
     }
 
-    private suspend fun sendCached(job: DownloadJob): Boolean {
+    private suspend fun sendCached(attempt: ClaimedDownloadJob): Boolean {
+        val job = attempt.job
         if (!telegramFileCacheEnabled) {
             return false
         }
@@ -162,22 +172,22 @@ class DownloadJobProcessor(
             return false
         }
 
-        downloadJobLifecycle.markUploading(job)
-        downloadJobLifecycle.complete(job, telegramResult.toDownloadedFileResult())
+        downloadJobLifecycle.markUploading(attempt)
+        downloadJobLifecycle.complete(attempt, telegramResult.toDownloadedFileResult())
 
         return true
     }
 
     private fun markMetadata(
-        jobId: Long,
+        attempt: ClaimedDownloadJob,
         metadata: YtDlpMetadataDto,
     ): DownloadJob {
         val mappedMetadata = mediaMetadataMapper.toMediaMetadata(metadata)
         val job = downloadJobService.markMetadata(
-            jobId,
-            mappedMetadata,
+            attempt = attempt,
+            metadata = mappedMetadata,
         )
-        downloadAnalytics.recordMetadataExtracted(jobId, mappedMetadata, job)
+        downloadAnalytics.recordMetadataExtracted(attempt.requiredId(), mappedMetadata, job)
         return job
     }
 

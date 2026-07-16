@@ -1,12 +1,14 @@
 package com.nkudrin713.kradnik.telegram
 
 import com.pengrad.telegrambot.TelegramBot
+import com.pengrad.telegrambot.model.ResponseParameters
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.response.SendResponse
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
@@ -26,13 +28,21 @@ class TelegramApiClientTest {
 
     @Test
     fun classifiesRateLimitAsRetryable() = runTest {
-        every { bot.execute(any<SendMessage>()) } returns failedResponse(429, "Too Many Requests")
+        val parameters: ResponseParameters = mockk {
+            every { retryAfter() } returns 17
+        }
+        every { bot.execute(any<SendMessage>()) } returns failedResponse(
+            errorCode = 429,
+            description = "Too Many Requests",
+            parameters = parameters,
+        )
 
         val error = assertFailsWith<TelegramSendException> {
             client.executeIo(SendMessage(100, "text"))
         }
 
         error.kind shouldBe TelegramSendFailureKind.RETRYABLE
+        error.retryAfter shouldBe Duration.ofSeconds(17)
     }
 
     @Test
@@ -63,11 +73,16 @@ class TelegramApiClientTest {
         TelegramSendException("Telegram response does not contain message").kind shouldBe TelegramSendFailureKind.RETRYABLE
     }
 
-    private fun failedResponse(errorCode: Int, description: String): SendResponse {
+    private fun failedResponse(
+        errorCode: Int,
+        description: String,
+        parameters: ResponseParameters? = null,
+    ): SendResponse {
         return mockk {
             every { isOk } returns false
             every { errorCode() } returns errorCode
             every { description() } returns description
+            every { parameters() } returns parameters
         }
     }
 }

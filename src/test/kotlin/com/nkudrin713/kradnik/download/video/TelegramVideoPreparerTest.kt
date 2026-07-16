@@ -80,7 +80,7 @@ class TelegramVideoPreparerTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             timedOut = true,
             exitCode = null,
-            output = "ffmpeg timeout",
+            stderr = "ffmpeg timeout",
             duration = 1.seconds,
         )
 
@@ -139,7 +139,7 @@ class TelegramVideoPreparerTest {
         return ProcessExecutionResult(
             timedOut = false,
             exitCode = exitCode,
-            output = output,
+            stderr = output,
             duration = 1.seconds,
         )
     }

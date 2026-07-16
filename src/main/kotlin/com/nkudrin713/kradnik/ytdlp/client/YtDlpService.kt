@@ -52,11 +52,14 @@ class YtDlpService(
         )
 
         handleBaseErrors(result)
-        if (result.output.isBlank()) {
+        if (result.stdoutTruncated) {
+            throw YtDlpException("yt-dlp metadata extraction output exceeded capture limit")
+        }
+        if (result.stdout.isBlank()) {
             throw YtDlpException("yt-dlp metadata extraction returned empty output")
         }
 
-        return objectMapper.readValue(result.output)
+        return objectMapper.readValue(result.stdout)
     }
 
     suspend fun download(
@@ -86,7 +89,7 @@ class YtDlpService(
         )
 
         handleBaseErrors(result)
-        val file = getDownloadedFile(result.output)
+        val file = getDownloadedFile(result.stdout)
 
         return DownloadedFile(
             file = file,
@@ -119,14 +122,15 @@ class YtDlpService(
         }
 
         if (result.exitCode != 0) {
-            if (result.output.isAuthenticationRequiredError()) {
+            val diagnosticOutput = result.diagnosticOutput
+            if (diagnosticOutput.isAuthenticationRequiredError()) {
                 throw YtDlpAuthenticationRequiredException(
-                    "yt-dlp authentication required: ${result.output.takeLast(500)}"
+                    "yt-dlp authentication required: ${diagnosticOutput.takeLast(500)}"
                 )
             }
 
             throw YtDlpException(
-                "yt-dlp command failed: ${result.output.takeLast(500)}"
+                "yt-dlp command failed: ${diagnosticOutput.takeLast(500)}"
             )
         }
     }

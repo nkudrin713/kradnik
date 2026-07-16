@@ -94,7 +94,7 @@ class TelegramVideoPreparer(
         )
 
         if (result.timedOut || result.exitCode != 0) {
-            throw VideoPrepareException("ffmpeg failed: ${result.output.take(500)}")
+            throw VideoPrepareException("ffmpeg failed: ${result.diagnosticOutput.takeLast(500)}")
         }
     }
 

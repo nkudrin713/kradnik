@@ -26,10 +26,13 @@ class VideoMetadataProbe(
         )
 
         if (result.timedOut || result.exitCode != 0) {
-            throw VideoMetadataProbeException("ffprobe failed: ${result.output.take(500)}")
+            throw VideoMetadataProbeException("ffprobe failed: ${result.diagnosticOutput.takeLast(500)}")
+        }
+        if (result.stdoutTruncated) {
+            throw VideoMetadataProbeException("ffprobe output exceeded capture limit")
         }
 
-        val lines = result.output
+        val lines = result.stdout
             .lineSequence()
             .map(String::trim)
             .filter(String::isNotEmpty)
@@ -40,7 +43,7 @@ class VideoMetadataProbe(
         val displayAspectRatio = lines.getOrNull(3)
 
         if (width == null || height == null || sampleAspectRatio == null || displayAspectRatio == null) {
-            throw VideoMetadataProbeException("ffprobe returned invalid dimensions: ${result.output.take(100)}")
+            throw VideoMetadataProbeException("ffprobe returned invalid dimensions: ${result.stdout.take(100)}")
         }
 
         return VideoMetadata(

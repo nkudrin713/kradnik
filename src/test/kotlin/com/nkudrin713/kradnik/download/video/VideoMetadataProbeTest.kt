@@ -39,6 +39,22 @@ class VideoMetadataProbeTest {
     }
 
     @Test
+    fun ignoresStderrOnSuccessfulProbe() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            timedOut = false,
+            exitCode = 0,
+            stdout = "1080\n1920\n1:1\n9:16",
+            stderr = "runtime warning",
+            duration = 1.seconds,
+        )
+
+        val actual = probe.probe(Path.of("video.mp4"))
+
+        assertEquals(1080, actual.width)
+        assertEquals(1920, actual.height)
+    }
+
+    @Test
     fun buildsExpectedFfprobeCommand() = runTest {
         coEvery { processRunner.run(any()) } returns result("1080\n1920\n1:1\n9:16")
 
@@ -124,7 +140,8 @@ class VideoMetadataProbeTest {
         return ProcessExecutionResult(
             timedOut = timedOut,
             exitCode = exitCode,
-            output = output,
+            stdout = if (exitCode == 0) output else "",
+            stderr = if (exitCode == 0) "" else output,
             duration = 1.seconds,
         )
     }

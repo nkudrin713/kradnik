@@ -5,6 +5,17 @@ import kotlin.time.Duration
 data class ProcessExecutionResult(
     val timedOut: Boolean,
     val exitCode: Int?,
-    val output: String = "",
-    val duration: Duration
-)
+    val stdout: String = "",
+    val stderr: String = "",
+    val stdoutTruncated: Boolean = false,
+    val stderrTruncated: Boolean = false,
+    val duration: Duration,
+) {
+    val diagnosticOutput: String
+        get() = buildList {
+            if (stdoutTruncated || stderrTruncated) {
+                add("[process output truncated]")
+            }
+            addAll(listOf(stderr, stdout).filter(String::isNotBlank))
+        }.joinToString(separator = "\n")
+}

@@ -47,7 +47,7 @@ class YtDlpServiceTest {
         """.trimIndent()
 
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = output,
+            stdout = output,
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -69,7 +69,7 @@ class YtDlpServiceTest {
     @Test
     fun extractMetadataIgnoresUnknownFields() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = """{"id":"video-id","title":"Test video","formats":[{"format_id":"1"}]}""",
+            stdout = """{"id":"video-id","title":"Test video","formats":[{"format_id":"1"}]}""",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -82,9 +82,41 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun extractMetadataIgnoresStderrOnSuccessfulProcess() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"video-id","title":"Test video"}""",
+            stderr = "runtime warning",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        val actual = service.extractMetadata(testRequest())
+
+        assertEquals("video-id", actual.id)
+    }
+
+    @Test
+    fun extractMetadataRejectsTruncatedStdout() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"video-id"}""",
+            stdoutTruncated = true,
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        val exception = assertFailsWith<YtDlpException> {
+            service.extractMetadata(testRequest())
+        }
+
+        assertTrue(exception.message!!.contains("capture limit"))
+    }
+
+    @Test
     fun extractMetadataCommandTimeout() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "",
+            stdout = "",
             timedOut = true,
             exitCode = null,
             duration = 5.seconds,
@@ -100,7 +132,7 @@ class YtDlpServiceTest {
     @Test
     fun extractMetadataCommandFailure() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "yt-dlp error",
+            stderr = "yt-dlp error",
             timedOut = false,
             exitCode = 1,
             duration = 5.seconds,
@@ -117,7 +149,7 @@ class YtDlpServiceTest {
     @Test
     fun extractMetadataAuthenticationRequired() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "ERROR: [Instagram] id: login required. Use --cookies-from-browser or --cookies",
+            stderr = "ERROR: [Instagram] id: login required. Use --cookies-from-browser or --cookies",
             timedOut = false,
             exitCode = 1,
             duration = 5.seconds,
@@ -134,7 +166,7 @@ class YtDlpServiceTest {
     @Test
     fun downloadAuthenticationRequired(@TempDir tempDir: Path) = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "ERROR: [Instagram] id: Requested content is not available, rate-limit reached or login required",
+            stderr = "ERROR: [Instagram] id: Requested content is not available, rate-limit reached or login required",
             timedOut = false,
             exitCode = 1,
             duration = 5.seconds,
@@ -150,7 +182,7 @@ class YtDlpServiceTest {
     @Test
     fun extractMetadataCommandEmptyOutput() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "",
+            stdout = "",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -166,7 +198,7 @@ class YtDlpServiceTest {
     @Test
     fun extractMetadataBuildsExpectedCommand() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = """{"id":"video-id","title":"Test video"}""",
+            stdout = """{"id":"video-id","title":"Test video"}""",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -191,7 +223,7 @@ class YtDlpServiceTest {
     @Test
     fun extractMetadataSuccess() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = """{"id":"video-id","title":"Test video","filesize":1000}""",
+            stdout = """{"id":"video-id","title":"Test video","filesize":1000}""",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -207,7 +239,7 @@ class YtDlpServiceTest {
     @Test
     fun extractMetadataTimeout() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "",
+            stdout = "",
             timedOut = true,
             exitCode = null,
             duration = 5.seconds,
@@ -223,7 +255,7 @@ class YtDlpServiceTest {
     @Test
     fun extractMetadataFailure() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "inspect error",
+            stderr = "inspect error",
             timedOut = false,
             exitCode = 1,
             duration = 5.seconds,
@@ -240,7 +272,7 @@ class YtDlpServiceTest {
     @Test
     fun extractMetadataEmptyOutput() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "",
+            stdout = "",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -259,7 +291,7 @@ class YtDlpServiceTest {
         file.writeText("video")
 
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
+            stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -277,7 +309,7 @@ class YtDlpServiceTest {
         file.writeText("video")
 
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
+            stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -307,7 +339,7 @@ class YtDlpServiceTest {
         file.writeText("video")
 
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = """
+            stdout = """
                 log line
                 KRADNIK_FILEPATH:"${file.absolutePathString()}"
                 trailing log line
@@ -325,7 +357,7 @@ class YtDlpServiceTest {
     @Test
     fun downloadMissingFilepath(@TempDir tempDir: Path) = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "",
+            stdout = "",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -343,7 +375,7 @@ class YtDlpServiceTest {
         val missingFile = tempDir.resolve("missing.mp4")
 
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "KRADNIK_FILEPATH:\"${missingFile.absolutePathString()}\"",
+            stdout = "KRADNIK_FILEPATH:\"${missingFile.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,
@@ -359,7 +391,7 @@ class YtDlpServiceTest {
     @Test
     fun downloadTimeout(@TempDir tempDir: Path) = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "",
+            stdout = "",
             timedOut = true,
             exitCode = null,
             duration = 5.seconds,
@@ -375,7 +407,7 @@ class YtDlpServiceTest {
     @Test
     fun downloadFailure(@TempDir tempDir: Path) = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "download error",
+            stderr = "download error",
             timedOut = false,
             exitCode = 1,
             duration = 5.seconds,
@@ -392,7 +424,7 @@ class YtDlpServiceTest {
     @Test
     fun downloadInvalidFilepathJson(@TempDir tempDir: Path) = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
-            output = "KRADNIK_FILEPATH:not-json",
+            stdout = "KRADNIK_FILEPATH:not-json",
             timedOut = false,
             exitCode = 0,
             duration = 5.seconds,

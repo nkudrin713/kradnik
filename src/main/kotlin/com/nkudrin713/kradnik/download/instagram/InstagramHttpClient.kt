@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.instagram
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.net.URI
 import java.net.http.HttpClient
@@ -31,6 +32,7 @@ class JdkInstagramHttpClient : InstagramHttpClient {
     private val httpClient = HttpClient.newBuilder()
         .connectTimeout(CONNECT_TIMEOUT)
         .build()
+    private val logger = LoggerFactory.getLogger(javaClass)
 
     override suspend fun getText(uri: URI): String = withContext(Dispatchers.IO) {
         val request = HttpRequest.newBuilder(uri)
@@ -52,6 +54,13 @@ class JdkInstagramHttpClient : InstagramHttpClient {
             )
         }
 
+        logger.info(
+            "Instagram embed response accepted: host={}, status={}, contentType={}, contentLength={}",
+            uri.host,
+            response.statusCode(),
+            response.headers().firstValue("Content-Type").orElse(null),
+            response.headers().firstValueAsLong("Content-Length").orElse(-1),
+        )
         response.body()
     }
 
@@ -87,6 +96,13 @@ class JdkInstagramHttpClient : InstagramHttpClient {
             throw InstagramEmbedException("Instagram media response is not a video: contentType=$contentType")
         }
 
+        logger.info(
+            "Instagram media response accepted: host={}, status={}, contentType={}, contentLength={}",
+            uri.host,
+            response.statusCode(),
+            contentType,
+            response.headers().firstValueAsLong("Content-Length").orElse(-1),
+        )
         response.body().use { input ->
             Files.copy(input, outputFile, StandardCopyOption.REPLACE_EXISTING)
         }

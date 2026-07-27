@@ -22,10 +22,20 @@ class VideoMetadataProbeTest {
     fun parsesFfprobeOutput() = runTest {
         coEvery { processRunner.run(any()) } returns result(
             output = """
-                1080
-                1920
-                1:1
-                9:16
+                codec_name=h264
+                profile=High
+                codec_tag_string=avc1
+                width=1080
+                height=1920
+                pix_fmt=yuv420p
+                level=40
+                r_frame_rate=30/1
+                avg_frame_rate=30000/1001
+                sample_aspect_ratio=1:1
+                display_aspect_ratio=9:16
+                color_space=bt709
+                color_transfer=bt709
+                color_primaries=bt709
             """.trimIndent()
         )
 
@@ -35,6 +45,15 @@ class VideoMetadataProbeTest {
         assertEquals(1920, actual.height)
         assertEquals("1:1", actual.sampleAspectRatio)
         assertEquals("9:16", actual.displayAspectRatio)
+        assertEquals("h264", actual.codecName)
+        assertEquals("avc1", actual.codecTag)
+        assertEquals("High", actual.codecProfile)
+        assertEquals(40, actual.codecLevel)
+        assertEquals("yuv420p", actual.pixelFormat)
+        assertEquals("30000/1001", actual.frameRate)
+        assertEquals("bt709", actual.colorSpace)
+        assertEquals("bt709", actual.colorTransfer)
+        assertEquals("bt709", actual.colorPrimaries)
         assertEquals(true, actual.isVertical)
     }
 
@@ -43,7 +62,7 @@ class VideoMetadataProbeTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             timedOut = false,
             exitCode = 0,
-            stdout = "1080\n1920\n1:1\n9:16",
+            stdout = metadataOutput(),
             stderr = "runtime warning",
             duration = 1.seconds,
         )
@@ -56,7 +75,7 @@ class VideoMetadataProbeTest {
 
     @Test
     fun buildsExpectedFfprobeCommand() = runTest {
-        coEvery { processRunner.run(any()) } returns result("1080\n1920\n1:1\n9:16")
+        coEvery { processRunner.run(any()) } returns result(metadataOutput())
 
         probe.probe(Path.of("video.mp4"))
 
@@ -68,12 +87,13 @@ class VideoMetadataProbeTest {
         assertEquals(null, command.workingDir)
         assertEquals(true, command.args.contains("-select_streams"))
         assertEquals(true, command.args.contains("v:0"))
+        assertEquals(true, command.args.any { it.contains("codec_name") })
         assertEquals(true, command.args.contains("video.mp4"))
     }
 
     @Test
     fun throwsOnInvalidOutput() = runTest {
-        coEvery { processRunner.run(any()) } returns result("1080")
+        coEvery { processRunner.run(any()) } returns result("width=1080")
 
         assertFailsWith<VideoMetadataProbeException> {
             probe.probe(Path.of("video.mp4"))
@@ -107,7 +127,9 @@ class VideoMetadataProbeTest {
 
     @Test
     fun throwsOnInvalidHeight() = runTest {
-        coEvery { processRunner.run(any()) } returns result("1080\ninvalid\n1:1\n9:16")
+        coEvery { processRunner.run(any()) } returns result(
+            metadataOutput().replace("height=1920", "height=invalid")
+        )
 
         assertFailsWith<VideoMetadataProbeException> {
             probe.probe(Path.of("video.mp4"))
@@ -116,7 +138,9 @@ class VideoMetadataProbeTest {
 
     @Test
     fun throwsOnInvalidWidth() = runTest {
-        coEvery { processRunner.run(any()) } returns result("invalid\n1080\n1:1\n9:16")
+        coEvery { processRunner.run(any()) } returns result(
+            metadataOutput().replace("width=1080", "width=invalid")
+        )
 
         assertFailsWith<VideoMetadataProbeException> {
             probe.probe(Path.of("video.mp4"))
@@ -125,7 +149,14 @@ class VideoMetadataProbeTest {
 
     @Test
     fun detectsHorizontalVideo() = runTest {
-        coEvery { processRunner.run(any()) } returns result("1920\n1080\n1:1\n16:9")
+        coEvery { processRunner.run(any()) } returns result(
+            """
+                width=1920
+                height=1080
+                sample_aspect_ratio=1:1
+                display_aspect_ratio=16:9
+            """.trimIndent()
+        )
 
         val actual = probe.probe(Path.of("video.mp4"))
 
@@ -144,5 +175,14 @@ class VideoMetadataProbeTest {
             stderr = if (exitCode == 0) "" else output,
             duration = 1.seconds,
         )
+    }
+
+    private fun metadataOutput(): String {
+        return """
+            width=1080
+            height=1920
+            sample_aspect_ratio=1:1
+            display_aspect_ratio=9:16
+        """.trimIndent()
     }
 }

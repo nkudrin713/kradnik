@@ -7,6 +7,7 @@ import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.net.URI
@@ -17,6 +18,7 @@ class InstagramEmbedDownloader(
     private val httpClient: InstagramHttpClient,
 ) {
     private val objectMapper = jacksonObjectMapper()
+    private val logger = LoggerFactory.getLogger(javaClass)
 
     fun isInstagramRequest(request: DownloadRequest): Boolean {
         val uri = parseUrlOrNull(request.originalUrl.trim()) ?: return false
@@ -44,7 +46,7 @@ class InstagramEmbedDownloader(
             throw InstagramEmbedException("Instagram embed response does not contain video")
         }
 
-        return InstagramPreparedDownload(
+        val preparedDownload = InstagramPreparedDownload(
             shortcode = shortcode,
             mediaUri = mediaUri,
             metadata = YtDlpMetadataDto(
@@ -72,6 +74,16 @@ class InstagramEmbedDownloader(
                 requestedFormats = null,
             ),
         )
+        logger.info(
+            "Instagram embed prepared: shortcode={}, mediaPresent={}, mediaHost={}, width={}, height={}, duration={}",
+            shortcode,
+            mediaUri != null,
+            mediaUri?.host,
+            preparedDownload.metadata.width,
+            preparedDownload.metadata.height,
+            preparedDownload.metadata.duration,
+        )
+        return preparedDownload
     }
 
     suspend fun download(
@@ -81,10 +93,17 @@ class InstagramEmbedDownloader(
         val mediaUri = requireNotNull(preparedDownload.mediaUri) {
             "Instagram prepared download does not contain media URL"
         }
-        return httpClient.download(
+        val downloadedFile = httpClient.download(
             uri = mediaUri,
             outputFile = outputDir.resolve("instagram-${preparedDownload.shortcode}.mp4"),
         )
+        logger.info(
+            "Instagram media downloaded: shortcode={}, mediaHost={}, sizeBytes={}",
+            preparedDownload.shortcode,
+            mediaUri.host,
+            downloadedFile.sizeBytes,
+        )
+        return downloadedFile
     }
 
     private fun extractContext(html: String): JsonNode {

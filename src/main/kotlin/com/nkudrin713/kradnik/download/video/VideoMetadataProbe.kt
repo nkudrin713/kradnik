@@ -17,8 +17,11 @@ class VideoMetadataProbe(
                 args = listOf(
                     "-v", "error",
                     "-select_streams", "v:0",
-                    "-show_entries", "stream=width,height,sample_aspect_ratio,display_aspect_ratio",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    "-show_entries",
+                    "stream=codec_name,codec_tag_string,profile,level,width,height,pix_fmt," +
+                            "r_frame_rate,avg_frame_rate,sample_aspect_ratio,display_aspect_ratio," +
+                            "color_space,color_transfer,color_primaries",
+                    "-of", "default=noprint_wrappers=1",
                     file.toString(),
                 ),
                 timeout = 1.minutes,
@@ -32,15 +35,18 @@ class VideoMetadataProbe(
             throw VideoMetadataProbeException("ffprobe output exceeded capture limit")
         }
 
-        val lines = result.stdout
+        val values = result.stdout
             .lineSequence()
             .map(String::trim)
             .filter(String::isNotEmpty)
-            .toList()
-        val width = lines.getOrNull(0)?.toIntOrNull()
-        val height = lines.getOrNull(1)?.toIntOrNull()
-        val sampleAspectRatio = lines.getOrNull(2)
-        val displayAspectRatio = lines.getOrNull(3)
+            .filter { it.contains('=') }
+            .associate { line ->
+                line.substringBefore('=') to line.substringAfter('=')
+            }
+        val width = values["width"]?.toIntOrNull()
+        val height = values["height"]?.toIntOrNull()
+        val sampleAspectRatio = values["sample_aspect_ratio"]
+        val displayAspectRatio = values["display_aspect_ratio"]
 
         if (width == null || height == null || sampleAspectRatio == null || displayAspectRatio == null) {
             throw VideoMetadataProbeException("ffprobe returned invalid dimensions: ${result.stdout.take(100)}")
@@ -51,6 +57,17 @@ class VideoMetadataProbe(
             height = height,
             sampleAspectRatio = sampleAspectRatio,
             displayAspectRatio = displayAspectRatio,
+            codecName = values["codec_name"],
+            codecTag = values["codec_tag_string"],
+            codecProfile = values["profile"],
+            codecLevel = values["level"]?.toIntOrNull(),
+            pixelFormat = values["pix_fmt"],
+            frameRate = values["avg_frame_rate"]
+                ?.takeUnless { it == "0/0" }
+                ?: values["r_frame_rate"]?.takeUnless { it == "0/0" },
+            colorSpace = values["color_space"],
+            colorTransfer = values["color_transfer"],
+            colorPrimaries = values["color_primaries"],
         )
     }
 }
@@ -60,6 +77,15 @@ data class VideoMetadata(
     val height: Int,
     val sampleAspectRatio: String,
     val displayAspectRatio: String,
+    val codecName: String? = null,
+    val codecTag: String? = null,
+    val codecProfile: String? = null,
+    val codecLevel: Int? = null,
+    val pixelFormat: String? = null,
+    val frameRate: String? = null,
+    val colorSpace: String? = null,
+    val colorTransfer: String? = null,
+    val colorPrimaries: String? = null,
 ) {
     val isVertical: Boolean = height > width
 }

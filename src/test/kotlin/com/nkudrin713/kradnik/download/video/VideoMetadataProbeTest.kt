@@ -53,6 +53,22 @@ class VideoMetadataProbeTest {
     }
 
     @Test
+    fun handlesVideoWithoutAspectRatioMetadata() = runTest {
+        coEvery { processRunner.run(any()) } returns result(
+            metadataOutput()
+                .replace("                  \"sample_aspect_ratio\": \"1:1\",\n", "")
+                .replace("                  \"display_aspect_ratio\": \"9:16\",\n", "")
+        )
+
+        val actual = probe.probe(Path.of("video.mp4"))
+
+        assertEquals(1080, actual.width)
+        assertEquals(1920, actual.height)
+        assertEquals(null, actual.sampleAspectRatio)
+        assertEquals(null, actual.displayAspectRatio)
+    }
+
+    @Test
     fun ignoresStderrOnSuccessfulProbe() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             timedOut = false,

@@ -52,7 +52,7 @@ class VideoMetadataProbe(
         val sampleAspectRatio = videoStream?.text(SAMPLE_ASPECT_RATIO)
         val displayAspectRatio = videoStream?.text(DISPLAY_ASPECT_RATIO)
 
-        if (width == null || height == null || sampleAspectRatio == null || displayAspectRatio == null) {
+        if (width == null || height == null) {
             throw VideoMetadataProbeException("ffprobe returned invalid dimensions: ${result.stdout.take(100)}")
         }
 
@@ -117,8 +117,8 @@ class VideoMetadataProbe(
 data class VideoMetadata(
     val width: Int,
     val height: Int,
-    val sampleAspectRatio: String,
-    val displayAspectRatio: String,
+    val sampleAspectRatio: String?,
+    val displayAspectRatio: String?,
     val containerFormat: String? = null,
     val videoCodec: String? = null,
     val audioCodec: String? = null,

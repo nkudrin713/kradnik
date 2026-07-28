@@ -1,7 +1,8 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.settings.DownloadMode
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
+import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
 import com.pengrad.telegrambot.request.DeleteMessage
 import com.pengrad.telegrambot.request.EditMessageText
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service
 class TelegramSender(
     private val apiClient: TelegramApiClient,
     private val modeView: TelegramModeView,
+    private val downloadChoiceView: TelegramDownloadChoiceView,
 ) {
     fun sendMessage(chatId: Long, text: String) {
         sendText(chatId, text)
@@ -26,16 +28,34 @@ class TelegramSender(
         editText(chatId, messageId, status.text)
     }
 
-    fun sendModeMenu(chatId: Long, outputType: OutputType) {
-        sendText(chatId, modeView.text(), modeView.keyboard(outputType))
+    fun sendModeMenu(chatId: Long, mode: DownloadMode): Int {
+        return sendText(chatId, modeView.text(), modeView.keyboard(mode))
     }
 
-    fun editModeMenu(chatId: Long, messageId: Int, outputType: OutputType) {
-        editText(chatId, messageId, modeView.text(), modeView.keyboard(outputType))
+    fun sendDownloadChoice(
+        chatId: Long,
+        replyToMessageId: Int,
+        telegramUpdateId: Int,
+    ): Int {
+        return sendText(
+            chatId = chatId,
+            text = downloadChoiceView.text(),
+            keyboard = downloadChoiceView.keyboard(telegramUpdateId),
+            replyToMessageId = replyToMessageId,
+        )
     }
 
-    fun answerCallback(callbackQueryId: String) {
-        apiClient.execute(AnswerCallbackQuery(callbackQueryId))
+    fun answerCallback(
+        callbackQueryId: String,
+        text: String? = null,
+        showAlert: Boolean = false,
+    ) {
+        val request = AnswerCallbackQuery(callbackQueryId)
+        text?.let(request::text)
+        if (showAlert) {
+            request.showAlert(true)
+        }
+        apiClient.execute(request)
     }
 
     fun deleteMessage(chatId: Long, messageId: Int) {
@@ -46,9 +66,11 @@ class TelegramSender(
         chatId: Long,
         text: String,
         keyboard: InlineKeyboardMarkup? = null,
+        replyToMessageId: Int? = null,
     ): Int {
         val request = SendMessage(chatId, text)
         keyboard?.let(request::replyMarkup)
+        replyToMessageId?.let { request.replyParameters(ReplyParameters(it)) }
         val response = apiClient.execute(request)
         return response.message()?.messageId()
             ?: throw TelegramSendException("Telegram response does not contain message")

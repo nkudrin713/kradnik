@@ -1,7 +1,5 @@
 package com.nkudrin713.kradnik.settings
 
-import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.repository.DownloadOutputTypeConverter
 import jakarta.persistence.Column
 import jakarta.persistence.Convert
 import jakarta.persistence.Entity
@@ -17,9 +15,12 @@ class DownloadSettings(
 	@Column(name = "chat_id")
 	val chatId: Long = 0,
 
-	@Convert(converter = DownloadOutputTypeConverter::class)
+	@Convert(converter = DownloadModeConverter::class)
 	@Column(nullable = false)
-	var mode: OutputType = OutputType.VIDEO,
+	var mode: DownloadMode = DownloadMode.ASK,
+
+	@Column(name = "mode_menu_message_id")
+	var modeMenuMessageId: Int? = null,
 
 	@UpdateTimestamp
 	@Column(name = "updated_at", nullable = false)

@@ -17,7 +17,7 @@ class StartHandler(
     }
 
     override fun handle(context: TelegramUpdateContext) {
-        telegramSender.sendMessage(context.chatId, "Пришли ссылку на видео")
+        telegramSender.sendMessage(context.chatId, "Пришли ссылку на медиа")
     }
 
 }

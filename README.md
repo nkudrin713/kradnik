@@ -10,7 +10,7 @@ All current bot instructions and user-facing messages are in Russian. English lo
 ## What the Bot Does
 
 - Accepts public media links in Telegram.
-- Lets each chat choose video or audio mode.
+- Lets each chat choose video, audio, or ask-every-time mode.
 - Downloads media through `yt-dlp`.
 - Sends the downloaded result back through Telegram.
 - Reuses Telegram-uploaded files when possible.
@@ -21,18 +21,19 @@ All current bot instructions and user-facing messages are in Russian. English lo
 ## User Flow
 
 1. User opens the bot.
-2. User selects video or audio mode.
+2. User keeps the default ask-every-time mode or selects video/audio mode.
 3. User sends a link.
-4. Bot creates a download job.
-5. Worker processes the job in the background.
-6. Bot updates the status message.
-7. Bot sends the final file or a short error message.
+4. Bot asks what to download when ask-every-time mode is enabled.
+5. Bot creates a download job.
+6. Worker processes the job in the background.
+7. Bot updates the status message.
+8. Bot replies to the link with the final file or a short error message.
 
 ## Main Commands
 
 - `/start` - start message.
 - `/help` - usage help.
-- `/mode` - switch between video and audio.
+- `/mode` - select video, audio, or ask-every-time mode.
 - `/legal` - legal disclaimer.
 - `/donate` - donation message.
 

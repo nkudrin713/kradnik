@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
+import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendVideo
 import kotlinx.coroutines.Dispatchers
@@ -18,7 +19,11 @@ class TelegramMediaSender(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    suspend fun sendVideo(chatId: Long, file: Path): TelegramSendResult {
+    suspend fun sendVideo(
+        chatId: Long,
+        file: Path,
+        replyToMessageId: Int? = null,
+    ): TelegramSendResult {
         val fileSize = fileSize(file)
         val metadata = videoMetadataProbe.probe(file)
         logger.info(
@@ -42,11 +47,13 @@ class TelegramMediaSender(
             metadata.colorTransfer,
             metadata.colorPrimaries,
         )
+        val request = SendVideo(chatId, file.toFile())
+            .width(metadata.width)
+            .height(metadata.height)
+            .supportsStreaming(true)
+        addReplyParameters(request, replyToMessageId)
         val response = apiClient.executeIo(
-            SendVideo(chatId, file.toFile())
-                .width(metadata.width)
-                .height(metadata.height)
-                .supportsStreaming(true),
+            request,
             errorContext = "(sizeMb=${formatMegabytes(fileSize)})",
         )
         val video = response.message()?.video()
@@ -54,10 +61,14 @@ class TelegramMediaSender(
         return TelegramSendResult(video.fileId, video.fileSize)
     }
 
-    suspend fun sendCachedVideo(chatId: Long, fileId: String): TelegramSendResult {
-        val response = apiClient.executeIo(
-            SendVideo(chatId, fileId).supportsStreaming(true),
-        )
+    suspend fun sendCachedVideo(
+        chatId: Long,
+        fileId: String,
+        replyToMessageId: Int? = null,
+    ): TelegramSendResult {
+        val request = SendVideo(chatId, fileId).supportsStreaming(true)
+        addReplyParameters(request, replyToMessageId)
+        val response = apiClient.executeIo(request)
         val video = response.message()?.video()
             ?: throw TelegramSendException("Telegram response does not contain video")
         return TelegramSendResult(video.fileId, video.fileSize)
@@ -69,12 +80,14 @@ class TelegramMediaSender(
         title: String?,
         performer: String?,
         durationSeconds: Int?,
+        replyToMessageId: Int? = null,
     ): TelegramSendResult {
         val fileSize = fileSize(file)
         val request = SendAudio(chatId, file.toFile())
         title?.let(request::title)
         performer?.let(request::performer)
         durationSeconds?.let(request::duration)
+        addReplyParameters(request, replyToMessageId)
 
         val response = apiClient.executeIo(
             request,
@@ -88,8 +101,14 @@ class TelegramMediaSender(
         )
     }
 
-    suspend fun sendCachedAudio(chatId: Long, fileId: String): TelegramSendResult {
-        val response = apiClient.executeIo(SendAudio(chatId, fileId))
+    suspend fun sendCachedAudio(
+        chatId: Long,
+        fileId: String,
+        replyToMessageId: Int? = null,
+    ): TelegramSendResult {
+        val request = SendAudio(chatId, fileId)
+        addReplyParameters(request, replyToMessageId)
+        val response = apiClient.executeIo(request)
         val audio = response.message()?.audio()
             ?: throw TelegramSendException("Telegram response does not contain audio")
         return TelegramSendResult(
@@ -106,6 +125,17 @@ class TelegramMediaSender(
 
     private fun formatMegabytes(bytes: Long): String {
         return String.format(Locale.US, "%.2f", bytes / BYTES_IN_MEGABYTE)
+    }
+
+    private fun addReplyParameters(
+        request: com.pengrad.telegrambot.request.AbstractSendRequest<*>,
+        replyToMessageId: Int?,
+    ) {
+        replyToMessageId ?: return
+        request.replyParameters(
+            ReplyParameters(replyToMessageId)
+                .allowSendingWithoutReply(true)
+        )
     }
 
     private companion object {

@@ -1,84 +1,113 @@
 package com.nkudrin713.kradnik.settings
 
-import com.nkudrin713.kradnik.download.domain.OutputType
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 
 class DownloadSettingsServiceTest {
     private val repository: DownloadSettingsRepository = mockk()
     private val service = DownloadSettingsService(repository)
 
     @Test
-    fun returnsVideoByDefault() {
+    fun returnsAskByDefault() {
         every { repository.findByChatId(100) } returns null
 
-        val actual = service.getOutputType(100)
+        val actual = service.getMode(100)
 
-        assertEquals(OutputType.VIDEO, actual)
+        assertEquals(DownloadMode.ASK, actual)
     }
 
     @Test
-    fun returnsSavedOutputType() {
+    fun returnsSavedMode() {
         every { repository.findByChatId(100) } returns DownloadSettings(
             chatId = 100,
-            mode = OutputType.AUDIO,
+            mode = DownloadMode.AUDIO,
         )
 
-        val actual = service.getOutputType(100)
+        val actual = service.getMode(100)
 
-        assertEquals(OutputType.AUDIO, actual)
+        assertEquals(DownloadMode.AUDIO, actual)
     }
 
     @Test
-    fun createsSettingsWhenMissing() {
+    fun createsDefaultSettingsWhenFirstMenuIsOpened() {
         every { repository.findByChatId(100) } returns null
         every { repository.save(any()) } answers { firstArg() }
 
-        val actual = service.setMode(
-            DownloadSettingsDto(
-                chatId = 100,
-                mode = "audio",
-            )
+        val previousMessageId = service.replaceModeMenu(
+            chatId = 100,
+            messageId = 200,
         )
 
-        assertEquals(100, actual.chatId)
-        assertEquals(OutputType.AUDIO, actual.mode)
-        verify { repository.save(any()) }
+        assertEquals(null, previousMessageId)
+        verify {
+            repository.save(
+                match {
+                    it.chatId == 100L &&
+                            it.mode == DownloadMode.ASK &&
+                            it.modeMenuMessageId == 200
+                }
+            )
+        }
     }
 
     @Test
-    fun updatesExistingSettings() {
+    fun replacesCurrentMenuAndReturnsPreviousMessageId() {
         val settings = DownloadSettings(
             chatId = 100,
-            mode = OutputType.VIDEO,
+            mode = DownloadMode.VIDEO,
+            modeMenuMessageId = 150,
         )
         every { repository.findByChatId(100) } returns settings
 
-        val actual = service.setMode(
-            DownloadSettingsDto(
-                chatId = 100,
-                mode = "audio",
-            )
+        val previousMessageId = service.replaceModeMenu(
+            chatId = 100,
+            messageId = 200,
         )
 
-        assertEquals(settings, actual)
-        assertEquals(OutputType.AUDIO, settings.mode)
-        verify(exactly = 0) { repository.save(any()) }
+        assertEquals(150, previousMessageId)
+        assertEquals(200, settings.modeMenuMessageId)
     }
 
     @Test
-    fun rejectsInvalidMode() {
-        assertFailsWith<IllegalArgumentException> {
-            service.setMode(
-                DownloadSettingsDto(
-                    chatId = 100,
-                    mode = "invalid",
-                )
-            )
-        }
+    fun selectsModeFromCurrentMenuAndClearsIt() {
+        val settings = DownloadSettings(
+            chatId = 100,
+            mode = DownloadMode.ASK,
+            modeMenuMessageId = 200,
+        )
+        every { repository.findByChatId(100) } returns settings
+
+        val selected = service.selectMode(
+            chatId = 100,
+            menuMessageId = 200,
+            mode = DownloadMode.AUDIO,
+        )
+
+        assertEquals(true, selected)
+        assertEquals(DownloadMode.AUDIO, settings.mode)
+        assertEquals(null, settings.modeMenuMessageId)
+    }
+
+    @Test
+    fun rejectsSelectionFromStaleMenu() {
+        val settings = DownloadSettings(
+            chatId = 100,
+            mode = DownloadMode.ASK,
+            modeMenuMessageId = 201,
+        )
+        every { repository.findByChatId(100) } returns settings
+
+        val selected = service.selectMode(
+            chatId = 100,
+            menuMessageId = 200,
+            mode = DownloadMode.AUDIO,
+        )
+
+        assertEquals(false, selected)
+        assertEquals(DownloadMode.ASK, settings.mode)
+        assertEquals(201, settings.modeMenuMessageId)
     }
 }

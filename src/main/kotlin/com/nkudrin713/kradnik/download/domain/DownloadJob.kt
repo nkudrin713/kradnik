@@ -31,6 +31,9 @@ class DownloadJob(
 	@Column(name = "telegram_update_id")
 	var telegramUpdateId: Int? = null,
 
+	@Column(name = "telegram_request_message_id")
+	var telegramRequestMessageId: Int? = null,
+
 	@Column(name = "original_url", nullable = false)
 	var originalUrl: String = "",
 

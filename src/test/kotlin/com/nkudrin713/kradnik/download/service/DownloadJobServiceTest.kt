@@ -33,6 +33,7 @@ class DownloadJobServiceTest {
         assertEquals(1, actual.job.telegramUserId)
         assertEquals(2, actual.job.telegramChatId)
         assertEquals(3, actual.job.telegramUpdateId)
+        assertEquals(4, actual.job.telegramRequestMessageId)
         assertEquals("https://example.com/raw", actual.job.originalUrl)
         assertEquals("https://example.com/normalized", actual.job.normalizedUrl)
         assertEquals("cache-key", actual.job.cacheKey)
@@ -253,6 +254,7 @@ class DownloadJobServiceTest {
             telegramUserId = 1,
             telegramChatId = 2,
             telegramUpdateId = 3,
+            telegramRequestMessageId = 4,
             originalUrl = "https://example.com/raw",
             normalizedUrl = "https://example.com/normalized",
             cacheKey = "cache-key",

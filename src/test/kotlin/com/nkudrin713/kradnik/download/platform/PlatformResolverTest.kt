@@ -118,7 +118,8 @@ class PlatformResolverTest {
         assertEquals(OutputType.VIDEO, actual.outputType)
         assertEquals("instagram_mobile_video", actual.presetName)
         assertEquals(listOf("--merge-output-format", "mp4"), actual.extraArgs)
-        assertEquals(true, actual.formatSelector.contains("b[height<=1280][ext=mp4]"))
+        assertEquals(true, actual.formatSelector.contains("vcodec^=avc1"))
+        assertEquals(true, actual.formatSelector.contains("acodec^=mp4a"))
     }
 
     @Test

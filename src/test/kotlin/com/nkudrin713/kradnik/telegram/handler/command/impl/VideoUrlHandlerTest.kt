@@ -8,6 +8,7 @@ import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.ResolvedDownload
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
 import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.settings.DownloadSettingsService
@@ -20,6 +21,7 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
+import io.mockk.slot
 import io.mockk.verify
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -89,15 +91,35 @@ class VideoUrlHandlerTest {
     fun recordsNewJobWithoutDeletingStatus() {
         val context = context("https://example.com/video", message = message())
         val job = DownloadJob(id = 1)
+        val command = slot<CreateDownloadJobCommand>()
         every { downloadSettingsService.getOutputType(100) } returns OutputType.VIDEO
         every { platformResolver.resolve(context.text, OutputType.VIDEO) } returns resolvedDownload()
         every { telegramSender.sendStatus(100, any()) } returns 500
-        every { downloadJobService.createJob(any()) } returns CreateDownloadJobResult.Created(job)
+        every { downloadJobService.createJob(capture(command)) } returns CreateDownloadJobResult.Created(job)
 
         handler.handle(context)
 
+        assertEquals("video:telegram-video-h264-v1", command.captured.cacheKey)
         verify { downloadAnalytics.recordDownloadRequested(any(), job) }
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
+    }
+
+    @Test
+    fun keepsAudioCacheKeyUnchanged() {
+        val context = context("https://example.com/video", message = message())
+        val command = slot<CreateDownloadJobCommand>()
+        every { downloadSettingsService.getOutputType(100) } returns OutputType.AUDIO
+        every {
+            platformResolver.resolve(context.text, OutputType.AUDIO)
+        } returns resolvedDownload(OutputType.AUDIO)
+        every { telegramSender.sendStatus(100, any()) } returns 500
+        every {
+            downloadJobService.createJob(capture(command))
+        } returns CreateDownloadJobResult.Created(DownloadJob(id = 1))
+
+        handler.handle(context)
+
+        assertEquals("video", command.captured.cacheKey)
     }
 
     @Test
@@ -142,7 +164,7 @@ class VideoUrlHandlerTest {
         }
     }
 
-    private fun resolvedDownload(): ResolvedDownload {
+    private fun resolvedDownload(outputType: OutputType = OutputType.VIDEO): ResolvedDownload {
         return ResolvedDownload(
             identity = DownloadIdentity(
                 originalUrl = "https://example.com/video",
@@ -152,7 +174,7 @@ class VideoUrlHandlerTest {
             request = DownloadRequest(
                 originalUrl = "https://example.com/video",
                 normalizedUrl = "https://example.com/video",
-                outputType = OutputType.VIDEO,
+                outputType = outputType,
                 formatSelector = "format",
                 presetName = "preset",
             ),

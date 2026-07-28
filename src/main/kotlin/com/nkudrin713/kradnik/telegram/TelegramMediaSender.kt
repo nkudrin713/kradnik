@@ -22,15 +22,17 @@ class TelegramMediaSender(
         val fileSize = fileSize(file)
         val metadata = videoMetadataProbe.probe(file)
         logger.info(
-            "Telegram video upload metadata: fileName={}, width={}, height={}, sar={}, dar={}, codec={}, " +
-                    "codecTag={}, profile={}, level={}, pixelFormat={}, frameRate={}, colorSpace={}, " +
-                    "colorTransfer={}, colorPrimaries={}",
+            "Telegram video upload metadata: fileName={}, container={}, width={}, height={}, sar={}, dar={}, " +
+                    "videoCodec={}, audioCodec={}, codecTag={}, profile={}, level={}, pixelFormat={}, " +
+                    "frameRate={}, colorSpace={}, colorTransfer={}, colorPrimaries={}",
             file.fileName,
+            metadata.containerFormat,
             metadata.width,
             metadata.height,
             metadata.sampleAspectRatio,
             metadata.displayAspectRatio,
-            metadata.codecName,
+            metadata.videoCodec,
+            metadata.audioCodec,
             metadata.codecTag,
             metadata.codecProfile,
             metadata.codecLevel,

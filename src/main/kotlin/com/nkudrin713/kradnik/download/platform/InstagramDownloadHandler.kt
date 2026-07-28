@@ -38,8 +38,8 @@ class InstagramDownloadHandler : PlatformDownloadHandler {
                 outputType = outputType,
                 presetName = "instagram_mobile_video",
                 formatSelector =
-                    "bv*[height<=1280][ext=mp4]+ba[ext=m4a]/" +
-                            "b[height<=1280][ext=mp4]/" +
+                    "bv*[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
+                            "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
                             "b[height<=1280]/best",
                 extraArgs = listOf("--merge-output-format", "mp4"),
             )

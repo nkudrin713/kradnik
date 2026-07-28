@@ -1,5 +1,7 @@
 package com.nkudrin713.kradnik.download.video
 
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessRunner
 import org.springframework.stereotype.Service
@@ -11,17 +13,19 @@ import kotlin.time.Duration.Companion.minutes
 class VideoMetadataProbe(
     private val processRunner: ProcessRunner,
 ) {
+    private val objectMapper = jacksonObjectMapper()
+
     suspend fun probe(file: Path): VideoMetadata {
         val result = processRunner.run(
             FfprobeCommand(
                 args = listOf(
                     "-v", "error",
-                    "-select_streams", "v:0",
                     "-show_entries",
-                    "stream=codec_name,codec_tag_string,profile,level,width,height,pix_fmt," +
+                    "format=format_name:" +
+                            "stream=codec_type,codec_name,codec_tag_string,profile,level,width,height,pix_fmt," +
                             "r_frame_rate,avg_frame_rate,sample_aspect_ratio,display_aspect_ratio," +
                             "color_space,color_transfer,color_primaries",
-                    "-of", "default=noprint_wrappers=1",
+                    "-of", "json",
                     file.toString(),
                 ),
                 timeout = 1.minutes,
@@ -35,18 +39,18 @@ class VideoMetadataProbe(
             throw VideoMetadataProbeException("ffprobe output exceeded capture limit")
         }
 
-        val values = result.stdout
-            .lineSequence()
-            .map(String::trim)
-            .filter(String::isNotEmpty)
-            .filter { it.contains('=') }
-            .associate { line ->
-                line.substringBefore('=') to line.substringAfter('=')
-            }
-        val width = values["width"]?.toIntOrNull()
-        val height = values["height"]?.toIntOrNull()
-        val sampleAspectRatio = values["sample_aspect_ratio"]
-        val displayAspectRatio = values["display_aspect_ratio"]
+        val root = try {
+            objectMapper.readTree(result.stdout)
+        } catch (error: Exception) {
+            throw VideoMetadataProbeException("ffprobe returned invalid JSON: ${result.stdout.take(100)}")
+        }
+        val streams = root.path(STREAMS)
+        val videoStream = streams.firstOrNull { it.text(CODEC_TYPE) == VIDEO }
+        val audioStream = streams.firstOrNull { it.text(CODEC_TYPE) == AUDIO }
+        val width = videoStream?.int(WIDTH)
+        val height = videoStream?.int(HEIGHT)
+        val sampleAspectRatio = videoStream?.text(SAMPLE_ASPECT_RATIO)
+        val displayAspectRatio = videoStream?.text(DISPLAY_ASPECT_RATIO)
 
         if (width == null || height == null || sampleAspectRatio == null || displayAspectRatio == null) {
             throw VideoMetadataProbeException("ffprobe returned invalid dimensions: ${result.stdout.take(100)}")
@@ -57,18 +61,56 @@ class VideoMetadataProbe(
             height = height,
             sampleAspectRatio = sampleAspectRatio,
             displayAspectRatio = displayAspectRatio,
-            codecName = values["codec_name"],
-            codecTag = values["codec_tag_string"],
-            codecProfile = values["profile"],
-            codecLevel = values["level"]?.toIntOrNull(),
-            pixelFormat = values["pix_fmt"],
-            frameRate = values["avg_frame_rate"]
+            containerFormat = root.path(FORMAT).text(FORMAT_NAME),
+            videoCodec = videoStream?.text(CODEC_NAME),
+            audioCodec = audioStream?.text(CODEC_NAME),
+            codecTag = videoStream?.text(CODEC_TAG),
+            codecProfile = videoStream?.text(PROFILE),
+            codecLevel = videoStream?.int(LEVEL),
+            pixelFormat = videoStream?.text(PIXEL_FORMAT),
+            frameRate = videoStream?.text(AVERAGE_FRAME_RATE)
                 ?.takeUnless { it == "0/0" }
-                ?: values["r_frame_rate"]?.takeUnless { it == "0/0" },
-            colorSpace = values["color_space"],
-            colorTransfer = values["color_transfer"],
-            colorPrimaries = values["color_primaries"],
+                ?: videoStream?.text(REAL_FRAME_RATE)?.takeUnless { it == "0/0" },
+            colorSpace = videoStream?.text(COLOR_SPACE),
+            colorTransfer = videoStream?.text(COLOR_TRANSFER),
+            colorPrimaries = videoStream?.text(COLOR_PRIMARIES),
         )
+    }
+
+    private fun JsonNode.text(fieldName: String): String? {
+        return path(fieldName)
+            .takeIf(JsonNode::isTextual)
+            ?.asText()
+            ?.takeIf(String::isNotBlank)
+    }
+
+    private fun JsonNode.int(fieldName: String): Int? {
+        return path(fieldName)
+            .takeIf(JsonNode::isIntegralNumber)
+            ?.intValue()
+    }
+
+    private companion object {
+        private const val STREAMS = "streams"
+        private const val FORMAT = "format"
+        private const val FORMAT_NAME = "format_name"
+        private const val CODEC_TYPE = "codec_type"
+        private const val CODEC_NAME = "codec_name"
+        private const val CODEC_TAG = "codec_tag_string"
+        private const val PROFILE = "profile"
+        private const val LEVEL = "level"
+        private const val WIDTH = "width"
+        private const val HEIGHT = "height"
+        private const val PIXEL_FORMAT = "pix_fmt"
+        private const val REAL_FRAME_RATE = "r_frame_rate"
+        private const val AVERAGE_FRAME_RATE = "avg_frame_rate"
+        private const val SAMPLE_ASPECT_RATIO = "sample_aspect_ratio"
+        private const val DISPLAY_ASPECT_RATIO = "display_aspect_ratio"
+        private const val COLOR_SPACE = "color_space"
+        private const val COLOR_TRANSFER = "color_transfer"
+        private const val COLOR_PRIMARIES = "color_primaries"
+        private const val VIDEO = "video"
+        private const val AUDIO = "audio"
     }
 }
 
@@ -77,7 +119,9 @@ data class VideoMetadata(
     val height: Int,
     val sampleAspectRatio: String,
     val displayAspectRatio: String,
-    val codecName: String? = null,
+    val containerFormat: String? = null,
+    val videoCodec: String? = null,
+    val audioCodec: String? = null,
     val codecTag: String? = null,
     val codecProfile: String? = null,
     val codecLevel: Int? = null,
@@ -88,6 +132,10 @@ data class VideoMetadata(
     val colorPrimaries: String? = null,
 ) {
     val isVertical: Boolean = height > width
+    val isMp4Container: Boolean = containerFormat
+        ?.split(',')
+        ?.any { it.equals("mp4", ignoreCase = true) }
+        ?: false
 }
 
 private data class FfprobeCommand(

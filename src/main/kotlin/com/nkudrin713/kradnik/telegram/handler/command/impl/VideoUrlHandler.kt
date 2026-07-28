@@ -1,12 +1,14 @@
 package com.nkudrin713.kradnik.telegram.handler.command.impl
 
 import com.nkudrin713.kradnik.analytics.DownloadAnalytics
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.download.video.TelegramVideoPolicy
 import com.nkudrin713.kradnik.settings.DownloadSettingsService
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramSender
@@ -57,7 +59,10 @@ class VideoUrlHandler(
             telegramUpdateId = context.update.updateId(),
             originalUrl = identity.originalUrl,
             normalizedUrl = identity.normalizedUrl,
-            cacheKey = identity.cacheKey,
+            cacheKey = when (request.outputType) {
+                OutputType.VIDEO -> TelegramVideoPolicy.versionCacheKey(identity.cacheKey)
+                OutputType.AUDIO -> identity.cacheKey
+            },
             outputType = request.outputType,
             downloadPreset = request.presetName,
             selectedFormat = request.formatSelector,

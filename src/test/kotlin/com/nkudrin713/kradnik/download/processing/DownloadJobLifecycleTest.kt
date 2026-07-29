@@ -141,6 +141,20 @@ class DownloadJobLifecycleTest {
     }
 
     @Test
+    fun reportsUnavailableSourceWithoutRetry() {
+        val job = job()
+        val attempt = attempt(job)
+        every { downloadJobService.markFailed(attempt, "source unavailable") } returns job
+        every { statusReporter.setStatus(any(), any()) } just runs
+
+        lifecycle.failSourceUnavailable(attempt, "source unavailable")
+
+        verify { downloadJobService.markFailed(attempt, "source unavailable") }
+        verify { statusReporter.setStatus(job, TelegramDownloadStatus.SOURCE_UNAVAILABLE) }
+        verify { downloadAnalytics.recordTerminalFailure(job, "source unavailable") }
+    }
+
+    @Test
     fun failsAuthenticationRequiredWithoutRetry() {
         val job = job()
         val attempt = attempt(job)

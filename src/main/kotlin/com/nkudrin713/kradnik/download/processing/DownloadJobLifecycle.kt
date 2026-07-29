@@ -93,6 +93,16 @@ class DownloadJobLifecycle(
         downloadAnalytics.recordTerminalFailure(job, errorMessage)
     }
 
+    fun failSourceUnavailable(
+        attempt: ClaimedDownloadJob,
+        errorMessage: String,
+    ) {
+        val job = attempt.job
+        downloadJobService.markFailed(attempt, errorMessage)
+        statusReporter.setStatus(job, TelegramDownloadStatus.SOURCE_UNAVAILABLE)
+        downloadAnalytics.recordTerminalFailure(job, errorMessage)
+    }
+
     fun failAuthenticationRequired(
         attempt: ClaimedDownloadJob,
         errorMessage: String,

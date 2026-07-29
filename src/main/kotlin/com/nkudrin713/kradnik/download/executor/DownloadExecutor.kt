@@ -36,6 +36,10 @@ sealed interface DownloadPreparation {
         val reason: String,
     ) : DownloadPreparation
 
+    data class SourceUnavailable(
+        val reason: String,
+    ) : DownloadPreparation
+
     data class TerminalFailure(
         val reason: String,
     ) : DownloadPreparation

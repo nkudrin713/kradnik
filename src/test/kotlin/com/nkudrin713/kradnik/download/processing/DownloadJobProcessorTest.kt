@@ -233,6 +233,29 @@ class DownloadJobProcessorTest {
     }
 
     @Test
+    fun reportsUnavailableInstagramContentWithoutRetry(@TempDir tempDir: Path) = runTest {
+        val url = "https://www.instagram.com/reel/ABC_123/"
+        val job = job(url = url)
+        val request = request(url = url)
+        every { instagramExecutor.supports(request) } returns true
+        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.SourceUnavailable(
+            "Instagram content is unavailable without authentication"
+        )
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(attempt(job))
+
+        verify {
+            downloadJobLifecycle.failSourceUnavailable(
+                attempt(job),
+                "Instagram content is unavailable without authentication",
+            )
+        }
+        verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any(), any()) }
+        verify(exactly = 0) { downloadPreflightService.check(any(), any()) }
+    }
+
+    @Test
     fun defersInstagramJobBeforeAttemptWhenLimiterIsBusy(@TempDir tempDir: Path) = runTest {
         val url = "https://www.instagram.com/reel/ABC_123/"
         val job = job(url = url)

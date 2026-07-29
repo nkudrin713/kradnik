@@ -122,6 +122,19 @@ class InstagramDownloadExecutorTest {
     }
 
     @Test
+    fun reportsUnavailableInstagramContentWithoutRetry() = runTest {
+        val request = request()
+        every { embedDownloader.supports(request) } returns true
+        every { rateLimiter.acquire() } returns RateLimitDecision.Granted(PERMIT)
+        coEvery { embedDownloader.prepare(request) } throws InstagramContentUnavailableException()
+
+        val result = assertIs<DownloadPreparation.SourceUnavailable>(executor.prepare(request))
+
+        assertEquals("Instagram content is unavailable without authentication", result.reason)
+        verify(exactly = 0) { rateLimiter.recordThrottle(any(), any()) }
+    }
+
+    @Test
     fun rejectsUnsupportedInstagramRequestBeforeLimiter() = runTest {
         val request = request(url = "https://www.instagram.com/stories/user/123/")
         every { embedDownloader.supports(request) } returns false

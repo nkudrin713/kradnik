@@ -71,6 +71,11 @@ class DownloadJobProcessor(
                     return
                 }
 
+                is DownloadPreparation.SourceUnavailable -> {
+                    downloadJobLifecycle.failSourceUnavailable(attempt, preparation.reason)
+                    return
+                }
+
                 is DownloadPreparation.TerminalFailure -> {
                     downloadJobLifecycle.failTerminal(attempt, preparation.reason)
                     return

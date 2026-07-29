@@ -94,5 +94,6 @@ enum class TelegramDownloadStatus(val text: String) {
     UPLOADING("Загружаю в Telegram ⬆️"),
     REJECTED_TOO_LARGE("Слишком тяжелый файл 🪨 Не справлюсь"),
     AUTHENTICATION_REQUIRED("Не смогу скачать, сервис требует cookies ⛔"),
+    SOURCE_UNAVAILABLE("Публикация недоступна для скачивания ⛔"),
     ERROR("Ошибка ⛔"),
 }

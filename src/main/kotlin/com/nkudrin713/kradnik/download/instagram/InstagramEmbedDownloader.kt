@@ -116,7 +116,11 @@ class InstagramEmbedDownloader(
         } catch (error: Exception) {
             throw InstagramEmbedException("Instagram embed payload is invalid", error)
         }
-        val contextJson = payloadNode.path(CONTEXT_JSON).takeIf(JsonNode::isTextual)?.asText()
+        val contextNode = payloadNode.path(CONTEXT_JSON)
+        if (contextNode.isNull) {
+            throw InstagramContentUnavailableException()
+        }
+        val contextJson = contextNode.takeIf(JsonNode::isTextual)?.asText()
             ?: throw InstagramEmbedException("Instagram embed context is missing")
 
         return try {
@@ -250,3 +254,6 @@ open class InstagramEmbedException : RuntimeException {
 
     constructor(message: String, cause: Throwable) : super(message, cause)
 }
+
+class InstagramContentUnavailableException :
+    InstagramEmbedException("Instagram content is unavailable without authentication")

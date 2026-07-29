@@ -46,6 +46,8 @@ class InstagramDownloadExecutor(
             )
         } catch (error: InstagramHttpException) {
             classifyHttpError(error, permit)
+        } catch (error: InstagramContentUnavailableException) {
+            DownloadPreparation.SourceUnavailable(error.message ?: error.javaClass.simpleName)
         } catch (error: InstagramEmbedException) {
             DownloadPreparation.TerminalFailure(error.message ?: error.javaClass.simpleName)
         }

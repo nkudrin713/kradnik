@@ -104,6 +104,17 @@ class InstagramEmbedDownloaderTest {
     }
 
     @Test
+    fun reportsUnavailableContentWhenEmbedContextIsNull() = runTest {
+        val embedUri = URI.create("https://www.instagram.com/p/ABC_123/embed/captioned/")
+        val payload = jacksonObjectMapper().writeValueAsString(mapOf("contextJSON" to null))
+        coEvery { httpClient.getText(embedUri) } returns "<script>[\"init\",[],[$payload]],</script>"
+
+        assertFailsWith<InstagramContentUnavailableException> {
+            downloader.prepare(request("https://www.instagram.com/reel/ABC_123/"))
+        }
+    }
+
+    @Test
     fun rejectsEmbedPayloadWithoutVideo() = runTest {
         val embedUri = URI.create("https://www.instagram.com/p/ABC_123/embed/captioned/")
         coEvery { httpClient.getText(embedUri) } returns embedHtml(

@@ -249,7 +249,6 @@ jobs:
           context: .
           push: true
           cache-from: type=gha
-          cache-to: type=gha,mode=max
           tags: |
             ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.target_sha }}
             ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}

@@ -41,4 +41,44 @@ class DownloadStatusReporterTest {
 
         verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.ERROR) }
     }
+
+    @Test
+    fun deletesStatusMessage() {
+        val job = DownloadJob(
+            id = 1,
+            telegramChatId = 100,
+            telegramStatusMessageId = 10,
+        )
+        every { telegramSender.deleteMessage(100, 10) } just runs
+
+        reporter.deleteStatus(job)
+
+        verify { telegramSender.deleteMessage(100, 10) }
+    }
+
+    @Test
+    fun skipsStatusDeletionWithoutMessageId() {
+        val job = DownloadJob(
+            id = 1,
+            telegramChatId = 100,
+        )
+
+        reporter.deleteStatus(job)
+
+        verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
+    }
+
+    @Test
+    fun swallowsStatusDeletionError() {
+        val job = DownloadJob(
+            id = 1,
+            telegramChatId = 100,
+            telegramStatusMessageId = 10,
+        )
+        every { telegramSender.deleteMessage(100, 10) } throws RuntimeException("telegram error")
+
+        reporter.deleteStatus(job)
+
+        verify { telegramSender.deleteMessage(100, 10) }
+    }
 }

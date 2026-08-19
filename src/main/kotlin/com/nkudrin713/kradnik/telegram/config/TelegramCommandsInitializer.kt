@@ -45,7 +45,7 @@ class TelegramCommandsInitializer(
     private fun commands(): Array<BotCommand> {
         return arrayOf(
             BotCommand("start", "запустить бота"),
-            BotCommand("mode", "переключить видео/аудио"),
+            BotCommand("mode", "выбрать режим загрузки"),
             BotCommand("help", "что умеет бот"),
             BotCommand("legal", "правовой дисклеймер"),
             BotCommand("donate", "поддержать проект"),

@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram.handler.command.impl
 
+import com.nkudrin713.kradnik.telegram.TelegramDonationSender
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.handler.TelegramUpdateContext
 import io.mockk.every
@@ -12,6 +13,7 @@ import kotlin.test.assertEquals
 
 class DonateHandlerTest {
     private val telegramSender: TelegramSender = mockk()
+    private val telegramDonationSender: TelegramDonationSender = mockk()
 
     @Test
     fun supportsDonateCommand() {
@@ -24,11 +26,11 @@ class DonateHandlerTest {
     @Test
     fun sendsDonationMessage() {
         val handler = handler(donationUrl = "https://example.com/donate")
-        every { telegramSender.sendDonationMessage(100, "https://example.com/donate") } just runs
+        every { telegramDonationSender.sendMessage(100, "https://example.com/donate") } just runs
 
         handler.handle(context("/donate"))
 
-        verify { telegramSender.sendDonationMessage(100, "https://example.com/donate") }
+        verify { telegramDonationSender.sendMessage(100, "https://example.com/donate") }
     }
 
     @Test
@@ -44,6 +46,7 @@ class DonateHandlerTest {
     private fun handler(donationUrl: String): DonateHandler {
         return DonateHandler(
             telegramSender = telegramSender,
+            telegramDonationSender = telegramDonationSender,
             donationUrl = donationUrl,
         )
     }

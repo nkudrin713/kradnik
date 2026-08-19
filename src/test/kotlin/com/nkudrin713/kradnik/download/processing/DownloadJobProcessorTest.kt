@@ -1,17 +1,25 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadExecutor
+import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
+import com.nkudrin713.kradnik.download.executor.DownloadPreparation
+import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
+import com.nkudrin713.kradnik.download.executor.YtDlpDownloadExecutor
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSendResult
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
+import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -22,10 +30,14 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
 import io.mockk.verify
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
 import java.math.BigDecimal
 import java.nio.file.Path
+import java.time.Duration
+import java.time.Instant
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
@@ -35,8 +47,15 @@ class DownloadJobProcessorTest {
     private val telegramVideoPreparer: TelegramVideoPreparer = mockk()
     private val telegramFileSender: TelegramFileSender = mockk()
     private val ytDlpService: YtDlpService = mockk()
+    private val instagramExecutor: DownloadExecutor = mockk {
+        every { supports(any()) } returns false
+    }
+    private val downloadExecutorResolver = DownloadExecutorResolver(
+        listOf(instagramExecutor, YtDlpDownloadExecutor(ytDlpService))
+    )
     private val mediaMetadataMapper: MediaMetadataMapper = mockk()
     private val downloadJobLifecycle: DownloadJobLifecycle = mockk(relaxed = true)
+    private val downloadAnalytics: DownloadAnalytics = mockk(relaxed = true)
     private val workDirCleaner: WorkDirCleaner = mockk()
 
     @Test
@@ -47,15 +66,82 @@ class DownloadJobProcessorTest {
             downloadedFileSize = 100
         }
         every { downloadJobService.findCachedJob(job) } returns cachedJob
-        every { telegramFileSender.sendCached(job, "cached-file-id", 100) } returns telegramResult()
+        coEvery { telegramFileSender.sendCached(job, "cached-file-id", 100) } returns telegramResult()
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
-        processor(tempDir, telegramFileCacheEnabled = true).process(job)
+        processor(tempDir, telegramFileCacheEnabled = true).process(attempt(job))
 
-        verify { telegramFileSender.sendCached(job, "cached-file-id", 100) }
-        verify { downloadJobLifecycle.markUploading(job) }
-        verify { downloadJobLifecycle.complete(job, any()) }
-        verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
+        coVerify { telegramFileSender.sendCached(job, "cached-file-id", 100) }
+        verify { downloadJobLifecycle.markUploading(attempt(job)) }
+        verify { downloadJobLifecycle.complete(attempt(job), any()) }
+        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+    }
+
+    @Test
+    fun downloadsSourceWhenCachedTelegramFileIsInvalid(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val cachedJob = job().apply {
+            telegramFileId = "invalid-file-id"
+            downloadedFileSize = 100
+        }
+        val request = request()
+        val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
+        val metadata = metadata()
+        every { downloadJobService.findCachedJob(job) } returns cachedJob
+        coEvery {
+            telegramFileSender.sendCached(job, "invalid-file-id", 100)
+        } throws TelegramSendException(400, "Bad Request: wrong file identifier")
+        coEvery { ytDlpService.extractMetadata(request) } returns metadata
+        every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
+        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
+        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
+        coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns downloadedFile
+        coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir, telegramFileCacheEnabled = true).process(attempt(job))
+
+        coVerify { ytDlpService.download(request, jobDir(tempDir)) }
+        coVerify { telegramFileSender.send(job, downloadedFile) }
+        verify { downloadJobLifecycle.complete(attempt(job), any()) }
+    }
+
+    @Test
+    fun failsTerminallyWhenTelegramRejectsRequest(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val cachedJob = job().apply {
+            telegramFileId = "cached-file-id"
+        }
+        every { downloadJobService.findCachedJob(job) } returns cachedJob
+        coEvery {
+            telegramFileSender.sendCached(job, "cached-file-id", null)
+        } throws TelegramSendException(403, "Forbidden: bot was blocked by the user")
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir, telegramFileCacheEnabled = true).process(attempt(job))
+
+        verify { downloadJobLifecycle.failTerminal(attempt(job), any()) }
+        verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any(), any()) }
+    }
+
+    @Test
+    fun retriesWhenTelegramIsTemporarilyUnavailable(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val retryAfter = Duration.ofSeconds(42)
+        val cachedJob = job().apply {
+            telegramFileId = "cached-file-id"
+        }
+        every { downloadJobService.findCachedJob(job) } returns cachedJob
+        coEvery {
+            telegramFileSender.sendCached(job, "cached-file-id", null)
+        } throws TelegramSendException(429, "Too Many Requests", retryAfter)
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir, telegramFileCacheEnabled = true).process(attempt(job))
+
+        verify { downloadJobLifecycle.failOrRetry(attempt(job), any(), retryAfter) }
+        verify(exactly = 0) { downloadJobLifecycle.failTerminal(any(), any()) }
     }
 
     @Test
@@ -67,10 +153,10 @@ class DownloadJobProcessorTest {
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Rejected("too large")
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
-        processor(tempDir).process(job)
+        processor(tempDir).process(attempt(job))
 
-        verify { downloadJobLifecycle.rejectTooLarge(job, "too large") }
-        verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
+        verify { downloadJobLifecycle.rejectTooLarge(attempt(job), "too large") }
+        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
     }
 
     @Test
@@ -84,22 +170,159 @@ class DownloadJobProcessorTest {
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed(request)
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
-        every { downloadJobService.markMetadata(1, any()) } returns job
-        coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
-        coEvery { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) } returns preparedFile
+        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
+        coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns preparedFile
         coEvery { telegramFileSender.send(job, preparedFile) } returns telegramResult()
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
-        processor(tempDir).process(job)
+        processor(tempDir).process(attempt(job))
 
-        verify { downloadJobLifecycle.markDownloading(job) }
+        verify { downloadJobLifecycle.markDownloading(attempt(job)) }
         coVerify(exactly = 1) { ytDlpService.extractMetadata(request) }
-        verify { downloadJobService.markMetadata(1, any()) }
-        verify { downloadJobLifecycle.markUploading(job) }
-        coVerify { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) }
+        verify { downloadJobService.markMetadata(attempt(job), any()) }
+        verify { downloadJobLifecycle.markUploading(attempt(job)) }
+        coVerify { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) }
         coVerify { telegramFileSender.send(job, preparedFile) }
-        verify { downloadJobLifecycle.complete(job, any()) }
-        verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
+        verify { downloadJobLifecycle.complete(attempt(job), any()) }
+        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+    }
+
+    @Test
+    fun downloadsInstagramVideoWithoutYtDlp(@TempDir tempDir: Path) = runTest {
+        val url = "https://www.instagram.com/reel/ABC_123/"
+        val job = job(url = url)
+        val request = request(url = url)
+        val metadata = metadata()
+        val session: PreparedDownloadSession = mockk()
+        val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
+        every { instagramExecutor.supports(request) } returns true
+        every { session.metadata } returns metadata
+        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.Ready(session)
+        every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
+        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
+        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        coEvery { session.download(request, jobDir(tempDir)) } returns downloadedFile
+        coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns downloadedFile
+        coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(attempt(job))
+
+        coVerify(exactly = 0) { ytDlpService.extractMetadata(any()) }
+        coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
+        coVerify(exactly = 1) { instagramExecutor.prepare(request) }
+        coVerify(exactly = 1) { session.download(request, jobDir(tempDir)) }
+    }
+
+    @Test
+    fun doesNotFallBackToYtDlpWhenInstagramEmbedExtractionFails(@TempDir tempDir: Path) = runTest {
+        val url = "https://www.instagram.com/reel/ABC_123/"
+        val job = job(url = url)
+        val request = request(url = url)
+        every { instagramExecutor.supports(request) } returns true
+        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.TerminalFailure("embed failed")
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(attempt(job))
+
+        coVerify(exactly = 1) { instagramExecutor.prepare(request) }
+        coVerify(exactly = 0) { ytDlpService.extractMetadata(any()) }
+        coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
+        verify { downloadJobLifecycle.failTerminal(attempt(job), "embed failed") }
+    }
+
+    @Test
+    fun reportsUnavailableInstagramContentWithoutRetry(@TempDir tempDir: Path) = runTest {
+        val url = "https://www.instagram.com/reel/ABC_123/"
+        val job = job(url = url)
+        val request = request(url = url)
+        every { instagramExecutor.supports(request) } returns true
+        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.SourceUnavailable(
+            "Instagram content is unavailable without authentication"
+        )
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(attempt(job))
+
+        verify {
+            downloadJobLifecycle.failSourceUnavailable(
+                attempt(job),
+                "Instagram content is unavailable without authentication",
+            )
+        }
+        verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any(), any()) }
+        verify(exactly = 0) { downloadPreflightService.check(any(), any()) }
+    }
+
+    @Test
+    fun defersInstagramJobBeforeAttemptWhenLimiterIsBusy(@TempDir tempDir: Path) = runTest {
+        val url = "https://www.instagram.com/reel/ABC_123/"
+        val job = job(url = url)
+        val request = request(url = url)
+        val retryAt = Instant.parse("2026-07-15T10:00:30Z")
+        every { instagramExecutor.supports(request) } returns true
+        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.NotReady(
+            retryAt = retryAt,
+            reason = "rate limited",
+        )
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(attempt(job))
+
+        verify { downloadJobLifecycle.deferBeforeAttempt(attempt(job), retryAt, "rate limited") }
+        verify(exactly = 0) { downloadPreflightService.check(any(), any()) }
+        coVerify(exactly = 0) { ytDlpService.extractMetadata(any()) }
+    }
+
+    @Test
+    fun schedulesInstagramRetryAfterThrottle(@TempDir tempDir: Path) = runTest {
+        val url = "https://www.instagram.com/reel/ABC_123/"
+        val job = job(url = url)
+        val request = request(url = url)
+        val retryAt = Instant.parse("2026-07-15T10:30:00Z")
+        every { instagramExecutor.supports(request) } returns true
+        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.RetryableFailure(
+            retryAt = retryAt,
+            reason = "Instagram throttled request",
+        )
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(attempt(job))
+
+        verify {
+            downloadJobLifecycle.retryAt(
+                attempt(job),
+                retryAt,
+                "Instagram throttled request",
+            )
+        }
+        verify(exactly = 0) { downloadPreflightService.check(any(), any()) }
+        coVerify(exactly = 0) { ytDlpService.extractMetadata(any()) }
+    }
+
+    @Test
+    fun doesNotUseYtDlpForUnsupportedInstagramRequest(@TempDir tempDir: Path) = runTest {
+        val url = "https://www.instagram.com/stories/user/123/"
+        val job = job(outputType = OutputType.AUDIO, url = url)
+        val request = request(outputType = OutputType.AUDIO, url = url)
+        every { instagramExecutor.supports(request) } returns true
+        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.TerminalFailure(
+            "Instagram request is not supported by embed downloader"
+        )
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(attempt(job))
+
+        coVerify(exactly = 1) { instagramExecutor.prepare(request) }
+        coVerify(exactly = 0) { ytDlpService.extractMetadata(any()) }
+        coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
+        verify {
+            downloadJobLifecycle.failTerminal(
+                attempt(job),
+                "Instagram request is not supported by embed downloader",
+            )
+        }
     }
 
     @Test
@@ -107,10 +330,16 @@ class DownloadJobProcessorTest {
         val job = job().apply { selectedFormat = null }
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
-        processor(tempDir).process(job)
+        processor(tempDir).process(attempt(job))
 
-        verify { downloadJobLifecycle.failOrRetry(job, "Download job selected format is missing") }
-        verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
+        verify {
+            downloadJobLifecycle.failOrRetry(
+                attempt(job),
+                "Download job selected format is missing",
+                null,
+            )
+        }
+        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
     }
 
     @Test
@@ -122,7 +351,7 @@ class DownloadJobProcessorTest {
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Rejected("too large")
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
-        processor(tempDir, telegramFileCacheEnabled = true).process(job)
+        processor(tempDir, telegramFileCacheEnabled = true).process(attempt(job))
 
         verify { downloadJobService.findCachedJob(job) }
         coVerify { ytDlpService.extractMetadata(request) }
@@ -140,7 +369,7 @@ class DownloadJobProcessorTest {
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Rejected("too large")
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
-        processor(tempDir, telegramFileCacheEnabled = true).process(job)
+        processor(tempDir, telegramFileCacheEnabled = true).process(attempt(job))
 
         verify { downloadJobService.findCachedJob(job) }
         coVerify { ytDlpService.extractMetadata(request) }
@@ -163,15 +392,15 @@ class DownloadJobProcessorTest {
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed(downloadRequest)
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
-        every { downloadJobService.markMetadata(1, any()) } returns markedJob
-        coEvery { ytDlpService.download(downloadRequest, tempDir.resolve("1")) } returns downloadedFile
+        every { downloadJobService.markMetadata(attempt(job), any()) } returns markedJob
+        coEvery { ytDlpService.download(downloadRequest, jobDir(tempDir)) } returns downloadedFile
         coEvery { telegramFileSender.send(markedJob, downloadedFile) } returns telegramResult()
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
-        processor(tempDir).process(job)
+        processor(tempDir).process(attempt(job))
 
         coVerify(exactly = 0) { telegramVideoPreparer.prepare(any(), any(), any()) }
-        coVerify { ytDlpService.download(downloadRequest, tempDir.resolve("1")) }
+        coVerify { ytDlpService.download(downloadRequest, jobDir(tempDir)) }
         coVerify { telegramFileSender.send(markedJob, downloadedFile) }
     }
 
@@ -182,13 +411,13 @@ class DownloadJobProcessorTest {
         coEvery { ytDlpService.extractMetadata(request) } throws IllegalStateException("metadata error")
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
-        processor(tempDir).process(job)
+        processor(tempDir).process(attempt(job))
 
         verify(exactly = 0) { downloadPreflightService.check(any(), any()) }
         verify(exactly = 0) { downloadJobService.markMetadata(any(), any()) }
         coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
         coVerify(exactly = 0) { telegramFileSender.send(any(), any()) }
-        verify { downloadJobLifecycle.failOrRetry(job, "metadata error") }
+        verify { downloadJobLifecycle.failOrRetry(attempt(job), "metadata error", null) }
     }
 
     @Test
@@ -198,11 +427,25 @@ class DownloadJobProcessorTest {
         coEvery { ytDlpService.extractMetadata(request) } throws YtDlpAuthenticationRequiredException("auth required")
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
-        processor(tempDir).process(job)
+        processor(tempDir).process(attempt(job))
 
-        verify { downloadJobLifecycle.failAuthenticationRequired(job, "auth required") }
-        verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any()) }
-        verify { workDirCleaner.deleteRecursively(tempDir.resolve("1")) }
+        verify { downloadJobLifecycle.failAuthenticationRequired(attempt(job), "auth required") }
+        verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any(), any()) }
+        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+    }
+
+    @Test
+    fun propagatesCancellationWithoutChangingJobState(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        coEvery { ytDlpService.extractMetadata(request()) } throws CancellationException("lease lost")
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        assertFailsWith<CancellationException> {
+            processor(tempDir).process(attempt(job))
+        }
+
+        verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any(), any()) }
+        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
     }
 
     @Test
@@ -214,15 +457,15 @@ class DownloadJobProcessorTest {
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed(request)
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata(durationSeconds = null)
-        every { downloadJobService.markMetadata(1, any()) } returns job
-        coEvery { ytDlpService.download(request, tempDir.resolve("1")) } returns downloadedFile
-        coEvery { telegramVideoPreparer.prepare(downloadedFile, tempDir.resolve("1"), 1) } returns downloadedFile
+        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
+        coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns downloadedFile
         coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
-        processor(tempDir).process(job)
+        processor(tempDir).process(attempt(job))
 
-        verify { downloadJobService.markMetadata(1, any()) }
+        verify { downloadJobService.markMetadata(attempt(job), any()) }
     }
 
     @Test
@@ -231,15 +474,15 @@ class DownloadJobProcessorTest {
         coEvery { ytDlpService.extractMetadata(request()) } throws object : RuntimeException() {}
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
-        processor(tempDir).process(job)
+        processor(tempDir).process(attempt(job))
 
-        verify { downloadJobLifecycle.failOrRetry(job, any()) }
+        verify { downloadJobLifecycle.failOrRetry(attempt(job), any(), null) }
     }
 
     @Test
     fun failsWhenJobIdIsMissing(@TempDir tempDir: Path) = runTest {
         assertFailsWith<IllegalArgumentException> {
-            processor(tempDir).process(job().apply { id = null })
+            processor(tempDir).process(attempt(job().apply { id = null }))
         }
     }
 
@@ -252,21 +495,31 @@ class DownloadJobProcessorTest {
             downloadPreflightService = downloadPreflightService,
             telegramVideoPreparer = telegramVideoPreparer,
             telegramFileSender = telegramFileSender,
-            ytDlpService = ytDlpService,
+            downloadExecutorResolver = downloadExecutorResolver,
             mediaMetadataMapper = mediaMetadataMapper,
             downloadJobLifecycle = downloadJobLifecycle,
+            downloadAnalytics = downloadAnalytics,
             workDirCleaner = workDirCleaner,
             workDir = workDir.toString(),
             telegramFileCacheEnabled = telegramFileCacheEnabled,
         )
     }
 
-    private fun job(outputType: OutputType = OutputType.VIDEO): DownloadJob {
+    private fun attempt(job: DownloadJob): ClaimedDownloadJob =
+        ClaimedDownloadJob(job, LEASE_TOKEN)
+
+    private fun jobDir(workDir: Path): Path =
+        workDir.resolve("1").resolve(LEASE_TOKEN.toString())
+
+    private fun job(
+        outputType: OutputType = OutputType.VIDEO,
+        url: String = "https://example.com/video",
+    ): DownloadJob {
         return DownloadJob(
             id = 1,
             telegramChatId = 100,
-            originalUrl = "https://example.com/video",
-            normalizedUrl = "https://example.com/video",
+            originalUrl = url,
+            normalizedUrl = url,
             outputType = outputType,
             downloadPreset = "preset",
             selectedFormat = "format",
@@ -274,10 +527,13 @@ class DownloadJobProcessorTest {
         )
     }
 
-    private fun request(outputType: OutputType = OutputType.VIDEO): DownloadRequest {
+    private fun request(
+        outputType: OutputType = OutputType.VIDEO,
+        url: String = "https://example.com/video",
+    ): DownloadRequest {
         return DownloadRequest(
-            originalUrl = "https://example.com/video",
-            normalizedUrl = "https://example.com/video",
+            originalUrl = url,
+            normalizedUrl = url,
             outputType = outputType,
             formatSelector = "format",
             extraArgs = listOf("--arg"),
@@ -331,5 +587,9 @@ class DownloadJobProcessorTest {
             telegramFileSize = 90,
             downloadedFileSize = 100,
         )
+    }
+
+    private companion object {
+        val LEASE_TOKEN: UUID = UUID.fromString("00000000-0000-0000-0000-000000000001")
     }
 }

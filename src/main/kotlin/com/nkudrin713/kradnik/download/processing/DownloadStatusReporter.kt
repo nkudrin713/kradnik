@@ -23,4 +23,13 @@ class DownloadStatusReporter(
             logger.warn("JOB[{}] status message update failed: {}", job.id, it.message)
         }
     }
+
+    fun deleteStatus(job: DownloadJob) {
+        val messageId = job.telegramStatusMessageId ?: return
+        runCatching {
+            telegramSender.deleteMessage(job.telegramChatId, messageId)
+        }.onFailure {
+            logger.warn("JOB[{}] status message deletion failed: {}", job.id, it.message)
+        }
+    }
 }

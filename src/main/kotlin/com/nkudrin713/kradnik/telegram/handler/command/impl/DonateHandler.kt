@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram.handler.command.impl
 
+import com.nkudrin713.kradnik.telegram.TelegramDonationSender
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.handler.TelegramUpdateContext
 import com.nkudrin713.kradnik.telegram.handler.command.TelegramCommandHandler
@@ -13,6 +14,7 @@ private const val DONATE_COMMAND = "/donate"
 @Order(20)
 class DonateHandler(
     private val telegramSender: TelegramSender,
+    private val telegramDonationSender: TelegramDonationSender,
     @Value("\${telegram.donation.url:}")
     private val donationUrl: String,
 ) : TelegramCommandHandler {
@@ -27,6 +29,6 @@ class DonateHandler(
             return
         }
 
-        telegramSender.sendDonationMessage(context.chatId, donationUrl)
+        telegramDonationSender.sendMessage(context.chatId, donationUrl)
     }
 }

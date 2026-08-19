@@ -1,6 +1,5 @@
 package com.nkudrin713.kradnik.settings
 
-import com.nkudrin713.kradnik.download.domain.OutputType
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -9,26 +8,38 @@ class DownloadSettingsService(
 	private val downloadSettingsRepository: DownloadSettingsRepository,
 ) {
 	@Transactional(readOnly = true)
-	fun getOutputType(chatId: Long): OutputType =
-		downloadSettingsRepository.findByChatId(chatId)?.mode ?: OutputType.VIDEO
+	fun getMode(chatId: Long): DownloadMode =
+		downloadSettingsRepository.findByChatId(chatId)?.mode ?: DownloadMode.ASK
 
 	@Transactional
-	fun setMode(dto: DownloadSettingsDto): DownloadSettings {
-		val mode = OutputType.fromDb(dto.mode)
-		val settings = downloadSettingsRepository.findByChatId(dto.chatId)
-			?: return downloadSettingsRepository.save(
-				DownloadSettings(
-					chatId = dto.chatId,
-					mode = mode,
-				)
-			)
+	fun replaceModeMenu(
+		chatId: Long,
+		messageId: Int,
+	): Int? {
+		val settings = getOrCreate(chatId)
+		val previousMessageId = settings.modeMenuMessageId
+		settings.modeMenuMessageId = messageId
+		return previousMessageId
+	}
+
+	@Transactional
+	fun selectMode(
+		chatId: Long,
+		menuMessageId: Int,
+		mode: DownloadMode,
+	): Boolean {
+		val settings = downloadSettingsRepository.findByChatId(chatId) ?: return false
+		if (settings.modeMenuMessageId != menuMessageId) {
+			return false
+		}
 
 		settings.mode = mode
-		return settings
+		settings.modeMenuMessageId = null
+		return true
+	}
+
+	private fun getOrCreate(chatId: Long): DownloadSettings {
+		return downloadSettingsRepository.findByChatId(chatId)
+			?: downloadSettingsRepository.save(DownloadSettings(chatId = chatId))
 	}
 }
-
-data class DownloadSettingsDto(
-	val chatId: Long,
-	val mode: String,
-)

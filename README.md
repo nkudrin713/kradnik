@@ -10,7 +10,7 @@ All current bot instructions and user-facing messages are in Russian. English lo
 ## What the Bot Does
 
 - Accepts public media links in Telegram.
-- Lets each chat choose video or audio mode.
+- Lets each chat choose video, audio, or ask-every-time mode.
 - Downloads media through `yt-dlp`.
 - Sends the downloaded result back through Telegram.
 - Reuses Telegram-uploaded files when possible.
@@ -21,18 +21,19 @@ All current bot instructions and user-facing messages are in Russian. English lo
 ## User Flow
 
 1. User opens the bot.
-2. User selects video or audio mode.
+2. User keeps the default ask-every-time mode or selects video/audio mode.
 3. User sends a link.
-4. Bot creates a download job.
-5. Worker processes the job in the background.
-6. Bot updates the status message.
-7. Bot sends the final file or a short error message.
+4. Bot asks what to download when ask-every-time mode is enabled.
+5. Bot creates a download job.
+6. Worker processes the job in the background.
+7. Bot updates the status message.
+8. Bot replies to the link with the final file or a short error message.
 
 ## Main Commands
 
 - `/start` - start message.
 - `/help` - usage help.
-- `/mode` - switch between video and audio.
+- `/mode` - select video, audio, or ask-every-time mode.
 - `/legal` - legal disclaimer.
 - `/donate` - donation message.
 
@@ -145,9 +146,37 @@ The database stores:
 - source metadata;
 - Telegram upload metadata;
 - per-chat mode settings;
-- cache keys for Telegram file reuse.
+- cache keys for Telegram file reuse;
+- analytics events and dashboard views.
 
 Schema changes are managed through Flyway migrations.
+
+## Analytics
+
+Runtime analytics are stored in PostgreSQL in `analytics_events`.
+
+Metabase is an opt-in Docker Compose service under the `analytics` profile:
+
+- development/test port: `3000`;
+- production port: `3001`.
+
+Start it locally when needed:
+
+```bash
+docker compose --profile analytics up -d metabase
+```
+
+On deployed environments, use the manual `Deploy` GitHub Actions workflow with the `analytics-start` or `analytics-stop` operation. Regular application deploys preserve its explicit on/off state and do not enable Metabase automatically. The workflow refuses to start Metabase when less than `1800 MiB` of memory is available.
+
+Connect Metabase to PostgreSQL with the read-only role:
+
+- host: `postgres`;
+- port: `5432`;
+- database: current `POSTGRES_DB`;
+- user: `kradnik_analytics_reader`;
+- password: `METABASE_ANALYTICS_DB_PASSWORD`.
+
+Use the `analytics_*` views for dashboards. The role has `SELECT` access only.
 
 ## Deployment
 

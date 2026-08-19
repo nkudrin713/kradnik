@@ -290,6 +290,7 @@ jobs:
             set -euo pipefail && \
             cd '$DEPLOY_PATH' && \
             test -f .env.next && \
+            if [ -f .metabase-enabled ]; then export COMPOSE_PROFILES=analytics; else unset COMPOSE_PROFILES; fi && \
             if [ -f .env ]; then cp .env .env.previous; else rm -f .env.previous; fi && \
             rollback() { \
               status=\$?; \
@@ -310,6 +311,7 @@ jobs:
             mv .env.next .env && \
             pull_app && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose up -d --remove-orphans && \
+            if [ ! -f .metabase-enabled ]; then DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose rm -sf metabase; fi && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose ps && \
             app_container=\$(docker compose ps -q app) && \
             test -n \"\$app_container\" && \

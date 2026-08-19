@@ -155,10 +155,18 @@ Schema changes are managed through Flyway migrations.
 
 Runtime analytics are stored in PostgreSQL in `analytics_events`.
 
-Metabase is started by Docker Compose as a separate service:
+Metabase is an opt-in Docker Compose service under the `analytics` profile:
 
 - development/test port: `3000`;
 - production port: `3001`.
+
+Start it locally when needed:
+
+```bash
+docker compose --profile analytics up -d metabase
+```
+
+On deployed environments, use the manual `Manage Analytics` GitHub Actions workflow. Regular application deploys preserve its explicit on/off state and do not enable Metabase automatically. The workflow refuses to start Metabase when less than `1800 MiB` of memory is available.
 
 Connect Metabase to PostgreSQL with the read-only role:
 

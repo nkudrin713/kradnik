@@ -42,6 +42,7 @@ services:
 
   metabase:
     image: metabase/metabase:v0.62.3.5
+    profiles: ["analytics"]
     container_name: ${METABASE_CONTAINER_NAME:-kradnik-metabase}
     restart: unless-stopped
     depends_on:

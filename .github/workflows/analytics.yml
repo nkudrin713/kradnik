@@ -1,0 +1,96 @@
+name: Manage Analytics
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to manage"
+        required: true
+        type: choice
+        options:
+          - development
+          - production
+      action:
+        description: "Metabase action"
+        required: true
+        type: choice
+        options:
+          - start
+          - stop
+
+permissions:
+  contents: read
+
+jobs:
+  manage:
+    name: ${{ inputs.action }} Metabase in ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-server
+      cancel-in-progress: false
+
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Manage Metabase
+        env:
+          ACTION: ${{ inputs.action }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PATH"
+          test "$DEPLOY_PATH" != "/"
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
+            set -euo pipefail && \
+            cd '$DEPLOY_PATH' && \
+            test -f docker-compose.yml && \
+            test -f .env && \
+            case '$ACTION' in \
+              start) \
+                available_memory_mb=\$(awk '/MemAvailable:/ {print int(\$2 / 1024)}' /proc/meminfo); \
+                test -n \"\$available_memory_mb\"; \
+                if [ \"\$available_memory_mb\" -lt 1800 ]; then \
+                  echo \"Metabase start refused: only \${available_memory_mb} MiB available\" >&2; \
+                  exit 1; \
+                fi; \
+                touch .metabase-enabled; \
+                start_failed() { \
+                  rm -f .metabase-enabled; \
+                  DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose rm -sf metabase || true; \
+                  exit 1; \
+                }; \
+                DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose --profile analytics up -d metabase || start_failed; \
+                container=\$(DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose --profile analytics ps -q metabase); \
+                test -n \"\$container\" || start_failed; \
+                port=\$(sed -n 's/^METABASE_PUBLIC_PORT=//p' .env); \
+                case \"\$port\" in ''|*[!0-9]*) start_failed ;; esac; \
+                ready=false; \
+                for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do \
+                  if curl --fail --silent --show-error \"http://127.0.0.1:\$port/api/health\" >/dev/null; then ready=true; break; fi; \
+                  sleep 5; \
+                done; \
+                test \"\$ready\" = true || start_failed; \
+                ;; \
+              stop) \
+                rm -f .metabase-enabled; \
+                DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose rm -sf metabase; \
+                test -z \"\$(DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose --profile analytics ps -aq metabase)\"; \
+                ;; \
+              *) \
+                echo 'Unsupported analytics action' >&2; \
+                exit 1; \
+                ;; \
+            esac\
+          "

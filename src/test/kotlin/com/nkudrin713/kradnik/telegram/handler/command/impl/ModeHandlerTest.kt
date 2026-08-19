@@ -1,8 +1,6 @@
 package com.nkudrin713.kradnik.telegram.handler.command.impl
 
-import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.settings.DownloadSettings
-import com.nkudrin713.kradnik.settings.DownloadSettingsDto
+import com.nkudrin713.kradnik.settings.DownloadMode
 import com.nkudrin713.kradnik.settings.DownloadSettingsService
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.handler.TelegramUpdateContext
@@ -28,45 +26,89 @@ class ModeHandlerTest {
         assertEquals(true, handler.supports(context("/mode")))
         assertEquals(true, handler.supports(context("mode:video")))
         assertEquals(true, handler.supports(context("mode:audio")))
+        assertEquals(true, handler.supports(context("mode:ask")))
         assertEquals(false, handler.supports(context("/start")))
     }
 
     @Test
-    fun sendsModeMenu() {
-        every { downloadSettingsService.getOutputType(100) } returns OutputType.VIDEO
-        every { telegramSender.sendModeMenu(100, OutputType.VIDEO) } just runs
-
-        handler.handle(context("/mode"))
-
-        verify { telegramSender.sendModeMenu(100, OutputType.VIDEO) }
-    }
-
-    @Test
-    fun changesModeAndEditsMenu() {
-        every { downloadSettingsService.getOutputType(100) } returns OutputType.VIDEO
+    fun replacesPreviousMenuAndDeletesCommand() {
+        every { downloadSettingsService.getMode(100) } returns DownloadMode.ASK
+        every { telegramSender.sendModeMenu(100, DownloadMode.ASK) } returns 300
         every {
-            downloadSettingsService.setMode(DownloadSettingsDto(chatId = 100, mode = OutputType.AUDIO.dbValue))
-        } returns DownloadSettings(chatId = 100, mode = OutputType.AUDIO)
-        every { telegramSender.answerCallback("callback-id") } just runs
-        every { telegramSender.editModeMenu(100, 200, OutputType.AUDIO) } just runs
+            downloadSettingsService.replaceModeMenu(
+                chatId = 100,
+                messageId = 300,
+            )
+        } returns 250
+        every { telegramSender.deleteMessage(any(), any()) } just runs
 
-        handler.handle(context("mode:audio", callbackQuery = callbackQuery(), messageId = 200))
+        handler.handle(context("/mode", messageId = 200))
 
-        verify { downloadSettingsService.setMode(DownloadSettingsDto(chatId = 100, mode = OutputType.AUDIO.dbValue)) }
-        verify { telegramSender.answerCallback("callback-id") }
-        verify { telegramSender.editModeMenu(100, 200, OutputType.AUDIO) }
+        verify { telegramSender.deleteMessage(100, 250) }
+        verify { telegramSender.deleteMessage(100, 200) }
     }
 
     @Test
-    fun skipsEditWhenSelectedModeIsAlreadyCurrent() {
-        every { downloadSettingsService.getOutputType(100) } returns OutputType.VIDEO
-        every { telegramSender.answerCallback("callback-id") } just runs
+    fun selectsModeShowsToastAndDeletesMenu() {
+        every {
+            downloadSettingsService.selectMode(
+                chatId = 100,
+                menuMessageId = 200,
+                mode = DownloadMode.AUDIO,
+            )
+        } returns true
+        every {
+            telegramSender.answerCallback(
+                callbackQueryId = "callback-id",
+                text = "Режим: Звук",
+            )
+        } just runs
+        every { telegramSender.deleteMessage(100, 200) } just runs
 
-        handler.handle(context("mode:video", callbackQuery = callbackQuery(), messageId = 200))
+        handler.handle(
+            context(
+                text = "mode:audio",
+                callbackQuery = callbackQuery(),
+                messageId = 200,
+            )
+        )
 
-        verify { telegramSender.answerCallback("callback-id") }
-        verify(exactly = 0) { downloadSettingsService.setMode(any()) }
-        verify(exactly = 0) { telegramSender.editModeMenu(any(), any(), any()) }
+        verify {
+            telegramSender.answerCallback(
+                callbackQueryId = "callback-id",
+                text = "Режим: Звук",
+            )
+        }
+        verify { telegramSender.deleteMessage(100, 200) }
+    }
+
+    @Test
+    fun ignoresStaleMenuAndDeletesIt() {
+        every {
+            downloadSettingsService.selectMode(
+                chatId = 100,
+                menuMessageId = 200,
+                mode = DownloadMode.VIDEO,
+            )
+        } returns false
+        every {
+            telegramSender.answerCallback(
+                callbackQueryId = "callback-id",
+                text = "Меню устарело",
+            )
+        } just runs
+        every { telegramSender.deleteMessage(100, 200) } just runs
+
+        handler.handle(
+            context(
+                text = "mode:video",
+                callbackQuery = callbackQuery(),
+                messageId = 200,
+            )
+        )
+
+        verify(exactly = 0) { downloadSettingsService.replaceModeMenu(any(), any()) }
+        verify { telegramSender.deleteMessage(100, 200) }
     }
 
     private fun context(

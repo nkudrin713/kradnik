@@ -19,15 +19,18 @@ class TelegramPollingService(
     @PostConstruct
     fun start() {
         bot.setUpdatesListener { updates ->
-            updates.forEach { update ->
-                runCatching {
+            var lastConfirmedUpdateId = UpdatesListener.CONFIRMED_UPDATES_NONE
+            for (update in updates) {
+                try {
                     updateHandler.handle(update)
-                }.onFailure {
-                    log.error("Failed to handle Telegram update", it)
+                    lastConfirmedUpdateId = update.updateId()
+                } catch (error: Exception) {
+                    log.error("Failed to handle Telegram update: updateId={}", update.updateId(), error)
+                    break
                 }
             }
 
-            UpdatesListener.CONFIRMED_UPDATES_ALL
+            lastConfirmedUpdateId
         }
     }
 

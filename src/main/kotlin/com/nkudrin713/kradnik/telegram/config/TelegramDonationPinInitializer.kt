@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.telegram.config
 
-import com.nkudrin713.kradnik.telegram.TelegramSender
+import com.nkudrin713.kradnik.telegram.TelegramDonationSender
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.ApplicationArguments
@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component
 
 @Component
 class TelegramDonationPinInitializer(
-    private val telegramSender: TelegramSender,
+    private val telegramDonationSender: TelegramDonationSender,
     @Value("\${telegram.donation.pin.enabled:false}")
     private val enabled: Boolean,
     @Value("\${telegram.donation.channel-id:@mediakradnik}")
@@ -34,10 +34,10 @@ class TelegramDonationPinInitializer(
         runCatching {
             val messageId = pinMessageId.toIntOrNull()
             if (messageId == null) {
-                val createdMessageId = telegramSender.sendDonationPin(channelId, donationUrl)
+                val createdMessageId = telegramDonationSender.sendPin(channelId, donationUrl)
                 logger.info("Telegram donation pin created: channel={}, messageId={}", channelId, createdMessageId)
             } else {
-                telegramSender.updateDonationPin(channelId, messageId, donationUrl)
+                telegramDonationSender.updatePin(channelId, messageId, donationUrl)
                 logger.info("Telegram donation pin updated: channel={}, messageId={}", channelId, messageId)
             }
         }.onFailure {

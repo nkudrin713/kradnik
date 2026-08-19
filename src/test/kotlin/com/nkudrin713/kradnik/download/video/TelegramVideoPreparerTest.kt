@@ -8,6 +8,7 @@ import com.nkudrin713.kradnik.process.ProcessRunner
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
 import java.io.RandomAccessFile
@@ -21,15 +22,49 @@ import kotlin.time.Duration.Companion.seconds
 class TelegramVideoPreparerTest {
     private val processRunner: ProcessRunner = mockk()
     private val videoMetadataProbe: VideoMetadataProbe = mockk()
-    private val preparer = TelegramVideoPreparer(processRunner, videoMetadataProbe)
+    private val preparer = TelegramVideoPreparer(
+        processRunner = processRunner,
+        videoMetadataProbe = videoMetadataProbe,
+        videoPolicy = TelegramVideoPolicy(),
+    )
 
     @Test
-    fun returnsSmallFileWithoutCompression(@TempDir tempDir: Path) = runTest {
+    fun returnsSmallCompatibleFileWithoutTranscoding(@TempDir tempDir: Path) = runTest {
         val file = DownloadedFile(tempDir.resolve("video.mp4"), TelegramUploadLimits.MAX_UPLOAD_BYTES)
+        coEvery { videoMetadataProbe.probe(file.file) } returns verticalMetadata()
 
         val actual = preparer.prepare(file, tempDir, jobId = 1)
 
         assertEquals(file, actual)
+        coVerify(exactly = 0) { processRunner.run(any()) }
+    }
+
+    @Test
+    fun transcodesSmallVp9Video(@TempDir tempDir: Path) = runTest {
+        val source = tempDir.resolve("source.mp4")
+        val file = DownloadedFile(source, 1_000)
+        val preparedFile = tempDir.resolve("telegram-video.mp4")
+        coEvery { videoMetadataProbe.probe(source) } returns verticalMetadata().copy(
+            videoCodec = "vp9",
+            codecTag = "vp09",
+        )
+        coEvery { processRunner.run(any()) } answers {
+            Path.of(firstArg<Command>().args.last()).writeText("transcoded")
+            processResult()
+        }
+        coEvery { videoMetadataProbe.probe(preparedFile) } returns verticalMetadata()
+
+        val actual = preparer.prepare(file, tempDir, jobId = 1)
+
+        assertEquals(preparedFile, actual.file)
+        assertEquals("transcoded".length.toLong(), actual.sizeBytes)
+
+        val command = slot<Command>()
+        coVerify { processRunner.run(capture(command)) }
+        assertEquals(true, command.captured.args.containsAll(listOf("-c:v", "libx264")))
+        assertEquals(true, command.captured.args.containsAll(listOf("-c:a", "aac")))
+        assertEquals(true, command.captured.args.containsAll(listOf("-pix_fmt", "yuv420p")))
+        assertEquals(true, command.captured.args.containsAll(listOf("-movflags", "+faststart")))
     }
 
     @Test
@@ -40,6 +75,7 @@ class TelegramVideoPreparerTest {
         assertFailsWith<VideoTooLargeException> {
             preparer.prepare(file, tempDir, jobId = 1)
         }
+        coVerify(exactly = 0) { processRunner.run(any()) }
     }
 
     @Test
@@ -61,10 +97,10 @@ class TelegramVideoPreparerTest {
     }
 
     @Test
-    fun failsWhenCompressionProcessFails(@TempDir tempDir: Path) = runTest {
+    fun failsWhenTranscodingProcessFails(@TempDir tempDir: Path) = runTest {
         val source = tempDir.resolve("source.mp4")
-        val file = DownloadedFile(source, TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
-        coEvery { videoMetadataProbe.probe(source) } returns verticalMetadata()
+        val file = DownloadedFile(source, 1_000)
+        coEvery { videoMetadataProbe.probe(source) } returns verticalMetadata().copy(videoCodec = "vp9")
         coEvery { processRunner.run(any()) } returns processResult(exitCode = 1, output = "ffmpeg error")
 
         assertFailsWith<VideoPrepareException> {
@@ -73,14 +109,14 @@ class TelegramVideoPreparerTest {
     }
 
     @Test
-    fun failsWhenCompressionProcessTimesOut(@TempDir tempDir: Path) = runTest {
+    fun failsWhenTranscodingProcessTimesOut(@TempDir tempDir: Path) = runTest {
         val source = tempDir.resolve("source.mp4")
-        val file = DownloadedFile(source, TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
-        coEvery { videoMetadataProbe.probe(source) } returns verticalMetadata()
+        val file = DownloadedFile(source, 1_000)
+        coEvery { videoMetadataProbe.probe(source) } returns verticalMetadata().copy(videoCodec = "vp9")
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             timedOut = true,
             exitCode = null,
-            output = "ffmpeg timeout",
+            stderr = "ffmpeg timeout",
             duration = 1.seconds,
         )
 
@@ -90,27 +126,38 @@ class TelegramVideoPreparerTest {
     }
 
     @Test
-    fun failsWhenCompressedVideoIsStillTooLarge(@TempDir tempDir: Path) = runTest {
+    fun failsWhenPreparedVideoIsStillTooLarge(@TempDir tempDir: Path) = runTest {
         val source = tempDir.resolve("source.mp4")
         val file = DownloadedFile(source, TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
+        val preparedFile = tempDir.resolve("telegram-video.mp4")
         coEvery { videoMetadataProbe.probe(source) } returns verticalMetadata()
         coEvery { processRunner.run(any()) } answers {
-            RandomAccessFile(Path.of(firstArg<Command>().args.last()).toFile(), "rw").use { file ->
-                file.setLength(TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
+            RandomAccessFile(Path.of(firstArg<Command>().args.last()).toFile(), "rw").use { output ->
+                output.setLength(TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
             }
             processResult()
         }
-        coEvery { videoMetadataProbe.probe(tempDir.resolve("telegram-video.mp4")) } returns verticalMetadata()
+        coEvery { videoMetadataProbe.probe(preparedFile) } returns verticalMetadata()
 
         assertFailsWith<VideoTooLargeException> {
-            TelegramVideoPreparer(
-                processRunner = processRunner,
-                videoMetadataProbe = videoMetadataProbe,
-            ).prepare(
-                file = file.copy(sizeBytes = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1),
-                outputDir = tempDir,
-                jobId = 1,
-            )
+            preparer.prepare(file, tempDir, jobId = 1)
+        }
+    }
+
+    @Test
+    fun failsWhenPreparedVideoStillViolatesPolicy(@TempDir tempDir: Path) = runTest {
+        val source = tempDir.resolve("source.mp4")
+        val file = DownloadedFile(source, 1_000)
+        val preparedFile = tempDir.resolve("telegram-video.mp4")
+        coEvery { videoMetadataProbe.probe(source) } returns verticalMetadata().copy(videoCodec = "vp9")
+        coEvery { processRunner.run(any()) } answers {
+            Path.of(firstArg<Command>().args.last()).writeText("transcoded")
+            processResult()
+        }
+        coEvery { videoMetadataProbe.probe(preparedFile) } returns verticalMetadata().copy(videoCodec = "vp9")
+
+        assertFailsWith<VideoPrepareException> {
+            preparer.prepare(file, tempDir, jobId = 1)
         }
     }
 
@@ -120,14 +167,18 @@ class TelegramVideoPreparerTest {
             height = 1920,
             sampleAspectRatio = "1:1",
             displayAspectRatio = "9:16",
+            containerFormat = "mov,mp4,m4a,3gp,3g2,mj2",
+            videoCodec = "h264",
+            audioCodec = "aac",
+            codecTag = "avc1",
+            pixelFormat = "yuv420p",
         )
     }
 
     private fun horizontalMetadata(): VideoMetadata {
-        return VideoMetadata(
+        return verticalMetadata().copy(
             width = 1920,
             height = 1080,
-            sampleAspectRatio = "1:1",
             displayAspectRatio = "16:9",
         )
     }
@@ -139,7 +190,7 @@ class TelegramVideoPreparerTest {
         return ProcessExecutionResult(
             timedOut = false,
             exitCode = exitCode,
-            output = output,
+            stderr = output,
             duration = 1.seconds,
         )
     }

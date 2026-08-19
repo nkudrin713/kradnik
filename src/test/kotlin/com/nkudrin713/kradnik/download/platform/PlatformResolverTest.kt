@@ -1,11 +1,11 @@
 package com.nkudrin713.kradnik.download.platform
 
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.identity.DownloadIdentity
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertSame
 
 class PlatformResolverTest {
     @Test
@@ -14,9 +14,9 @@ class PlatformResolverTest {
         val second = handler(supported = true, platform = DownloadPlatform.INSTAGRAM)
         val resolver = PlatformResolver(listOf(first, second), toggles(instagramEnabled = true))
 
-        val actual = resolver.resolve("https://example.com/video")
+        val actual = resolver.resolve("https://example.com/video", OutputType.VIDEO)
 
-        assertSame(second, actual)
+        assertEquals("preset-instagram", actual.request.presetName)
     }
 
     @Test
@@ -27,7 +27,7 @@ class PlatformResolverTest {
         )
 
         assertFailsWith<UnsupportedPlatformException> {
-            resolver.resolve("https://example.com/video")
+            resolver.resolve("https://example.com/video", OutputType.VIDEO)
         }
     }
 
@@ -41,7 +41,7 @@ class PlatformResolverTest {
         )
 
         val exception = assertFailsWith<UnsupportedPlatformException> {
-            resolver.resolve("https://www.instagram.com/reel/abc/")
+            resolver.resolve("https://www.instagram.com/reel/abc/", OutputType.VIDEO)
         }
 
         assertEquals(
@@ -61,31 +61,34 @@ class PlatformResolverTest {
 
     @Test
     fun youtubeHandlerBuildsAudioRequest() {
-        val actual = YouTubeDownloadHandler().buildRequest(
+        val actual = YouTubeDownloadHandler().resolve(
             url = "https://youtube.com/watch?v=id",
             outputType = OutputType.AUDIO,
-        )
+        ).request
 
         assertEquals("https://youtube.com/watch?v=id", actual.originalUrl)
-        assertEquals("https://youtube.com/watch?v=id", actual.normalizedUrl)
+        assertEquals("https://www.youtube.com/watch?v=id", actual.normalizedUrl)
         assertEquals(OutputType.AUDIO, actual.outputType)
         assertEquals("youtube_audio", actual.presetName)
         assertEquals("ba/bestaudio", actual.formatSelector)
-        assertEquals(listOf(
-            "-x",
-            "--audio-format", "mp3",
-            "--embed-metadata",
-            "--embed-thumbnail",
-            "--convert-thumbnails", "jpg",
-        ), actual.extraArgs)
+        assertEquals(
+            listOf(
+                "-x",
+                "--audio-format", "mp3",
+                "--embed-metadata",
+                "--embed-thumbnail",
+                "--convert-thumbnails", "jpg",
+            ),
+            actual.extraArgs,
+        )
     }
 
     @Test
     fun youtubeHandlerBuildsVideoRequest() {
-        val actual = YouTubeDownloadHandler().buildRequest(
+        val actual = YouTubeDownloadHandler().resolve(
             url = "https://youtube.com/watch?v=id",
             outputType = OutputType.VIDEO,
-        )
+        ).request
 
         assertEquals("https://youtube.com/watch?v=id", actual.originalUrl)
         assertEquals(OutputType.VIDEO, actual.outputType)
@@ -105,25 +108,26 @@ class PlatformResolverTest {
 
     @Test
     fun instagramHandlerBuildsVideoRequest() {
-        val actual = InstagramDownloadHandler().buildRequest(
+        val actual = InstagramDownloadHandler().resolve(
             url = "https://www.instagram.com/reel/abc/?igshid=tracking",
             outputType = OutputType.VIDEO,
-        )
+        ).request
 
         assertEquals("https://www.instagram.com/reel/abc/?igshid=tracking", actual.originalUrl)
         assertEquals("https://www.instagram.com/reel/abc/", actual.normalizedUrl)
         assertEquals(OutputType.VIDEO, actual.outputType)
         assertEquals("instagram_mobile_video", actual.presetName)
         assertEquals(listOf("--merge-output-format", "mp4"), actual.extraArgs)
-        assertEquals(true, actual.formatSelector.contains("b[height<=1280][ext=mp4]"))
+        assertEquals(true, actual.formatSelector.contains("vcodec^=avc1"))
+        assertEquals(true, actual.formatSelector.contains("acodec^=mp4a"))
     }
 
     @Test
     fun instagramHandlerBuildsAudioRequest() {
-        val actual = InstagramDownloadHandler().buildRequest(
+        val actual = InstagramDownloadHandler().resolve(
             url = "https://www.instagram.com/p/abc/",
             outputType = OutputType.AUDIO,
-        )
+        ).request
 
         assertEquals("https://www.instagram.com/p/abc/", actual.normalizedUrl)
         assertEquals(OutputType.AUDIO, actual.outputType)
@@ -141,18 +145,24 @@ class PlatformResolverTest {
 
             override fun supports(url: String): Boolean = supported
 
-            override fun normalize(url: String): String = url
-
-            override fun buildRequest(
+            override fun resolve(
                 url: String,
                 outputType: OutputType,
-            ): DownloadRequest {
-                return DownloadRequest(
+            ): ResolvedDownload {
+                val request = DownloadRequest(
                     originalUrl = url,
                     normalizedUrl = url,
                     outputType = outputType,
                     formatSelector = "format",
-                    presetName = "preset",
+                    presetName = "preset-${platform.name.lowercase()}",
+                )
+                return ResolvedDownload(
+                    identity = DownloadIdentity(
+                        originalUrl = url,
+                        normalizedUrl = url,
+                        cacheKey = "cache-key",
+                    ),
+                    request = request,
                 )
             }
         }

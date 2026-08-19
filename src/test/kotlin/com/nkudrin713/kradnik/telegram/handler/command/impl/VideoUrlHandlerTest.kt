@@ -1,14 +1,13 @@
 package com.nkudrin713.kradnik.telegram.handler.command.impl
 
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.platform.PlatformResolver
-import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
-import com.nkudrin713.kradnik.download.service.DownloadJobService
-import com.nkudrin713.kradnik.download.identity.UrlIdentityResolver
+import com.nkudrin713.kradnik.settings.DownloadMode
 import com.nkudrin713.kradnik.settings.DownloadSettingsService
+import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.handler.TelegramUpdateContext
 import com.pengrad.telegrambot.model.Message
+import com.pengrad.telegrambot.model.Update
 import com.pengrad.telegrambot.model.User
 import io.mockk.every
 import io.mockk.just
@@ -19,16 +18,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class VideoUrlHandlerTest {
-    private val downloadJobService: DownloadJobService = mockk()
     private val downloadSettingsService: DownloadSettingsService = mockk()
-    private val platformResolver: PlatformResolver = mockk()
-    private val urlIdentityResolver: UrlIdentityResolver = mockk()
+    private val telegramDownloadStarter: TelegramDownloadStarter = mockk()
     private val telegramSender: TelegramSender = mockk()
     private val handler = VideoUrlHandler(
-        downloadJobService = downloadJobService,
         downloadSettingsService = downloadSettingsService,
-        platformResolver = platformResolver,
-        urlIdentityResolver = urlIdentityResolver,
+        telegramDownloadStarter = telegramDownloadStarter,
         telegramSender = telegramSender,
     )
 
@@ -40,31 +35,108 @@ class VideoUrlHandlerTest {
     }
 
     @Test
-    fun sendsAvailablePlatformsWhenPlatformIsDisabled() {
-        every { downloadSettingsService.getOutputType(100) } returns OutputType.VIDEO
-        every { platformResolver.resolve("https://www.instagram.com/reel/abc/") } throws UnsupportedPlatformException(
-            "Платформа не поддерживается. Доступные платформы: YouTube."
-        )
-        every { telegramSender.sendMessage(100, any()) } just runs
+    fun asksWhatToDownloadInAskMode() {
+        val context = context("https://example.com/video", message = message())
+        every { downloadSettingsService.getMode(100) } returns DownloadMode.ASK
+        every { telegramDownloadStarter.validate(100, context.text) } returns true
+        every {
+            telegramSender.sendDownloadChoice(
+                chatId = 100,
+                replyToMessageId = 200,
+                telegramUpdateId = 400,
+            )
+        } returns 500
 
-        handler.handle(context("https://www.instagram.com/reel/abc/", message = message()))
+        handler.handle(context)
 
         verify {
-            telegramSender.sendMessage(
-                100,
-                "Платформа не поддерживается. Доступные платформы: YouTube.",
+            telegramSender.sendDownloadChoice(
+                chatId = 100,
+                replyToMessageId = 200,
+                telegramUpdateId = 400,
             )
         }
-        verify(exactly = 0) { downloadJobService.createJob(any()) }
-        verify(exactly = 0) { urlIdentityResolver.resolve(any(), any(), any()) }
+        verify(exactly = 0) { telegramDownloadStarter.start(any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun doesNotShowChoiceForUnsupportedUrl() {
+        val context = context("https://example.com/video", message = message())
+        every { downloadSettingsService.getMode(100) } returns DownloadMode.ASK
+        every { telegramDownloadStarter.validate(100, context.text) } returns false
+
+        handler.handle(context)
+
+        verify(exactly = 0) { telegramSender.sendDownloadChoice(any(), any(), any()) }
+    }
+
+    @Test
+    fun startsVideoImmediatelyInVideoMode() {
+        val context = context("https://example.com/video", message = message())
+        every { downloadSettingsService.getMode(100) } returns DownloadMode.VIDEO
+        every {
+            telegramDownloadStarter.start(
+                telegramUserId = 300,
+                telegramChatId = 100,
+                telegramUpdateId = 400,
+                telegramRequestMessageId = 200,
+                url = context.text,
+                outputType = OutputType.VIDEO,
+            )
+        } returns true
+
+        handler.handle(context)
+
+        verify {
+            telegramDownloadStarter.start(
+                telegramUserId = 300,
+                telegramChatId = 100,
+                telegramUpdateId = 400,
+                telegramRequestMessageId = 200,
+                url = context.text,
+                outputType = OutputType.VIDEO,
+            )
+        }
+    }
+
+    @Test
+    fun startsAudioImmediatelyInAudioMode() {
+        val context = context("https://example.com/video", message = message())
+        every { downloadSettingsService.getMode(100) } returns DownloadMode.AUDIO
+        every {
+            telegramDownloadStarter.start(
+                telegramUserId = 300,
+                telegramChatId = 100,
+                telegramUpdateId = 400,
+                telegramRequestMessageId = 200,
+                url = context.text,
+                outputType = OutputType.AUDIO,
+            )
+        } returns true
+
+        handler.handle(context)
+
+        verify {
+            telegramDownloadStarter.start(
+                telegramUserId = 300,
+                telegramChatId = 100,
+                telegramUpdateId = 400,
+                telegramRequestMessageId = 200,
+                url = context.text,
+                outputType = OutputType.AUDIO,
+            )
+        }
     }
 
     private fun context(
         text: String,
         message: Message? = null,
     ): TelegramUpdateContext {
+        val update = mockk<Update> {
+            every { updateId() } returns 400
+        }
         return TelegramUpdateContext(
-            update = mockk(),
+            update = update,
             message = message,
             callbackQuery = null,
             text = text,

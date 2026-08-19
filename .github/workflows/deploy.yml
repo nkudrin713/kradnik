@@ -6,6 +6,15 @@ on:
       - develop
   workflow_dispatch:
     inputs:
+      operation:
+        description: "Operation to run"
+        required: true
+        default: deploy
+        type: choice
+        options:
+          - deploy
+          - analytics-start
+          - analytics-stop
       environment:
         description: "Environment to deploy"
         required: true
@@ -14,8 +23,8 @@ on:
           - development
           - production
       version:
-        description: "Image tag to deploy, for example v1.4.0"
-        required: true
+        description: "Image tag for deploy, for example v1.4.0"
+        required: false
         type: string
 
 permissions:
@@ -118,11 +127,85 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
 
+  analytics:
+    name: Manage Metabase
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.operation == 'analytics-start' || inputs.operation == 'analytics-stop') }}
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-server
+      cancel-in-progress: false
+
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Manage Metabase
+        env:
+          OPERATION: ${{ inputs.operation }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PATH"
+          test "$DEPLOY_PATH" != "/"
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
+            set -euo pipefail && \
+            cd '$DEPLOY_PATH' && \
+            test -f docker-compose.yml && \
+            test -f .env && \
+            case '$OPERATION' in \
+              analytics-start) \
+                available_memory_mb=\$(awk '/MemAvailable:/ {print int(\$2 / 1024)}' /proc/meminfo); \
+                test -n \"\$available_memory_mb\"; \
+                if [ \"\$available_memory_mb\" -lt 1800 ]; then \
+                  echo \"Metabase start refused: only \${available_memory_mb} MiB available\" >&2; \
+                  exit 1; \
+                fi; \
+                touch .metabase-enabled; \
+                start_failed() { \
+                  rm -f .metabase-enabled; \
+                  DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose rm -sf metabase || true; \
+                  exit 1; \
+                }; \
+                DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose --profile analytics up -d metabase || start_failed; \
+                container=\$(DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose --profile analytics ps -q metabase); \
+                test -n \"\$container\" || start_failed; \
+                port=\$(sed -n 's/^METABASE_PUBLIC_PORT=//p' .env); \
+                case \"\$port\" in ''|*[!0-9]*) start_failed ;; esac; \
+                ready=false; \
+                for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do \
+                  if curl --fail --silent --show-error \"http://127.0.0.1:\$port/api/health\" >/dev/null; then ready=true; break; fi; \
+                  sleep 5; \
+                done; \
+                test \"\$ready\" = true || start_failed; \
+                ;; \
+              analytics-stop) \
+                rm -f .metabase-enabled; \
+                DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose rm -sf metabase; \
+                test -z \"\$(DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose --profile analytics ps -aq metabase)\"; \
+                ;; \
+              *) \
+                echo 'Unsupported analytics operation' >&2; \
+                exit 1; \
+                ;; \
+            esac\
+          "
+
   deploy:
     name: Deploy to server
     runs-on: ubuntu-latest
     needs: checks
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.checks.outputs.deployable == 'true') }}
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.operation == 'deploy') || (github.event_name == 'push' && needs.checks.outputs.deployable == 'true')) }}
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}
     concurrency:
       group: deploy-server
@@ -188,6 +271,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          METABASE_ANALYTICS_DB_PASSWORD: ${{ secrets.METABASE_ANALYTICS_DB_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_DONATION_URL: ${{ vars.TELEGRAM_DONATION_URL || secrets.TELEGRAM_DONATION_URL }}
           TELEGRAM_DONATION_CHANNEL_ID: ${{ vars.TELEGRAM_DONATION_CHANNEL_ID || secrets.TELEGRAM_DONATION_CHANNEL_ID }}
@@ -202,21 +286,33 @@ jobs:
           image_tag="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
           app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$image_tag"
           deploy_environment="${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}"
+          metabase_analytics_db_password="${METABASE_ANALYTICS_DB_PASSWORD:-$POSTGRES_PASSWORD}"
           if [ "$deploy_environment" = "production" ]; then
+            app_environment="prod"
             app_container_name="kradnik-prod-app"
             postgres_container_name="kradnik-prod-postgres"
             postgres_db="kradnik_prod"
             postgres_volume_name="kradnik-prod-postgres-data"
             postgres_public_port="5434"
+            metabase_container_name="kradnik-prod-metabase"
+            metabase_volume_name="kradnik-prod-metabase-data"
+            metabase_public_port="3001"
+            metabase_site_url="https://analytics.nkudrin.dev"
           else
+            app_environment="test"
             app_container_name="kradnik-test-app"
             postgres_container_name="kradnik-test-postgres"
             postgres_db="kradnik_test"
             postgres_volume_name="kradnik-test-postgres-data"
             postgres_public_port="5433"
+            metabase_container_name="kradnik-test-metabase"
+            metabase_volume_name="kradnik-test-metabase-data"
+            metabase_public_port="3000"
+            metabase_site_url="https://analytics-test.nkudrin.dev"
           fi
           {
             printf 'APP_IMAGE=%s\n' "$app_image"
+            printf 'APP_ENV=%s\n' "$app_environment"
             printf 'APP_CONTAINER_NAME=%s\n' "$app_container_name"
             printf 'POSTGRES_CONTAINER_NAME=%s\n' "$postgres_container_name"
             printf 'POSTGRES_DB=%s\n' "$postgres_db"
@@ -224,6 +320,11 @@ jobs:
             printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
             printf 'POSTGRES_VOLUME_NAME=%s\n' "$postgres_volume_name"
             printf 'POSTGRES_PUBLIC_PORT=%s\n' "$postgres_public_port"
+            printf 'METABASE_CONTAINER_NAME=%s\n' "$metabase_container_name"
+            printf 'METABASE_VOLUME_NAME=%s\n' "$metabase_volume_name"
+            printf 'METABASE_PUBLIC_PORT=%s\n' "$metabase_public_port"
+            printf 'METABASE_SITE_URL=%s\n' "$metabase_site_url"
+            printf 'METABASE_ANALYTICS_DB_PASSWORD=%s\n' "$metabase_analytics_db_password"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
             printf 'TELEGRAM_DONATION_URL=%s\n' "${TELEGRAM_DONATION_URL:-https://pay.cloudtips.ru/p/6f779a3d}"
             printf 'TELEGRAM_DONATION_CHANNEL_ID=%s\n' "${TELEGRAM_DONATION_CHANNEL_ID:-@mediakradnik}"
@@ -272,6 +373,7 @@ jobs:
             set -euo pipefail && \
             cd '$DEPLOY_PATH' && \
             test -f .env.next && \
+            if [ -f .metabase-enabled ]; then export COMPOSE_PROFILES=analytics; else unset COMPOSE_PROFILES; fi && \
             if [ -f .env ]; then cp .env .env.previous; else rm -f .env.previous; fi && \
             rollback() { \
               status=\$?; \
@@ -292,12 +394,14 @@ jobs:
             mv .env.next .env && \
             pull_app && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose up -d --remove-orphans && \
+            if [ ! -f .metabase-enabled ]; then DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose rm -sf metabase; fi && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose ps && \
             app_container=\$(docker compose ps -q app) && \
             test -n \"\$app_container\" && \
             test \"\$(docker inspect -f '{{.State.Status}}' \"\$app_container\")\" = running && \
             sleep 15 && \
             test \"\$(docker inspect -f '{{.State.Status}}' \"\$app_container\")\" = running && \
+            DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose exec -T postgres sh -c 'printf \"%s\n\" \"ALTER ROLE kradnik_analytics_reader WITH LOGIN PASSWORD :'\\''analytics_password'\\'';\" | PGPASSWORD=\"\$POSTGRES_PASSWORD\" psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -v analytics_password=\"\$METABASE_ANALYTICS_DB_PASSWORD\"' && \
             rm -f .env.previous && \
             docker image prune -f --filter until=24h\
           "

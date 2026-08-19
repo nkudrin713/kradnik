@@ -1,7 +1,6 @@
 package com.nkudrin713.kradnik.download.video
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
-import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessRunner
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +17,7 @@ import kotlin.time.Duration.Companion.minutes
 class TelegramVideoPreparer(
     private val processRunner: ProcessRunner,
     private val videoMetadataProbe: VideoMetadataProbe,
+    private val videoPolicy: TelegramVideoPolicy,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -26,51 +26,81 @@ class TelegramVideoPreparer(
         outputDir: Path,
         jobId: Long,
     ): DownloadedFile {
-        if (file.sizeBytes <= TelegramUploadLimits.MAX_UPLOAD_BYTES) {
-            return file
+        val sourceMetadata = videoMetadataProbe.probe(file.file)
+        return when (val decision = videoPolicy.evaluate(sourceMetadata, file.sizeBytes)) {
+            TelegramVideoPolicyDecision.Accepted -> file
+            TelegramVideoPolicyDecision.RejectedTooLarge -> throw VideoTooLargeException(file.sizeBytes)
+            is TelegramVideoPolicyDecision.Transcode -> transcode(
+                file = file,
+                sourceMetadata = sourceMetadata,
+                issues = decision.issues,
+                outputDir = outputDir,
+                jobId = jobId,
+            )
         }
+    }
 
-        val dimensions = videoMetadataProbe.probe(file.file)
-        if (!dimensions.isVertical) {
-            throw VideoTooLargeException(file.sizeBytes)
-        }
-
+    private suspend fun transcode(
+        file: DownloadedFile,
+        sourceMetadata: VideoMetadata,
+        issues: Set<TelegramVideoIssue>,
+        outputDir: Path,
+        jobId: Long,
+    ): DownloadedFile {
         logger.info(
-            "JOB[{}] compressing vertical video for Telegram: sourceSizeMb={}, width={}, height={}",
+            "JOB[{}] transcoding video for Telegram: reasons={}, sourceSizeMb={}, container={}, " +
+                    "videoCodec={}, audioCodec={}, pixelFormat={}, width={}, height={}",
             jobId,
+            issues,
             formatMegabytes(file.sizeBytes),
-            dimensions.width,
-            dimensions.height,
+            sourceMetadata.containerFormat,
+            sourceMetadata.videoCodec,
+            sourceMetadata.audioCodec,
+            sourceMetadata.pixelFormat,
+            sourceMetadata.width,
+            sourceMetadata.height,
         )
 
-        val compressedFile = outputDir.resolve("telegram-video.mp4")
-        transcodeVertical(file.file, compressedFile)
+        val preparedFile = outputDir.resolve("telegram-video.mp4")
+        transcodeForTelegram(file.file, preparedFile)
 
-        val compressedSize = withContext(Dispatchers.IO) {
-            Files.size(compressedFile)
+        val preparedSize = withContext(Dispatchers.IO) {
+            Files.size(preparedFile)
         }
-        val compressedDimensions = videoMetadataProbe.probe(compressedFile)
-        if (compressedSize > TelegramUploadLimits.MAX_UPLOAD_BYTES) {
-            throw VideoTooLargeException(compressedSize)
+        val preparedMetadata = videoMetadataProbe.probe(preparedFile)
+        when (val decision = videoPolicy.evaluate(preparedMetadata, preparedSize)) {
+            TelegramVideoPolicyDecision.Accepted -> Unit
+            TelegramVideoPolicyDecision.RejectedTooLarge -> throw VideoTooLargeException(preparedSize)
+            is TelegramVideoPolicyDecision.Transcode -> {
+                if (TelegramVideoIssue.FILE_SIZE in decision.issues) {
+                    throw VideoTooLargeException(preparedSize)
+                }
+                throw VideoPrepareException(
+                    "Prepared video violates Telegram policy: issues=${decision.issues}"
+                )
+            }
         }
 
         logger.info(
-            "JOB[{}] vertical video compressed: sizeMb={}, width={}, height={}, sar={}, dar={}",
+            "JOB[{}] video prepared for Telegram: sizeMb={}, container={}, videoCodec={}, " +
+                    "audioCodec={}, pixelFormat={}, width={}, height={}",
             jobId,
-            formatMegabytes(compressedSize),
-            compressedDimensions.width,
-            compressedDimensions.height,
-            compressedDimensions.sampleAspectRatio,
-            compressedDimensions.displayAspectRatio,
+            formatMegabytes(preparedSize),
+            preparedMetadata.containerFormat,
+            preparedMetadata.videoCodec,
+            preparedMetadata.audioCodec,
+            preparedMetadata.pixelFormat,
+            preparedMetadata.width,
+            preparedMetadata.height,
         )
 
         return DownloadedFile(
-            file = compressedFile,
-            sizeBytes = compressedSize,
+            file = preparedFile,
+            sizeBytes = preparedSize,
         )
     }
 
-    private suspend fun transcodeVertical(input: Path, output: Path) {
+    private suspend fun transcodeForTelegram(input: Path, output: Path) {
         val result = processRunner.run(
             FfmpegCommand(
                 args = listOf(
@@ -78,6 +108,8 @@ class TelegramVideoPreparer(
                     "-hide_banner",
                     "-loglevel", "error",
                     "-i", input.toString(),
+                    "-map", "0:v:0",
+                    "-map", "0:a:0?",
                     "-vf", "scale=min(1080\\,iw):-2,setsar=1",
                     "-c:v", "libx264",
                     "-preset", "fast",
@@ -94,7 +126,7 @@ class TelegramVideoPreparer(
         )
 
         if (result.timedOut || result.exitCode != 0) {
-            throw VideoPrepareException("ffmpeg failed: ${result.output.take(500)}")
+            throw VideoPrepareException("ffmpeg failed: ${result.diagnosticOutput.takeLast(500)}")
         }
     }
 

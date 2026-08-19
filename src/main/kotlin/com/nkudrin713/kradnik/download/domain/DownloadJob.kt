@@ -13,6 +13,7 @@ import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.Instant
+import java.util.UUID
 
 @Entity
 @Table(name = "download_jobs")
@@ -26,6 +27,12 @@ class DownloadJob(
 
 	@Column(name = "telegram_chat_id", nullable = false)
 	var telegramChatId: Long = 0,
+
+	@Column(name = "telegram_update_id")
+	var telegramUpdateId: Int? = null,
+
+	@Column(name = "telegram_request_message_id")
+	var telegramRequestMessageId: Int? = null,
 
 	@Column(name = "original_url", nullable = false)
 	var originalUrl: String = "",
@@ -106,4 +113,13 @@ class DownloadJob(
 
 	@Column(name = "completed_at")
 	var completedAt: Instant? = null,
+
+	@Column(name = "next_attempt_at", nullable = false)
+	var nextAttemptAt: Instant = Instant.EPOCH,
+
+	@Column(name = "lease_token")
+	var leaseToken: UUID? = null,
+
+	@Column(name = "lease_expires_at")
+	var leaseExpiresAt: Instant? = null,
 )

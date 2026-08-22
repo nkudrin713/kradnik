@@ -46,7 +46,7 @@ class VkDownloadHandler : PlatformDownloadHandler {
                 outputType = outputType,
                 presetName = VK_VIDEO_PRESET,
                 formatSelector =
-                    "bv*[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/" +
+                    "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/" +
                             "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
                             "b[height<=1280]/best",
                 extraArgs = listOf("--merge-output-format", "mp4"),

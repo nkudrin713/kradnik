@@ -34,8 +34,12 @@ class VkDownloadHandlerTest {
         assertEquals(OutputType.VIDEO, actual.outputType)
         assertEquals(VK_VIDEO_PRESET, actual.presetName)
         assertEquals(listOf("--merge-output-format", "mp4"), actual.extraArgs)
-        assertTrue(actual.formatSelector.contains("height<=1280"))
-        assertTrue(actual.formatSelector.contains("vcodec^=avc1"))
+        assertEquals(
+            "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/" +
+                "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
+                "b[height<=1280]/best",
+            actual.formatSelector,
+        )
     }
 
     @Test

@@ -7,7 +7,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class AudioUploadPlannerTest {
-    private val planner = AudioUploadPlanner()
+    private val planner = AudioUploadPlanner(
+        TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
+    )
 
     @Test
     fun selectsHighQualityForShortAudio() {

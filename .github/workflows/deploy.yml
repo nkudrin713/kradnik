@@ -35,6 +35,10 @@ concurrency:
   group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
   cancel-in-progress: true
 
+env:
+  TELEGRAM_BOT_API_COMMIT: adfd7f6a8e990272851777eeb3ae0def4216f161
+  TELEGRAM_BOT_API_IMAGE: ghcr.io/nkudrin713/kradnik-telegram-bot-api:adfd7f6a8e990272851777eeb3ae0def4216f161
+
 jobs:
   checks:
     name: Tests and checks
@@ -126,6 +130,28 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+
+      - name: Check Telegram Bot API image
+        id: telegram_bot_api_image
+        if: ${{ steps.latest_before_push.outputs.is_latest == 'true' }}
+        run: |
+          if docker buildx imagetools inspect "$TELEGRAM_BOT_API_IMAGE" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push Telegram Bot API image
+        if: ${{ steps.latest_before_push.outputs.is_latest == 'true' && steps.telegram_bot_api_image.outputs.exists != 'true' }}
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.telegram-bot-api
+          push: true
+          build-args: TELEGRAM_BOT_API_COMMIT=${{ env.TELEGRAM_BOT_API_COMMIT }}
+          cache-from: type=gha,scope=telegram-bot-api
+          cache-to: type=gha,mode=max,scope=telegram-bot-api
+          tags: ${{ env.TELEGRAM_BOT_API_IMAGE }}
 
   analytics:
     name: Manage Metabase
@@ -273,6 +299,14 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           METABASE_ANALYTICS_DB_PASSWORD: ${{ secrets.METABASE_ANALYTICS_DB_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_LOCAL_API_ENABLED: ${{ vars.TELEGRAM_LOCAL_API_ENABLED || 'false' }}
+          TELEGRAM_BOT_API_URL: ${{ vars.TELEGRAM_BOT_API_URL }}
+          TELEGRAM_BOT_FILE_API_URL: ${{ vars.TELEGRAM_BOT_FILE_API_URL }}
+          TELEGRAM_MAX_UPLOAD_BYTES: ${{ vars.TELEGRAM_MAX_UPLOAD_BYTES }}
+          TELEGRAM_CONNECT_TIMEOUT: ${{ vars.TELEGRAM_CONNECT_TIMEOUT || '10s' }}
+          TELEGRAM_REQUEST_TIMEOUT: ${{ vars.TELEGRAM_REQUEST_TIMEOUT || '60m' }}
           TELEGRAM_DONATION_URL: ${{ vars.TELEGRAM_DONATION_URL || secrets.TELEGRAM_DONATION_URL }}
           TELEGRAM_DONATION_CHANNEL_ID: ${{ vars.TELEGRAM_DONATION_CHANNEL_ID || secrets.TELEGRAM_DONATION_CHANNEL_ID }}
           TELEGRAM_DONATION_PIN_ENABLED: ${{ vars.TELEGRAM_DONATION_PIN_ENABLED || secrets.TELEGRAM_DONATION_PIN_ENABLED }}
@@ -288,6 +322,25 @@ jobs:
           app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$image_tag"
           deploy_environment="${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}"
           metabase_analytics_db_password="${METABASE_ANALYTICS_DB_PASSWORD:-$POSTGRES_PASSWORD}"
+          telegram_local_api_enabled="${TELEGRAM_LOCAL_API_ENABLED:-false}"
+          case "$telegram_local_api_enabled" in true|false) ;; *) echo 'TELEGRAM_LOCAL_API_ENABLED must be true or false' >&2; exit 1 ;; esac
+          if [ "$deploy_environment" = "production" ] && [ "$telegram_local_api_enabled" = "true" ]; then
+            echo 'Local Telegram Bot API is not approved for production' >&2
+            exit 1
+          fi
+          if [ "$telegram_local_api_enabled" = "true" ]; then
+            test -n "$TELEGRAM_API_ID"
+            test -n "$TELEGRAM_API_HASH"
+            telegram_bot_api_url="${TELEGRAM_BOT_API_URL:-http://telegram-bot-api:8081/bot}"
+            telegram_bot_file_api_url="${TELEGRAM_BOT_FILE_API_URL:-http://telegram-bot-api:8081/file/bot}"
+            telegram_max_upload_bytes="${TELEGRAM_MAX_UPLOAD_BYTES:-2000000000}"
+            download_work_dir="/var/lib/kradnik/media"
+          else
+            telegram_bot_api_url="${TELEGRAM_BOT_API_URL:-https://api.telegram.org/bot}"
+            telegram_bot_file_api_url="${TELEGRAM_BOT_FILE_API_URL:-https://api.telegram.org/file/bot}"
+            telegram_max_upload_bytes="${TELEGRAM_MAX_UPLOAD_BYTES:-47185920}"
+            download_work_dir="/tmp/kradnik-downloads"
+          fi
           if [ "$deploy_environment" = "production" ]; then
             app_environment="prod"
             app_container_name="kradnik-prod-app"
@@ -299,6 +352,9 @@ jobs:
             metabase_volume_name="kradnik-prod-metabase-data"
             metabase_public_port="3001"
             metabase_site_url="https://analytics.nkudrin.dev"
+            telegram_bot_api_container_name="kradnik-prod-telegram-bot-api"
+            telegram_bot_api_data_volume_name="kradnik-prod-telegram-bot-api-data"
+            media_work_volume_name="kradnik-prod-media-work"
           else
             app_environment="test"
             app_container_name="kradnik-test-app"
@@ -310,6 +366,9 @@ jobs:
             metabase_volume_name="kradnik-test-metabase-data"
             metabase_public_port="3000"
             metabase_site_url="https://analytics-test.nkudrin.dev"
+            telegram_bot_api_container_name="kradnik-test-telegram-bot-api"
+            telegram_bot_api_data_volume_name="kradnik-test-telegram-bot-api-data"
+            media_work_volume_name="kradnik-test-media-work"
           fi
           {
             printf 'APP_IMAGE=%s\n' "$app_image"
@@ -327,6 +386,19 @@ jobs:
             printf 'METABASE_SITE_URL=%s\n' "$metabase_site_url"
             printf 'METABASE_ANALYTICS_DB_PASSWORD=%s\n' "$metabase_analytics_db_password"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
+            printf 'TELEGRAM_BOT_API_IMAGE=%s\n' "$TELEGRAM_BOT_API_IMAGE"
+            printf 'TELEGRAM_BOT_API_CONTAINER_NAME=%s\n' "$telegram_bot_api_container_name"
+            printf 'TELEGRAM_BOT_API_DATA_VOLUME_NAME=%s\n' "$telegram_bot_api_data_volume_name"
+            printf 'MEDIA_WORK_VOLUME_NAME=%s\n' "$media_work_volume_name"
+            printf 'TELEGRAM_API_ID=%s\n' "$TELEGRAM_API_ID"
+            printf 'TELEGRAM_API_HASH=%s\n' "$TELEGRAM_API_HASH"
+            printf 'TELEGRAM_LOCAL_API_ENABLED=%s\n' "$telegram_local_api_enabled"
+            printf 'TELEGRAM_BOT_API_URL=%s\n' "$telegram_bot_api_url"
+            printf 'TELEGRAM_BOT_FILE_API_URL=%s\n' "$telegram_bot_file_api_url"
+            printf 'TELEGRAM_MAX_UPLOAD_BYTES=%s\n' "$telegram_max_upload_bytes"
+            printf 'TELEGRAM_CONNECT_TIMEOUT=%s\n' "$TELEGRAM_CONNECT_TIMEOUT"
+            printf 'TELEGRAM_REQUEST_TIMEOUT=%s\n' "$TELEGRAM_REQUEST_TIMEOUT"
+            printf 'DOWNLOAD_WORK_DIR=%s\n' "$download_work_dir"
             printf 'TELEGRAM_DONATION_URL=%s\n' "${TELEGRAM_DONATION_URL:-https://pay.cloudtips.ru/p/6f779a3d}"
             printf 'TELEGRAM_DONATION_CHANNEL_ID=%s\n' "${TELEGRAM_DONATION_CHANNEL_ID:-@mediakradnik}"
             printf 'TELEGRAM_DONATION_PIN_ENABLED=%s\n' "${TELEGRAM_DONATION_PIN_ENABLED:-false}"
@@ -375,26 +447,39 @@ jobs:
             set -euo pipefail && \
             cd '$DEPLOY_PATH' && \
             test -f .env.next && \
-            if [ -f .metabase-enabled ]; then export COMPOSE_PROFILES=analytics; else unset COMPOSE_PROFILES; fi && \
+            set_profiles() { \
+              profiles=''; \
+              if [ -f .metabase-enabled ]; then profiles='analytics'; fi; \
+              local_enabled=\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env 2>/dev/null); \
+              if [ \"\$local_enabled\" = 'true' ]; then \
+                if [ -n \"\$profiles\" ]; then profiles=\"\$profiles,telegram-local\"; else profiles='telegram-local'; fi; \
+              fi; \
+              if [ -n \"\$profiles\" ]; then export COMPOSE_PROFILES=\"\$profiles\"; else unset COMPOSE_PROFILES; fi; \
+            } && \
             if [ -f .env ]; then cp .env .env.previous; else rm -f .env.previous; fi && \
             rollback() { \
               status=\$?; \
               if [ \"\$status\" -ne 0 ] && [ -f .env.previous ]; then \
                 mv .env.previous .env; \
+                set_profiles; \
                 DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose up -d --remove-orphans || true; \
               fi; \
               exit \"\$status\"; \
             } && \
-            pull_app() { \
+            pull_images() { \
               for attempt in 1 2 3; do \
-                DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose pull app && return 0; \
+                if DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose pull app && \
+                  { [ \"\${COMPOSE_PROFILES:-}\" != 'telegram-local' ] && [ \"\${COMPOSE_PROFILES:-}\" != 'analytics,telegram-local' ] || DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose pull telegram-bot-api; }; then \
+                  return 0; \
+                fi; \
                 sleep \$((attempt * 5)); \
               done; \
               return 1; \
             } && \
             trap rollback EXIT && \
             mv .env.next .env && \
-            pull_app && \
+            set_profiles && \
+            pull_images && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose up -d --remove-orphans && \
             if [ ! -f .metabase-enabled ]; then DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose rm -sf metabase; fi && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose ps && \
@@ -403,6 +488,11 @@ jobs:
             test \"\$(docker inspect -f '{{.State.Status}}' \"\$app_container\")\" = running && \
             sleep 15 && \
             test \"\$(docker inspect -f '{{.State.Status}}' \"\$app_container\")\" = running && \
+            if [ \"\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env)\" = 'true' ]; then \
+              telegram_api_container=\$(docker compose ps -q telegram-bot-api); \
+              test -n \"\$telegram_api_container\"; \
+              test \"\$(docker inspect -f '{{.State.Health.Status}}' \"\$telegram_api_container\")\" = healthy; \
+            fi && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose exec -T postgres sh -c 'printf \"%s\n\" \"ALTER ROLE kradnik_analytics_reader WITH LOGIN PASSWORD :'\\''analytics_password'\\'';\" | PGPASSWORD=\"\$POSTGRES_PASSWORD\" psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -v analytics_password=\"\$METABASE_ANALYTICS_DB_PASSWORD\"' && \
             rm -f .env.previous && \
             docker image prune -f --filter until=24h\

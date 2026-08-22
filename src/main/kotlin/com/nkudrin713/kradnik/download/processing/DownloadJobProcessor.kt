@@ -10,11 +10,13 @@ import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
+import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
+import com.nkudrin713.kradnik.download.video.VideoTooLargeException
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -37,6 +39,7 @@ class DownloadJobProcessor(
     private val downloadJobLifecycle: DownloadJobLifecycle,
     private val downloadAnalytics: DownloadAnalytics,
     private val workDirCleaner: WorkDirCleaner,
+    private val uploadLimits: TelegramUploadLimits,
     @Value("\${download.work-dir:/tmp/kradnik-downloads}")
     private val workDir: String,
     @Value("\${download.telegram-file-cache.enabled:true}")
@@ -96,6 +99,13 @@ class DownloadJobProcessor(
 
             val downloadedFile = session.download(downloadRequest, outputDir)
             val uploadFile = prepareForUpload(uploadJob, downloadedFile, outputDir, jobId)
+            if (uploadFile.sizeBytes > uploadLimits.maxUploadBytes) {
+                downloadJobLifecycle.rejectTooLarge(
+                    attempt,
+                    uploadLimitReason(uploadJob.outputType, uploadFile.sizeBytes),
+                )
+                return
+            }
 
             upload(attempt, uploadJob, uploadFile)
         } catch (error: YtDlpAuthenticationRequiredException) {
@@ -106,6 +116,12 @@ class DownloadJobProcessor(
             )
         } catch (error: CancellationException) {
             throw error
+        } catch (error: VideoTooLargeException) {
+            logger.warn("JOB[{}] video exceeds Telegram upload limit", jobId)
+            downloadJobLifecycle.rejectTooLarge(
+                attempt,
+                uploadLimitReason(OutputType.VIDEO, error.sizeBytes),
+            )
         } catch (error: TelegramSendException) {
             logger.error("JOB[{}] Telegram send failed", jobId, error)
             val errorMessage = error.message ?: error.javaClass.simpleName
@@ -198,6 +214,11 @@ class DownloadJobProcessor(
 
     private fun formatMegabytes(bytes: Long): String {
         return String.format(Locale.US, "%.2f", bytes / BYTES_IN_MEGABYTE)
+    }
+
+    private fun uploadLimitReason(outputType: OutputType, sizeBytes: Long): String {
+        return "Selected ${outputType.dbValue} is too large for Telegram: " +
+                "sizeMb=${formatMegabytes(sizeBytes)}, limitMb=${formatMegabytes(uploadLimits.maxUploadBytes)}"
     }
 
     private companion object {

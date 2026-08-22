@@ -32,7 +32,7 @@ class PlatformIdentityTest {
 
         assertEquals("https://www.youtube.com/watch?v=abc&utm_source=x", actual.originalUrl)
         assertEquals("https://www.youtube.com/watch?v=abc", actual.normalizedUrl)
-        assertEquals("youtube:video:abc:video:youtube_h264_mobile", actual.cacheKey)
+        assertEquals("youtube:video:abc:video:youtube_h264_mobile_2gb", actual.cacheKey)
     }
 
     @Test
@@ -54,7 +54,7 @@ class PlatformIdentityTest {
         ).identity
 
         assertEquals("https://www.youtube.com/watch?v=abc", actual.normalizedUrl)
-        assertEquals("youtube:video:abc:video:youtube_h264_mobile", actual.cacheKey)
+        assertEquals("youtube:video:abc:video:youtube_h264_mobile_2gb", actual.cacheKey)
     }
 
     @Test
@@ -65,7 +65,7 @@ class PlatformIdentityTest {
         ).identity
 
         assertEquals("https://www.youtube.com/watch?v=abc", actual.normalizedUrl)
-        assertEquals("youtube:video:abc:video:youtube_h264_mobile", actual.cacheKey)
+        assertEquals("youtube:video:abc:video:youtube_h264_mobile_2gb", actual.cacheKey)
     }
 
     @Test
@@ -87,7 +87,7 @@ class PlatformIdentityTest {
         ).identity
 
         assertEquals("https://www.youtube.com/watch?v=abc", actual.normalizedUrl)
-        assertEquals("youtube:video:abc:video:youtube_h264_mobile", actual.cacheKey)
+        assertEquals("youtube:video:abc:video:youtube_h264_mobile_2gb", actual.cacheKey)
     }
 
     @Test

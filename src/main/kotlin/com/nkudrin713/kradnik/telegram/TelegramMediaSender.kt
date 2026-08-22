@@ -16,6 +16,7 @@ import java.util.Locale
 class TelegramMediaSender(
     private val apiClient: TelegramApiClient,
     private val videoMetadataProbe: VideoMetadataProbe,
+    private val requestFactory: TelegramMediaRequestFactory,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -47,7 +48,7 @@ class TelegramMediaSender(
             metadata.colorTransfer,
             metadata.colorPrimaries,
         )
-        val request = SendVideo(chatId, file.toFile())
+        val request = requestFactory.video(chatId, file)
             .width(metadata.width)
             .height(metadata.height)
             .supportsStreaming(true)
@@ -83,7 +84,7 @@ class TelegramMediaSender(
         replyToMessageId: Int? = null,
     ): TelegramSendResult {
         val fileSize = fileSize(file)
-        val request = SendAudio(chatId, file.toFile())
+        val request = requestFactory.audio(chatId, file)
         title?.let(request::title)
         performer?.let(request::performer)
         durationSeconds?.let(request::duration)

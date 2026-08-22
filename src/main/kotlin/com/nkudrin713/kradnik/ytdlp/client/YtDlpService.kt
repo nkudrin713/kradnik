@@ -84,7 +84,7 @@ class YtDlpService(
             YtDlpCommand(
                 args = args,
                 workingDir = outputDir,
-                timeout = 10.minutes,
+                timeout = 30.minutes,
             )
         )
 

@@ -109,9 +109,14 @@ class PlatformResolverTest {
 
         assertEquals("https://youtube.com/watch?v=id", actual.originalUrl)
         assertEquals(OutputType.VIDEO, actual.outputType)
-        assertEquals("youtube_h264_mobile", actual.presetName)
+        assertEquals("youtube_h264_mobile_2gb", actual.presetName)
         assertEquals(listOf("--merge-output-format", "mp4"), actual.extraArgs)
-        assertEquals(true, actual.formatSelector.contains("height<=1280"))
+        assertEquals(
+            "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
+                "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
+                "b[height<=1280]/best",
+            actual.formatSelector,
+        )
     }
 
     @Test

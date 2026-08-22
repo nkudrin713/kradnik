@@ -10,6 +10,7 @@ import java.util.Locale
 @Service
 class DownloadPreflightService(
     private val audioUploadPlanner: AudioUploadPlanner,
+    private val uploadLimits: TelegramUploadLimits,
 ) {
     fun check(
         request: DownloadRequest,
@@ -27,7 +28,7 @@ class DownloadPreflightService(
 
         val selectedSize = selectedSize(metadata) ?: return DownloadPreflightDecision.Allowed(request)
 
-        if (selectedSize <= TelegramUploadLimits.MAX_UPLOAD_BYTES) {
+        if (selectedSize <= uploadLimits.maxUploadBytes) {
             return DownloadPreflightDecision.Allowed(request)
         }
 
@@ -37,7 +38,7 @@ class DownloadPreflightService(
 
         return DownloadPreflightDecision.Rejected(
             reason = "Selected ${request.outputType.dbValue} is too large for Telegram: " +
-                    "sizeMb=${formatMegabytes(selectedSize)}, limitMb=${formatMegabytes(TelegramUploadLimits.MAX_UPLOAD_BYTES)}"
+                    "sizeMb=${formatMegabytes(selectedSize)}, limitMb=${formatMegabytes(uploadLimits.maxUploadBytes)}"
         )
     }
 

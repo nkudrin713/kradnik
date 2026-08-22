@@ -13,12 +13,14 @@ import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.executor.YtDlpDownloadExecutor
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
+import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSendResult
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
+import com.nkudrin713.kradnik.download.video.VideoTooLargeException
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
@@ -57,6 +59,7 @@ class DownloadJobProcessorTest {
     private val downloadJobLifecycle: DownloadJobLifecycle = mockk(relaxed = true)
     private val downloadAnalytics: DownloadAnalytics = mockk(relaxed = true)
     private val workDirCleaner: WorkDirCleaner = mockk()
+    private val uploadLimits = TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
 
     @Test
     fun completesCachedJob(@TempDir tempDir: Path) = runTest {
@@ -185,6 +188,54 @@ class DownloadJobProcessorTest {
         coVerify { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) }
         coVerify { telegramFileSender.send(job, preparedFile) }
         verify { downloadJobLifecycle.complete(attempt(job), any()) }
+        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+    }
+
+    @Test
+    fun rejectsDownloadedAudioAboveLimitBeforeUpload(@TempDir tempDir: Path) = runTest {
+        val job = job(outputType = OutputType.AUDIO)
+        val request = request(outputType = OutputType.AUDIO)
+        val downloadedFile = DownloadedFile(
+            tempDir.resolve("downloaded.mp3"),
+            uploadLimits.maxUploadBytes + 1,
+        )
+        val metadata = metadata()
+        every { downloadJobService.findCachedJob(job) } returns null
+        coEvery { ytDlpService.extractMetadata(request) } returns metadata
+        every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
+        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
+        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(attempt(job))
+
+        verify { downloadJobLifecycle.rejectTooLarge(attempt(job), match { it.contains("limitMb=45.00") }) }
+        coVerify(exactly = 0) { telegramFileSender.send(any(), any()) }
+        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+    }
+
+    @Test
+    fun rejectsVideoThatRemainsAboveLimitAfterPreparation(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val request = request()
+        val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
+        val metadata = metadata()
+        every { downloadJobService.findCachedJob(job) } returns null
+        coEvery { ytDlpService.extractMetadata(request) } returns metadata
+        every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
+        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
+        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
+        coEvery {
+            telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1)
+        } throws VideoTooLargeException(uploadLimits.maxUploadBytes + 1)
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(attempt(job))
+
+        verify { downloadJobLifecycle.rejectTooLarge(attempt(job), match { it.contains("limitMb=45.00") }) }
+        coVerify(exactly = 0) { telegramFileSender.send(any(), any()) }
         verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
     }
 
@@ -500,6 +551,7 @@ class DownloadJobProcessorTest {
             downloadJobLifecycle = downloadJobLifecycle,
             downloadAnalytics = downloadAnalytics,
             workDirCleaner = workDirCleaner,
+            uploadLimits = uploadLimits,
             workDir = workDir.toString(),
             telegramFileCacheEnabled = telegramFileCacheEnabled,
         )

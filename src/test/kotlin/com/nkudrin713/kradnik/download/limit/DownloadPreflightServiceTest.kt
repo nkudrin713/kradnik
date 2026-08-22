@@ -10,7 +10,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class DownloadPreflightServiceTest {
-    private val service = DownloadPreflightService(AudioUploadPlanner())
+    private val uploadLimits = TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
+    private val service = DownloadPreflightService(
+        audioUploadPlanner = AudioUploadPlanner(uploadLimits),
+        uploadLimits = uploadLimits,
+    )
 
     @Test
     fun allowsUnknownSize() {
@@ -25,7 +29,7 @@ class DownloadPreflightServiceTest {
             audioRequest(),
             metadata(
                 durationSeconds = null,
-                filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+                filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
             ),
         )
 
@@ -38,7 +42,7 @@ class DownloadPreflightServiceTest {
             audioRequest(extraArgs = listOf("-x", "--audio-format", "mp3")),
             metadata(
                 durationSeconds = 8604,
-                filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+                filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
             ),
         )
 
@@ -54,7 +58,7 @@ class DownloadPreflightServiceTest {
             audioRequest(extraArgs = listOf("-x", "--audio-format", "mp3")),
             metadata(
                 durationSeconds = 4 * 60 * 60,
-                filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+                filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
             ),
         )
 
@@ -63,9 +67,30 @@ class DownloadPreflightServiceTest {
 
     @Test
     fun allowsSizeEqualToLimit() {
-        val actual = service.check(audioRequest(), metadata(filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES))
+        val actual = service.check(audioRequest(), metadata(filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES))
 
         assertIs<DownloadPreflightDecision.Allowed>(actual)
+    }
+
+    @Test
+    fun localModeAllowsTwoBillionBytesAndRejectsMore() {
+        val localLimits = TelegramUploadLimits(TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES)
+        val localService = DownloadPreflightService(
+            audioUploadPlanner = AudioUploadPlanner(localLimits),
+            uploadLimits = localLimits,
+        )
+
+        val allowed = localService.check(
+            audioRequest(),
+            metadata(durationSeconds = null, filesize = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES),
+        )
+        val rejected = localService.check(
+            audioRequest(),
+            metadata(durationSeconds = null, filesize = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES + 1),
+        )
+
+        assertIs<DownloadPreflightDecision.Allowed>(allowed)
+        assertIs<DownloadPreflightDecision.Rejected>(rejected)
     }
 
     @Test
@@ -75,7 +100,7 @@ class DownloadPreflightServiceTest {
             metadata(
                 durationSeconds = null,
                 filesize = null,
-                filesizeApprox = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+                filesizeApprox = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
             ),
         )
 
@@ -87,7 +112,7 @@ class DownloadPreflightServiceTest {
         val actual = service.check(
             videoRequest(),
             metadata(
-                filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+                filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
                 width = 1920,
                 height = 1080,
             ),
@@ -101,7 +126,7 @@ class DownloadPreflightServiceTest {
         val actual = service.check(
             videoRequest(),
             metadata(
-                filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+                filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
                 width = 1080,
                 height = 1920,
             ),
@@ -121,7 +146,7 @@ class DownloadPreflightServiceTest {
                         ext = "mp4",
                         width = 1920,
                         height = 1080,
-                        filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES,
+                        filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
                         filesizeApprox = null,
                     ),
                     format(
@@ -190,7 +215,7 @@ class DownloadPreflightServiceTest {
                         width = 1920,
                         height = 1080,
                         filesize = null,
-                        filesizeApprox = TelegramUploadLimits.MAX_UPLOAD_BYTES,
+                        filesizeApprox = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
                     ),
                     format(
                         formatId = "audio",
@@ -212,7 +237,7 @@ class DownloadPreflightServiceTest {
         val actual = service.check(
             videoRequest(),
             metadata(
-                filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+                filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
                 width = null,
                 height = 1920,
             ),
@@ -226,7 +251,7 @@ class DownloadPreflightServiceTest {
         val actual = service.check(
             videoRequest(),
             metadata(
-                filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+                filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
                 width = 1080,
                 height = null,
             ),
@@ -241,7 +266,7 @@ class DownloadPreflightServiceTest {
             audioRequest(),
             metadata(
                 durationSeconds = null,
-                filesize = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+                filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
             ),
         )
 

@@ -25,12 +25,14 @@ class TelegramVideoPreparerTest {
     private val preparer = TelegramVideoPreparer(
         processRunner = processRunner,
         videoMetadataProbe = videoMetadataProbe,
-        videoPolicy = TelegramVideoPolicy(),
+        videoPolicy = TelegramVideoPolicy(
+            TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
+        ),
     )
 
     @Test
     fun returnsSmallCompatibleFileWithoutTranscoding(@TempDir tempDir: Path) = runTest {
-        val file = DownloadedFile(tempDir.resolve("video.mp4"), TelegramUploadLimits.MAX_UPLOAD_BYTES)
+        val file = DownloadedFile(tempDir.resolve("video.mp4"), TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
         coEvery { videoMetadataProbe.probe(file.file) } returns verticalMetadata()
 
         val actual = preparer.prepare(file, tempDir, jobId = 1)
@@ -69,7 +71,7 @@ class TelegramVideoPreparerTest {
 
     @Test
     fun rejectsLargeHorizontalVideo(@TempDir tempDir: Path) = runTest {
-        val file = DownloadedFile(tempDir.resolve("video.mp4"), TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
+        val file = DownloadedFile(tempDir.resolve("video.mp4"), TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1)
         coEvery { videoMetadataProbe.probe(file.file) } returns horizontalMetadata()
 
         assertFailsWith<VideoTooLargeException> {
@@ -81,7 +83,7 @@ class TelegramVideoPreparerTest {
     @Test
     fun compressesLargeVerticalVideo(@TempDir tempDir: Path) = runTest {
         val source = tempDir.resolve("source.mp4")
-        val file = DownloadedFile(source, TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
+        val file = DownloadedFile(source, TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1)
         coEvery { videoMetadataProbe.probe(source) } returns verticalMetadata()
         coEvery { processRunner.run(any()) } answers {
             Path.of(firstArg<Command>().args.last()).writeText("compressed")
@@ -128,12 +130,12 @@ class TelegramVideoPreparerTest {
     @Test
     fun failsWhenPreparedVideoIsStillTooLarge(@TempDir tempDir: Path) = runTest {
         val source = tempDir.resolve("source.mp4")
-        val file = DownloadedFile(source, TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
+        val file = DownloadedFile(source, TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1)
         val preparedFile = tempDir.resolve("telegram-video.mp4")
         coEvery { videoMetadataProbe.probe(source) } returns verticalMetadata()
         coEvery { processRunner.run(any()) } answers {
             RandomAccessFile(Path.of(firstArg<Command>().args.last()).toFile(), "rw").use { output ->
-                output.setLength(TelegramUploadLimits.MAX_UPLOAD_BYTES + 1)
+                output.setLength(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1)
             }
             processResult()
         }

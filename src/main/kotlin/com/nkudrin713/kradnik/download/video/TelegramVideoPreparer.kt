@@ -147,7 +147,7 @@ private data class FfmpegCommand(
     override val executable: String = "ffmpeg",
 ) : Command
 
-class VideoTooLargeException(sizeBytes: Long) :
+class VideoTooLargeException(val sizeBytes: Long) :
     RuntimeException(
         "Video is too large for Telegram upload: sizeMb=${
             String.format(Locale.US, "%.2f", sizeBytes / (1024.0 * 1024.0))

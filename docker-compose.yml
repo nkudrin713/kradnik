@@ -6,6 +6,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      telegram-bot-api:
+        condition: service_healthy
+        required: false
     environment:
       APP_ENV: ${APP_ENV:?APP_ENV is required}
       POSTGRES_HOST: postgres
@@ -14,6 +17,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-kradnik}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kradnik}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_LOCAL_API_ENABLED: ${TELEGRAM_LOCAL_API_ENABLED:-false}
+      TELEGRAM_BOT_API_URL: ${TELEGRAM_BOT_API_URL:-https://api.telegram.org/bot}
+      TELEGRAM_BOT_FILE_API_URL: ${TELEGRAM_BOT_FILE_API_URL:-https://api.telegram.org/file/bot}
+      TELEGRAM_MAX_UPLOAD_BYTES: ${TELEGRAM_MAX_UPLOAD_BYTES:-47185920}
+      TELEGRAM_CONNECT_TIMEOUT: ${TELEGRAM_CONNECT_TIMEOUT:-10s}
+      TELEGRAM_REQUEST_TIMEOUT: ${TELEGRAM_REQUEST_TIMEOUT:-60m}
+      DOWNLOAD_WORK_DIR: ${DOWNLOAD_WORK_DIR:-/tmp/kradnik-downloads}
       TELEGRAM_DONATION_URL: ${TELEGRAM_DONATION_URL:-https://pay.cloudtips.ru/p/6f779a3d}
       TELEGRAM_DONATION_CHANNEL_ID: ${TELEGRAM_DONATION_CHANNEL_ID:-@mediakradnik}
       TELEGRAM_DONATION_PIN_ENABLED: ${TELEGRAM_DONATION_PIN_ENABLED:-false}
@@ -21,6 +31,27 @@ services:
       DOWNLOAD_PLATFORM_YOUTUBE_ENABLED: ${DOWNLOAD_PLATFORM_YOUTUBE_ENABLED:-false}
       DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED: ${DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED:-false}
       DOWNLOAD_PLATFORM_VK_ENABLED: ${DOWNLOAD_PLATFORM_VK_ENABLED:-false}
+    volumes:
+      - media-work:/var/lib/kradnik/media
+
+  telegram-bot-api:
+    image: ${TELEGRAM_BOT_API_IMAGE:-ghcr.io/nkudrin713/kradnik-telegram-bot-api:adfd7f6a8e990272851777eeb3ae0def4216f161}
+    profiles: ["telegram-local"]
+    container_name: ${TELEGRAM_BOT_API_CONTAINER_NAME:-kradnik-telegram-bot-api}
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+      - media-work:/var/lib/kradnik/media:ro
+    tmpfs:
+      - /tmp/telegram-bot-api:size=64m,mode=0700,uid=101,gid=101
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8081"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   postgres:
     image: postgres:17-alpine
@@ -63,3 +94,7 @@ volumes:
     name: ${POSTGRES_VOLUME_NAME:-kradnik_postgres-data}
   metabase-data:
     name: ${METABASE_VOLUME_NAME:-kradnik_metabase-data}
+  telegram-bot-api-data:
+    name: ${TELEGRAM_BOT_API_DATA_VOLUME_NAME:-kradnik_telegram-bot-api-data}
+  media-work:
+    name: ${MEDIA_WORK_VOLUME_NAME:-kradnik_media-work}

@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.video.VideoMetadata
 import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
+import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.Audio
 import com.pengrad.telegrambot.model.Message
@@ -26,7 +27,11 @@ import kotlin.test.Test
 class TelegramMediaSenderTest {
     private val bot: TelegramBot = mockk()
     private val videoMetadataProbe: VideoMetadataProbe = mockk()
-    private val sender = TelegramMediaSender(TelegramApiClient(bot), videoMetadataProbe)
+    private val sender = TelegramMediaSender(
+        apiClient = TelegramApiClient(bot),
+        videoMetadataProbe = videoMetadataProbe,
+        requestFactory = TelegramMediaRequestFactory(TelegramBotProperties(token = "test-token")),
+    )
 
     @Test
     fun sendsVideoWithMetadata(@TempDir tempDir: Path) = runTest {

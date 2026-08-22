@@ -43,12 +43,11 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
                 outputType = outputType,
-                presetName = "youtube_h264_mobile",
+                presetName = "youtube_h264_mobile_2gb",
                 formatSelector =
-                    "bv*[filesize<40M][height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
-                            "bv*[height<=720][filesize<40M][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
-                            "bv*[height<=480][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
-                            "b[height<=720][vcodec^=avc1][ext=mp4]/b",
+                    "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
+                            "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
+                            "b[height<=1280]/best",
                 extraArgs = listOf("--merge-output-format", "mp4"),
             )
 

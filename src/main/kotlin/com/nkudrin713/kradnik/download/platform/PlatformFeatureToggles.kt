@@ -9,12 +9,15 @@ class PlatformFeatureToggles(
     private val youtubeEnabled: Boolean,
     @Value("\${download.platform.instagram.enabled:false}")
     private val instagramEnabled: Boolean,
+    @Value("\${download.platform.vk.enabled:false}")
+    private val vkEnabled: Boolean,
 ) {
 
     fun isEnabled(platform: DownloadPlatform): Boolean {
         return when (platform) {
             DownloadPlatform.YOUTUBE -> youtubeEnabled
             DownloadPlatform.INSTAGRAM -> instagramEnabled
+            DownloadPlatform.VK -> vkEnabled
         }
     }
 

@@ -51,6 +51,23 @@ class PlatformResolverTest {
     }
 
     @Test
+    fun throwsWhenVkIsDisabled() {
+        val resolver = PlatformResolver(
+            handlers = listOf(VkDownloadHandler()),
+            platformFeatureToggles = toggles(vkEnabled = false),
+        )
+
+        val exception = assertFailsWith<UnsupportedPlatformException> {
+            resolver.resolve("https://vk.com/video-1_2", OutputType.VIDEO)
+        }
+
+        assertEquals(
+            "Платформа не поддерживается. Доступные платформы: YouTube.",
+            exception.message,
+        )
+    }
+
+    @Test
     fun youtubeHandlerSupportsExpectedHosts() {
         val handler = YouTubeDownloadHandler()
 
@@ -171,10 +188,12 @@ class PlatformResolverTest {
     private fun toggles(
         youtubeEnabled: Boolean = true,
         instagramEnabled: Boolean = false,
+        vkEnabled: Boolean = false,
     ): PlatformFeatureToggles {
         return PlatformFeatureToggles(
             youtubeEnabled = youtubeEnabled,
             instagramEnabled = instagramEnabled,
+            vkEnabled = vkEnabled,
         )
     }
 }

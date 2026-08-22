@@ -5,4 +5,5 @@ enum class DownloadPlatform(
 ) {
     YOUTUBE("YouTube"),
     INSTAGRAM("Instagram"),
+    VK("VK"),
 }

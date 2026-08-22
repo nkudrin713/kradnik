@@ -1,7 +1,11 @@
-package com.nkudrin713.kradnik.download.executor
+package com.nkudrin713.kradnik.download.vk
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
-import com.nkudrin713.kradnik.download.platform.VK_PRESET_PREFIX
+import com.nkudrin713.kradnik.download.executor.DownloadExecutor
+import com.nkudrin713.kradnik.download.executor.DownloadPreparation
+import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
+import com.nkudrin713.kradnik.download.platform.VK_AUDIO_PRESET
+import com.nkudrin713.kradnik.download.platform.VK_VIDEO_PRESET
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -10,23 +14,23 @@ import org.springframework.stereotype.Component
 import java.nio.file.Path
 
 @Component
-@Order(1000)
-class YtDlpDownloadExecutor(
+@Order(20)
+class VkDownloadExecutor(
     private val ytDlpService: YtDlpService,
 ) : DownloadExecutor {
     override fun supports(request: DownloadRequest): Boolean {
-        return !request.presetName.startsWith(VK_PRESET_PREFIX)
+        return request.presetName == VK_VIDEO_PRESET || request.presetName == VK_AUDIO_PRESET
     }
 
     override suspend fun prepare(request: DownloadRequest): DownloadPreparation {
         return DownloadPreparation.Ready(
-            YtDlpPreparedDownloadSession(
+            VkPreparedDownloadSession(
                 metadata = ytDlpService.extractMetadata(request),
             )
         )
     }
 
-    private inner class YtDlpPreparedDownloadSession(
+    private inner class VkPreparedDownloadSession(
         override val metadata: YtDlpMetadataDto,
     ) : PreparedDownloadSession {
         override suspend fun download(

@@ -3,13 +3,15 @@ package com.nkudrin713.kradnik.ytdlp.client
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.platform.YOUTUBE_PRESET_PREFIX
+import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 import kotlin.io.path.fileSize
@@ -26,26 +28,31 @@ private const val OUTPUT = "-o"
 private const val PRINT = "--print"
 private const val FILEPATH_MARKER = "KRADNIK_FILEPATH:"
 private const val FINAL_FILEPATH = "after_move:${FILEPATH_MARKER}%(filepath)j"
+private const val EXTRACTOR_ARGS = "--extractor-args"
+private const val YOUTUBE_PLAYER_CLIENT = "youtube:player_client=mweb"
 
 private const val TITLE_EXT = "%(title)s.%(ext)s"
 
 @Service
 class YtDlpService(
     private val processRunner: ProcessRunner,
+    @Value("\${download.youtube.po-token-provider-url:}")
+    private val youtubePoTokenProviderUrl: String = "",
 ) {
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
 
     suspend fun extractMetadata(request: DownloadRequest): YtDlpMetadataDto {
         val result = processRunner.run(
             YtDlpCommand(
-                args = listOf(
-                    DUMP_SINGLE_JSON,
-                    NO_PLAYLIST,
-                    NO_WARNINGS,
-                    FORMAT,
-                    request.formatSelector,
-                    request.originalUrl,
-                ),
+                args = buildList {
+                    add(DUMP_SINGLE_JSON)
+                    add(NO_PLAYLIST)
+                    add(NO_WARNINGS)
+                    add(FORMAT)
+                    add(request.formatSelector)
+                    addAll(youtubePoTokenArgs(request))
+                    add(request.originalUrl)
+                },
                 workingDir = null,
                 timeout = 30.seconds,
             )
@@ -76,6 +83,7 @@ class YtDlpService(
             add(TITLE_EXT)
             add(PRINT)
             add(FINAL_FILEPATH)
+            addAll(youtubePoTokenArgs(request))
             addAll(request.extraArgs)
             add(request.originalUrl)
         }
@@ -114,6 +122,20 @@ class YtDlpService(
         }
 
         return file
+    }
+
+    private fun youtubePoTokenArgs(request: DownloadRequest): List<String> {
+        val providerUrl = youtubePoTokenProviderUrl.trim().trimEnd('/')
+        if (!request.presetName.startsWith(YOUTUBE_PRESET_PREFIX) || providerUrl.isEmpty()) {
+            return emptyList()
+        }
+
+        return listOf(
+            EXTRACTOR_ARGS,
+            YOUTUBE_PLAYER_CLIENT,
+            EXTRACTOR_ARGS,
+            "youtubepot-bgutilhttp:base_url=$providerUrl",
+        )
     }
 
     private fun handleBaseErrors(result: ProcessExecutionResult) {

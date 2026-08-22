@@ -19,6 +19,7 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -27,6 +28,10 @@ class YtDlpServiceTest {
 
     private val service = YtDlpService(
         processRunner = processRunner,
+    )
+    private val serviceWithProvider = YtDlpService(
+        processRunner = processRunner,
+        youtubePoTokenProviderUrl = "http://youtube-pot-provider:4416/",
     )
 
     @Test
@@ -221,6 +226,56 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun extractMetadataAddsPoTokenProviderArgsForYouTube() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"video-id","title":"Test video"}""",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        serviceWithProvider.extractMetadata(youtubeRequest())
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+        assertContainsPoTokenProviderArgs(commandSlot.captured.args)
+    }
+
+    @Test
+    fun extractMetadataDoesNotAddPoTokenProviderArgsForOtherPlatforms() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"video-id","title":"Test video"}""",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        serviceWithProvider.extractMetadata(testRequest())
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+        assertFalse(commandSlot.captured.args.contains(YOUTUBE_PLAYER_CLIENT_ARG))
+        assertFalse(commandSlot.captured.args.contains(YOUTUBE_PROVIDER_ARG))
+    }
+
+    @Test
+    fun extractMetadataDoesNotAddPoTokenProviderArgsWhenDisabled() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"video-id","title":"Test video"}""",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        service.extractMetadata(youtubeRequest())
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+        assertFalse(commandSlot.captured.args.contains(YOUTUBE_PLAYER_CLIENT_ARG))
+        assertFalse(commandSlot.captured.args.contains(YOUTUBE_PROVIDER_ARG))
+    }
+
+    @Test
     fun extractMetadataSuccess() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             stdout = """{"id":"video-id","title":"Test video","filesize":1000}""",
@@ -334,6 +389,24 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun downloadAddsPoTokenProviderArgsForYouTube(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("video.mp4")
+        file.writeText("video")
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        serviceWithProvider.download(youtubeRequest(), tempDir)
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+        assertContainsPoTokenProviderArgs(commandSlot.captured.args)
+    }
+
+    @Test
     fun downloadUsesLastOutputLineAsFilepath(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("video.mp4")
         file.writeText("video")
@@ -444,5 +517,29 @@ class YtDlpServiceTest {
             extraArgs = listOf("--merge-output-format", "mp4"),
             presetName = "test",
         )
+    }
+
+    private fun youtubeRequest(): DownloadRequest {
+        return testRequest().copy(
+            originalUrl = "https://youtube.com/watch?v=video-id",
+            normalizedUrl = "https://youtube.com/watch?v=video-id",
+            presetName = "youtube_h264_mobile_2gb",
+        )
+    }
+
+    private fun assertContainsPoTokenProviderArgs(args: List<String>) {
+        val expectedArgs = listOf(
+            "--extractor-args",
+            YOUTUBE_PLAYER_CLIENT_ARG,
+            "--extractor-args",
+            YOUTUBE_PROVIDER_ARG,
+        )
+        assertTrue(args.windowed(expectedArgs.size).contains(expectedArgs))
+    }
+
+    private companion object {
+        private const val YOUTUBE_PLAYER_CLIENT_ARG = "youtube:player_client=mweb"
+        private const val YOUTUBE_PROVIDER_ARG =
+            "youtubepot-bgutilhttp:base_url=http://youtube-pot-provider:4416"
     }
 }

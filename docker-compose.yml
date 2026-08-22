@@ -9,6 +9,9 @@ services:
       telegram-bot-api:
         condition: service_healthy
         required: false
+      youtube-pot-provider:
+        condition: service_healthy
+        required: false
     environment:
       APP_ENV: ${APP_ENV:?APP_ENV is required}
       POSTGRES_HOST: postgres
@@ -31,6 +34,7 @@ services:
       DOWNLOAD_PLATFORM_YOUTUBE_ENABLED: ${DOWNLOAD_PLATFORM_YOUTUBE_ENABLED:-false}
       DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED: ${DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED:-false}
       DOWNLOAD_PLATFORM_VK_ENABLED: ${DOWNLOAD_PLATFORM_VK_ENABLED:-false}
+      YOUTUBE_PO_TOKEN_PROVIDER_URL: ${YOUTUBE_PO_TOKEN_PROVIDER_URL:-}
     volumes:
       - media-work:/var/lib/kradnik/media
 
@@ -49,6 +53,24 @@ services:
       - /tmp/telegram-bot-api:size=64m,mode=0700,uid=101,gid=101
     healthcheck:
       test: ["CMD", "nc", "-z", "127.0.0.1", "8081"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  youtube-pot-provider:
+    image: ${YOUTUBE_PO_TOKEN_PROVIDER_IMAGE:-brainicism/bgutil-ytdlp-pot-provider:1.3.2-deno}
+    profiles: ["youtube-pot"]
+    container_name: ${YOUTUBE_PO_TOKEN_PROVIDER_CONTAINER_NAME:-kradnik-youtube-pot-provider}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "deno",
+          "eval",
+          "--no-config",
+          "const connection = await Deno.connect({ hostname: '127.0.0.1', port: 4416 }); connection.close();",
+        ]
       interval: 5s
       timeout: 3s
       retries: 12

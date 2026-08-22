@@ -26,6 +26,7 @@ concurrency:
 env:
   TELEGRAM_BOT_API_COMMIT: adfd7f6a8e990272851777eeb3ae0def4216f161
   TELEGRAM_BOT_API_IMAGE: ghcr.io/nkudrin713/kradnik-telegram-bot-api:adfd7f6a8e990272851777eeb3ae0def4216f161
+  YOUTUBE_PO_TOKEN_PROVIDER_IMAGE: brainicism/bgutil-ytdlp-pot-provider:1.3.2-deno
 
 jobs:
   checks:
@@ -150,6 +151,7 @@ jobs:
           TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
           TELEGRAM_LOCAL_API_ENABLED: ${{ vars.TELEGRAM_LOCAL_API_ENABLED || 'false' }}
+          YOUTUBE_PO_TOKEN_PROVIDER_ENABLED: ${{ vars.YOUTUBE_PO_TOKEN_PROVIDER_ENABLED || 'false' }}
           TELEGRAM_BOT_API_URL: ${{ vars.TELEGRAM_BOT_API_URL }}
           TELEGRAM_BOT_FILE_API_URL: ${{ vars.TELEGRAM_BOT_FILE_API_URL }}
           TELEGRAM_MAX_UPLOAD_BYTES: ${{ vars.TELEGRAM_MAX_UPLOAD_BYTES }}
@@ -170,8 +172,14 @@ jobs:
           metabase_analytics_db_password="${METABASE_ANALYTICS_DB_PASSWORD:-$POSTGRES_PASSWORD}"
           telegram_local_api_enabled="${TELEGRAM_LOCAL_API_ENABLED:-false}"
           case "$telegram_local_api_enabled" in true|false) ;; *) echo 'TELEGRAM_LOCAL_API_ENABLED must be true or false' >&2; exit 1 ;; esac
+          youtube_po_token_provider_enabled="${YOUTUBE_PO_TOKEN_PROVIDER_ENABLED:-false}"
+          case "$youtube_po_token_provider_enabled" in true|false) ;; *) echo 'YOUTUBE_PO_TOKEN_PROVIDER_ENABLED must be true or false' >&2; exit 1 ;; esac
           if [ "${{ inputs.environment }}" = "production" ] && [ "$telegram_local_api_enabled" = "true" ]; then
             echo 'Local Telegram Bot API is not approved for production' >&2
+            exit 1
+          fi
+          if [ "${{ inputs.environment }}" = "production" ] && [ "$youtube_po_token_provider_enabled" = "true" ]; then
+            echo 'YouTube PO Token Provider is not approved for production' >&2
             exit 1
           fi
           if [ "$telegram_local_api_enabled" = "true" ]; then
@@ -187,6 +195,11 @@ jobs:
             telegram_max_upload_bytes="${TELEGRAM_MAX_UPLOAD_BYTES:-47185920}"
             download_work_dir="/tmp/kradnik-downloads"
           fi
+          if [ "$youtube_po_token_provider_enabled" = "true" ]; then
+            youtube_po_token_provider_url="http://youtube-pot-provider:4416"
+          else
+            youtube_po_token_provider_url=""
+          fi
           if [ "${{ inputs.environment }}" = "production" ]; then
             app_environment="prod"
             app_container_name="kradnik-prod-app"
@@ -198,6 +211,7 @@ jobs:
             metabase_volume_name="kradnik-prod-metabase-data"
             metabase_public_port="3001"
             telegram_bot_api_container_name="kradnik-prod-telegram-bot-api"
+            youtube_po_token_provider_container_name="kradnik-prod-youtube-pot-provider"
             telegram_bot_api_data_volume_name="kradnik-prod-telegram-bot-api-data"
             media_work_volume_name="kradnik-prod-media-work"
           else
@@ -211,6 +225,7 @@ jobs:
             metabase_volume_name="kradnik-test-metabase-data"
             metabase_public_port="3000"
             telegram_bot_api_container_name="kradnik-test-telegram-bot-api"
+            youtube_po_token_provider_container_name="kradnik-test-youtube-pot-provider"
             telegram_bot_api_data_volume_name="kradnik-test-telegram-bot-api-data"
             media_work_volume_name="kradnik-test-media-work"
           fi
@@ -230,12 +245,16 @@ jobs:
             printf 'METABASE_ANALYTICS_DB_PASSWORD=%s\n' "$metabase_analytics_db_password"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
             printf 'TELEGRAM_BOT_API_IMAGE=%s\n' "$TELEGRAM_BOT_API_IMAGE"
+            printf 'YOUTUBE_PO_TOKEN_PROVIDER_IMAGE=%s\n' "$YOUTUBE_PO_TOKEN_PROVIDER_IMAGE"
             printf 'TELEGRAM_BOT_API_CONTAINER_NAME=%s\n' "$telegram_bot_api_container_name"
             printf 'TELEGRAM_BOT_API_DATA_VOLUME_NAME=%s\n' "$telegram_bot_api_data_volume_name"
             printf 'MEDIA_WORK_VOLUME_NAME=%s\n' "$media_work_volume_name"
             printf 'TELEGRAM_API_ID=%s\n' "$TELEGRAM_API_ID"
             printf 'TELEGRAM_API_HASH=%s\n' "$TELEGRAM_API_HASH"
             printf 'TELEGRAM_LOCAL_API_ENABLED=%s\n' "$telegram_local_api_enabled"
+            printf 'YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=%s\n' "$youtube_po_token_provider_enabled"
+            printf 'YOUTUBE_PO_TOKEN_PROVIDER_URL=%s\n' "$youtube_po_token_provider_url"
+            printf 'YOUTUBE_PO_TOKEN_PROVIDER_CONTAINER_NAME=%s\n' "$youtube_po_token_provider_container_name"
             printf 'TELEGRAM_BOT_API_URL=%s\n' "$telegram_bot_api_url"
             printf 'TELEGRAM_BOT_FILE_API_URL=%s\n' "$telegram_bot_file_api_url"
             printf 'TELEGRAM_MAX_UPLOAD_BYTES=%s\n' "$telegram_max_upload_bytes"
@@ -273,14 +292,25 @@ jobs:
           test "$DEPLOY_PATH" != "/"
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
             cd '$DEPLOY_PATH' && \
-            docker compose --profile analytics --profile telegram-local down --volumes --rmi all --remove-orphans && \
+            docker compose --profile analytics --profile telegram-local --profile youtube-pot down --volumes --rmi all --remove-orphans && \
             rm -f .metabase-enabled && \
-            if [ \"\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env)\" = 'true' ]; then export COMPOSE_PROFILES=telegram-local; else unset COMPOSE_PROFILES; fi && \
+            profiles='' && \
+            if [ \"\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env)\" = 'true' ]; then profiles='telegram-local'; fi && \
+            if [ \"\$(sed -n 's/^YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=//p' .env)\" = 'true' ]; then \
+              if [ -n \"\$profiles\" ]; then profiles=\"\$profiles,youtube-pot\"; else profiles='youtube-pot'; fi; \
+            fi && \
+            if [ -n \"\$profiles\" ]; then export COMPOSE_PROFILES=\"\$profiles\"; else unset COMPOSE_PROFILES; fi && \
             docker compose pull app && \
-            if [ \"\${COMPOSE_PROFILES:-}\" = 'telegram-local' ]; then docker compose pull telegram-bot-api; fi && \
+            if [ \"\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env)\" = 'true' ]; then docker compose pull telegram-bot-api; fi && \
+            if [ \"\$(sed -n 's/^YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=//p' .env)\" = 'true' ]; then docker compose pull youtube-pot-provider; fi && \
             docker compose up -d --remove-orphans && \
             docker compose ps && \
             test \"\$(docker compose ps -q app | xargs docker inspect -f '{{.State.Status}}')\" = running && \
+            if [ \"\$(sed -n 's/^YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=//p' .env)\" = 'true' ]; then \
+              youtube_pot_container=\$(docker compose ps -q youtube-pot-provider); \
+              test -n \"\$youtube_pot_container\"; \
+              test \"\$(docker inspect -f '{{.State.Health.Status}}' \"\$youtube_pot_container\")\" = healthy; \
+            fi && \
             docker compose exec -T postgres sh -c 'printf \"%s\n\" \"ALTER ROLE kradnik_analytics_reader WITH LOGIN PASSWORD :'\\''analytics_password'\\'';\" | PGPASSWORD=\"\$POSTGRES_PASSWORD\" psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -v analytics_password=\"\$METABASE_ANALYTICS_DB_PASSWORD\"' && \
             docker image prune -f\
           "

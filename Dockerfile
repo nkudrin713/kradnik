@@ -5,7 +5,7 @@ ARG CURL_CFFI_VERSION=0.15.0
 
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates deno=2.3.1-r5 ffmpeg py3-pip python3 \
+RUN apk add --no-cache ca-certificates deno=2.7.4-r2 ffmpeg py3-pip python3 \
     && pip install --no-cache-dir --break-system-packages \
         "yt-dlp[default]==${YT_DLP_VERSION}" \
         "curl-cffi==${CURL_CFFI_VERSION}"

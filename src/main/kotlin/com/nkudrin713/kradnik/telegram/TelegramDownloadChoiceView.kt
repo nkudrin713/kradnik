@@ -16,22 +16,13 @@ private const val MAX_CALLBACK_BYTES = 64
 @Component
 class TelegramDownloadChoiceView {
     fun text(mediaInfo: DownloadChoiceMediaInfo): String {
-        return buildString {
-            copyableTitle(mediaInfo)?.let {
-                append("<code>")
-                append(it.escapeHtml())
-                appendLine("</code>")
-            }
+        val videoInfo = buildList {
+            add(mediaInfo.title?.takeIf { it.isNotBlank() } ?: "Название недоступно")
             mediaInfo.durationSeconds?.let {
-                appendLine("Длительность: ${formatDuration(it)}")
+                add("Длительность: ${formatDuration(it)}")
             }
-            if (isNotEmpty()) {
-                appendLine()
-            }
-            appendLine("Выберите, что скачать")
-            appendLine()
-            append("≈ — примерный размер файла")
         }
+        return "<pre>${videoInfo.joinToString("\n").escapeHtml()}</pre>"
     }
 
     fun keyboard(
@@ -53,13 +44,6 @@ class TelegramDownloadChoiceView {
         val prefix = if (option.approximateSize) "≈ " else ""
         val unavailable = if (option.available) "" else " · недоступно"
         return "$label · $prefix${DownloadSizeFormatter.format(size)}$unavailable"
-    }
-
-    private fun copyableTitle(mediaInfo: DownloadChoiceMediaInfo): String? {
-        return listOfNotNull(
-            mediaInfo.channelName?.takeIf { it.isNotBlank() },
-            mediaInfo.title?.takeIf { it.isNotBlank() },
-        ).joinToString(" - ").takeIf { it.isNotBlank() }
     }
 
     private fun formatDuration(totalSeconds: Long): String {

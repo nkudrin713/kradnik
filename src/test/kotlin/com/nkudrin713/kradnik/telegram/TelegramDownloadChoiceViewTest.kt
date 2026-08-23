@@ -12,7 +12,7 @@ class TelegramDownloadChoiceViewTest {
     private val view = TelegramDownloadChoiceView()
 
     @Test
-    fun createsCopyableEscapedVideoInfoAndDuration() {
+    fun createsPreformattedEscapedTitleAndNonClickableDuration() {
         val actual = view.text(
             DownloadChoiceMediaInfo(
                 channelName = "Channel <official>",
@@ -23,15 +23,24 @@ class TelegramDownloadChoiceViewTest {
 
         assertEquals(
             """
-                <code>Channel &lt;official&gt; - Title &amp; more</code>
-                Длительность: 1:02:03
-
-                Выберите, что скачать
-
-                ≈ — примерный размер файла
+                <pre>Title &amp; more
+                Длительность: 1:02:03</pre>
             """.trimIndent(),
             actual,
         )
+    }
+
+    @Test
+    fun usesFallbackWhenTitleIsMissing() {
+        val actual = view.text(
+            DownloadChoiceMediaInfo(
+                channelName = "Channel",
+                title = null,
+                durationSeconds = null,
+            )
+        )
+
+        assertEquals("<pre>Название недоступно</pre>", actual)
     }
 
     @Test

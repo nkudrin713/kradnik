@@ -136,6 +136,29 @@ class DownloadPreflightServiceTest {
     }
 
     @Test
+    fun localModeRejectsLargeVerticalVideo() {
+        val localLimits = TelegramUploadLimits(
+            maxUploadBytes = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES,
+            localMode = true,
+        )
+        val localService = DownloadPreflightService(
+            audioUploadPlanner = AudioUploadPlanner(localLimits),
+            uploadLimits = localLimits,
+        )
+
+        val actual = localService.check(
+            videoRequest(),
+            metadata(
+                filesize = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES + 1,
+                width = 1080,
+                height = 1920,
+            ),
+        )
+
+        assertIs<DownloadPreflightDecision.Rejected>(actual)
+    }
+
+    @Test
     fun sumsRequestedFormatsWhenTopLevelSizeIsMissing() {
         val actual = service.check(
             videoRequest(),

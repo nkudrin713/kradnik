@@ -11,7 +11,7 @@ class TelegramVideoPolicy(
         metadata: VideoMetadata,
         sizeBytes: Long,
     ): TelegramVideoPolicyDecision {
-        if (sizeBytes > uploadLimits.maxUploadBytes && !metadata.isVertical) {
+        if (sizeBytes > uploadLimits.maxUploadBytes && (uploadLimits.localMode || !metadata.isVertical)) {
             return TelegramVideoPolicyDecision.RejectedTooLarge
         }
 

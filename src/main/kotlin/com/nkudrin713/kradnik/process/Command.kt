@@ -8,4 +8,6 @@ interface Command {
     val args: List<String>
     val workingDir: Path?
     val timeout: Duration
+    val maxWorkingDirectoryBytes: Long?
+        get() = null
 }

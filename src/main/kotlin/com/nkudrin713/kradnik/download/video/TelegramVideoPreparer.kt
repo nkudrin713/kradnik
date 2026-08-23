@@ -1,25 +1,37 @@
 package com.nkudrin713.kradnik.download.video
 
+import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessRunner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration as JavaDuration
 import java.util.Locale
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.minutes
+import kotlin.time.toKotlinDuration
 
 @Service
 class TelegramVideoPreparer(
     private val processRunner: ProcessRunner,
     private val videoMetadataProbe: VideoMetadataProbe,
     private val videoPolicy: TelegramVideoPolicy,
+    private val workDirCapacityGuard: WorkDirCapacityGuard,
+    @Value("\${download.video.ffmpeg-timeout:20m}")
+    private val ffmpegTimeout: JavaDuration = JavaDuration.ofMinutes(20),
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
+
+    init {
+        require(!ffmpegTimeout.isNegative && !ffmpegTimeout.isZero) {
+            "download.video.ffmpeg-timeout must be positive"
+        }
+    }
 
     suspend fun prepare(
         file: DownloadedFile,
@@ -61,6 +73,7 @@ class TelegramVideoPreparer(
             sourceMetadata.height,
         )
 
+        workDirCapacityGuard.ensureTranscodeCapacity(outputDir)
         val preparedFile = outputDir.resolve("telegram-video.mp4")
         transcodeForTelegram(file.file, preparedFile)
 
@@ -121,7 +134,7 @@ class TelegramVideoPreparer(
                     "-movflags", "+faststart",
                     output.toString(),
                 ),
-                timeout = FFMPEG_TIMEOUT_MINUTES.minutes,
+                timeout = ffmpegTimeout.toKotlinDuration(),
             )
         )
 
@@ -136,7 +149,6 @@ class TelegramVideoPreparer(
 
     private companion object {
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
-        private const val FFMPEG_TIMEOUT_MINUTES = 20
     }
 }
 

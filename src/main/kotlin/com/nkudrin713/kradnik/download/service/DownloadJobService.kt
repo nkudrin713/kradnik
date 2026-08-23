@@ -99,6 +99,11 @@ class DownloadJobService(
 			)
 	}
 
+	@Transactional(readOnly = true)
+	fun ownsLease(jobId: Long, leaseToken: UUID): Boolean {
+		return downloadJobRepository.existsByIdAndLeaseToken(jobId, leaseToken)
+	}
+
 	@Transactional
 	fun markMetadata(attempt: ClaimedDownloadJob, metadata: MediaMetadata): DownloadJob {
 		val job = attempt.job

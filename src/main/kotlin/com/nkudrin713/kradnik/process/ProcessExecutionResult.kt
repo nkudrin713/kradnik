@@ -9,6 +9,7 @@ data class ProcessExecutionResult(
     val stderr: String = "",
     val stdoutTruncated: Boolean = false,
     val stderrTruncated: Boolean = false,
+    val workingDirectoryLimitExceeded: Boolean = false,
     val duration: Duration,
 ) {
     val diagnosticOutput: String

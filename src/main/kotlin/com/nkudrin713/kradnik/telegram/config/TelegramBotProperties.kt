@@ -23,6 +23,10 @@ data class TelegramBotProperties(
         require(maxUploadBytes in 1..TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES) {
             "telegram.bot.max-upload-bytes must be between 1 and ${TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES}"
         }
+        require(localMode || maxUploadBytes <= TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES) {
+            "telegram.bot.max-upload-bytes must not exceed ${TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES} " +
+                    "when local mode is disabled"
+        }
         require(!connectTimeout.isNegative && !connectTimeout.isZero) {
             "telegram.bot.connect-timeout must be positive"
         }

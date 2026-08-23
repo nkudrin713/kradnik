@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.ytdlp.client
 
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -28,6 +29,13 @@ class YtDlpServiceTest {
 
     private val service = YtDlpService(
         processRunner = processRunner,
+    )
+    private val localService = YtDlpService(
+        processRunner = processRunner,
+        uploadLimits = TelegramUploadLimits(
+            maxUploadBytes = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES,
+            localMode = true,
+        ),
     )
     private val serviceWithProvider = YtDlpService(
         processRunner = processRunner,
@@ -370,7 +378,7 @@ class YtDlpServiceTest {
             duration = 5.seconds,
         )
 
-        service.download(testRequest(), tempDir)
+        localService.download(testRequest(), tempDir)
 
         val commandSlot = slot<Command>()
         coVerify { processRunner.run(capture(commandSlot)) }
@@ -383,9 +391,37 @@ class YtDlpServiceTest {
         assertTrue(command.args.contains("bv*+ba/b"))
         assertTrue(command.args.contains("--print"))
         assertTrue(command.args.contains("after_move:KRADNIK_FILEPATH:%(filepath)j"))
+        assertTrue(
+            command.args.windowed(2).contains(
+                listOf("--max-filesize", TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES.toString())
+            )
+        )
+        assertEquals(
+            TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES * 2,
+            command.maxWorkingDirectoryBytes,
+        )
         assertTrue(command.args.contains("--merge-output-format"))
         assertTrue(command.args.contains("mp4"))
         assertTrue(command.args.contains("https://example.com"))
+    }
+
+    @Test
+    fun cloudDownloadKeepsVerticalCompressionSourceUnbounded(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("video.mp4")
+        file.writeText("video")
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        service.download(testRequest(), tempDir)
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+        assertFalse(commandSlot.captured.args.contains("--max-filesize"))
+        assertEquals(null, commandSlot.captured.maxWorkingDirectoryBytes)
     }
 
     @Test
@@ -437,7 +473,7 @@ class YtDlpServiceTest {
         )
 
         val exception = assertFailsWith<YtDlpException> {
-            service.download(testRequest(), tempDir)
+            localService.download(testRequest(), tempDir)
         }
 
         assertTrue(exception.message!!.contains("did not print final filepath"))
@@ -475,6 +511,22 @@ class YtDlpServiceTest {
         }
 
         assertTrue(exception.message!!.contains("command timed out"))
+    }
+
+    @Test
+    fun downloadFailsWhenWorkingDirectoryLimitIsExceeded(@TempDir tempDir: Path) = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            timedOut = false,
+            exitCode = 137,
+            workingDirectoryLimitExceeded = true,
+            duration = 5.seconds,
+        )
+
+        val exception = assertFailsWith<YtDlpFileSizeLimitException> {
+            localService.download(testRequest(), tempDir)
+        }
+
+        assertEquals(TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES, exception.limitBytes)
     }
 
     @Test

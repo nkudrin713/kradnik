@@ -10,5 +10,6 @@ data class YtDlpCommand(
     override val args: List<String>,
     override val workingDir: Path?,
     override val timeout: Duration,
+    override val maxWorkingDirectoryBytes: Long? = null,
     override val executable: String = YT_DLP,
 ) : Command

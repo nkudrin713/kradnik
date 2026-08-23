@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.analytics.DownloadAnalytics
+import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
@@ -8,6 +9,7 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.requiredId
 import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
+import com.nkudrin713.kradnik.download.instagram.InstagramMediaTooLargeException
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
@@ -19,6 +21,7 @@ import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import com.nkudrin713.kradnik.download.video.VideoTooLargeException
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpFileSizeLimitException
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
@@ -39,6 +42,7 @@ class DownloadJobProcessor(
     private val downloadJobLifecycle: DownloadJobLifecycle,
     private val downloadAnalytics: DownloadAnalytics,
     private val workDirCleaner: WorkDirCleaner,
+    private val workDirCapacityGuard: WorkDirCapacityGuard,
     private val uploadLimits: TelegramUploadLimits,
     @Value("\${download.work-dir:/tmp/kradnik-downloads}")
     private val workDir: String,
@@ -50,12 +54,13 @@ class DownloadJobProcessor(
     suspend fun process(attempt: ClaimedDownloadJob) {
         val job = attempt.job
         val jobId = requireNotNull(job.id)
-        val outputDir = Path.of(workDir)
-            .resolve(jobId.toString())
+        val jobDir = Path.of(workDir).resolve(jobId.toString())
+        val outputDir = jobDir
             .resolve(attempt.leaseToken.toString())
-            .createDirectories()
 
         try {
+            workDirCleaner.deleteRecursively(jobDir)
+            outputDir.createDirectories()
             if (sendCached(attempt)) {
                 return
             }
@@ -93,6 +98,7 @@ class DownloadJobProcessor(
             }
             val downloadRequest = (preflightDecision as DownloadPreflightDecision.Allowed).request
 
+            workDirCapacityGuard.ensureDownloadCapacity(outputDir)
             downloadJobLifecycle.markDownloading(attempt)
 
             val uploadJob = markMetadata(attempt, metadata)
@@ -122,6 +128,18 @@ class DownloadJobProcessor(
                 attempt,
                 uploadLimitReason(OutputType.VIDEO, error.sizeBytes),
             )
+        } catch (error: YtDlpFileSizeLimitException) {
+            logger.warn("JOB[{}] download exceeded safe file size limit", jobId)
+            downloadJobLifecycle.rejectTooLarge(
+                attempt,
+                uploadLimitReason(job.outputType, error.limitBytes + 1),
+            )
+        } catch (error: InstagramMediaTooLargeException) {
+            logger.warn("JOB[{}] Instagram media exceeds Telegram upload limit", jobId)
+            downloadJobLifecycle.rejectTooLarge(
+                attempt,
+                uploadLimitReason(job.outputType, error.sizeBytes),
+            )
         } catch (error: TelegramSendException) {
             logger.error("JOB[{}] Telegram send failed", jobId, error)
             val errorMessage = error.message ?: error.javaClass.simpleName
@@ -134,7 +152,7 @@ class DownloadJobProcessor(
             logger.error("JOB[{}] processing failed", jobId, error)
             downloadJobLifecycle.failOrRetry(attempt, error.message ?: error.javaClass.simpleName)
         } finally {
-            workDirCleaner.deleteRecursively(outputDir)
+            workDirCleaner.deleteRecursively(jobDir)
         }
     }
 

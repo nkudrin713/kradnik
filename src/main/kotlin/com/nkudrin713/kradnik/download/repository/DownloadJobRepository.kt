@@ -10,6 +10,8 @@ import java.util.UUID
 interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 	fun findByTelegramUpdateId(telegramUpdateId: Int): DownloadJob?
 
+	fun existsByIdAndLeaseToken(id: Long, leaseToken: UUID): Boolean
+
 	@Query(
 		value = """
 			SELECT 1

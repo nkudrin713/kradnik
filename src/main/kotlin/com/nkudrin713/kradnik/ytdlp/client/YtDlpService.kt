@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.YOUTUBE_PRESET_PREFIX
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
@@ -14,10 +15,10 @@ import kotlinx.coroutines.withContext
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.nio.file.Path
+import java.time.Duration
 import kotlin.io.path.fileSize
 import kotlin.io.path.isRegularFile
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.toKotlinDuration
 
 private const val DUMP_SINGLE_JSON = "--dump-single-json"
 private const val NO_PLAYLIST = "--no-playlist"
@@ -25,6 +26,7 @@ private const val NO_WARNINGS = "--no-warnings"
 private const val NO_RESTRICT_FILENAMES = "--no-restrict-filenames"
 private const val FORMAT = "-f"
 private const val OUTPUT = "-o"
+private const val MAX_FILESIZE = "--max-filesize"
 private const val PRINT = "--print"
 private const val FILEPATH_MARKER = "KRADNIK_FILEPATH:"
 private const val FINAL_FILEPATH = "after_move:${FILEPATH_MARKER}%(filepath)j"
@@ -36,10 +38,22 @@ private const val TITLE_EXT = "%(title)s.%(ext)s"
 @Service
 class YtDlpService(
     private val processRunner: ProcessRunner,
+    private val uploadLimits: TelegramUploadLimits = TelegramUploadLimits(
+        TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES
+    ),
     @Value("\${download.youtube.po-token-provider-url:}")
     private val youtubePoTokenProviderUrl: String = "",
+    @Value("\${download.yt-dlp.metadata-timeout:30s}")
+    private val metadataTimeout: Duration = Duration.ofSeconds(30),
+    @Value("\${download.yt-dlp.download-timeout:30m}")
+    private val downloadTimeout: Duration = Duration.ofMinutes(30),
 ) {
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
+
+    init {
+        require(metadataTimeout.isPositive()) { "download.yt-dlp.metadata-timeout must be positive" }
+        require(downloadTimeout.isPositive()) { "download.yt-dlp.download-timeout must be positive" }
+    }
 
     suspend fun extractMetadata(request: DownloadRequest): YtDlpMetadataDto {
         val result = processRunner.run(
@@ -54,7 +68,7 @@ class YtDlpService(
                     add(request.originalUrl)
                 },
                 workingDir = null,
-                timeout = 30.seconds,
+                timeout = metadataTimeout.toKotlinDuration(),
             )
         )
 
@@ -81,6 +95,10 @@ class YtDlpService(
             add(request.formatSelector)
             add(OUTPUT)
             add(TITLE_EXT)
+            if (uploadLimits.localMode) {
+                add(MAX_FILESIZE)
+                add(uploadLimits.maxUploadBytes.toString())
+            }
             add(PRINT)
             add(FINAL_FILEPATH)
             addAll(youtubePoTokenArgs(request))
@@ -92,10 +110,21 @@ class YtDlpService(
             YtDlpCommand(
                 args = args,
                 workingDir = outputDir,
-                timeout = 30.minutes,
+                timeout = downloadTimeout.toKotlinDuration(),
+                maxWorkingDirectoryBytes = if (uploadLimits.localMode) {
+                    uploadLimits.maxUploadBytes * WORKING_DIRECTORY_LIMIT_MULTIPLIER
+                } else {
+                    null
+                },
             )
         )
 
+        if (result.workingDirectoryLimitExceeded) {
+            throw YtDlpFileSizeLimitException(uploadLimits.maxUploadBytes)
+        }
+        if (uploadLimits.localMode && result.diagnosticOutput.lowercase().contains("max-filesize")) {
+            throw YtDlpFileSizeLimitException(uploadLimits.maxUploadBytes)
+        }
         handleBaseErrors(result)
         val file = getDownloadedFile(result.stdout)
 
@@ -163,8 +192,15 @@ class YtDlpService(
                 normalized.contains("--cookies") ||
                 normalized.contains("--cookies-from-browser")
     }
+
+    private companion object {
+        private const val WORKING_DIRECTORY_LIMIT_MULTIPLIER = 2L
+    }
 }
 
 open class YtDlpException(message: String) : RuntimeException(message)
 
 class YtDlpAuthenticationRequiredException(message: String) : YtDlpException(message)
+
+class YtDlpFileSizeLimitException(val limitBytes: Long) :
+    YtDlpException("yt-dlp working directory exceeded safe size limit")

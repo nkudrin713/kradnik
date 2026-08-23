@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.video
 
+import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.process.Command
@@ -22,12 +23,14 @@ import kotlin.time.Duration.Companion.seconds
 class TelegramVideoPreparerTest {
     private val processRunner: ProcessRunner = mockk()
     private val videoMetadataProbe: VideoMetadataProbe = mockk()
+    private val workDirCapacityGuard: WorkDirCapacityGuard = mockk(relaxed = true)
     private val preparer = TelegramVideoPreparer(
         processRunner = processRunner,
         videoMetadataProbe = videoMetadataProbe,
         videoPolicy = TelegramVideoPolicy(
             TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
         ),
+        workDirCapacityGuard = workDirCapacityGuard,
     )
 
     @Test

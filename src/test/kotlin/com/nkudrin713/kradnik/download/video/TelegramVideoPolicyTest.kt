@@ -88,6 +88,23 @@ class TelegramVideoPolicyTest {
     }
 
     @Test
+    fun localModeRejectsLargeVerticalVideo() {
+        val localPolicy = TelegramVideoPolicy(
+            TelegramUploadLimits(
+                maxUploadBytes = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES,
+                localMode = true,
+            )
+        )
+
+        val result = localPolicy.evaluate(
+            metadata = compatibleMetadata(),
+            sizeBytes = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES + 1,
+        )
+
+        assertEquals(TelegramVideoPolicyDecision.RejectedTooLarge, result)
+    }
+
+    @Test
     fun versionsVideoCacheKey() {
         assertEquals(
             "instagram:reel:video:telegram-video-h264-v1",

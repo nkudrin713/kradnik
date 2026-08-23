@@ -58,6 +58,16 @@ class TelegramBotConfigTest {
         }
     }
 
+    @Test
+    fun rejectsLocalUploadLimitWhenCloudModeIsEnabled() {
+        assertFailsWith<IllegalArgumentException> {
+            TelegramBotProperties(
+                token = "test-token",
+                maxUploadBytes = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
+            )
+        }
+    }
+
     private fun TelegramBot.apiBaseUrl(): String {
         val api = field("api")
         return api.field("baseUrl") as String

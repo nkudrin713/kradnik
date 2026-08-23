@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.analytics.DownloadAnalytics
+import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
@@ -11,6 +12,7 @@ import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.executor.YtDlpDownloadExecutor
+import com.nkudrin713.kradnik.download.instagram.InstagramMediaTooLargeException
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
@@ -23,6 +25,7 @@ import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import com.nkudrin713.kradnik.download.video.VideoTooLargeException
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpFileSizeLimitException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import io.mockk.coEvery
@@ -59,6 +62,7 @@ class DownloadJobProcessorTest {
     private val downloadJobLifecycle: DownloadJobLifecycle = mockk(relaxed = true)
     private val downloadAnalytics: DownloadAnalytics = mockk(relaxed = true)
     private val workDirCleaner: WorkDirCleaner = mockk()
+    private val workDirCapacityGuard: WorkDirCapacityGuard = mockk(relaxed = true)
     private val uploadLimits = TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
 
     @Test
@@ -77,7 +81,7 @@ class DownloadJobProcessorTest {
         coVerify { telegramFileSender.sendCached(job, "cached-file-id", 100) }
         verify { downloadJobLifecycle.markUploading(attempt(job)) }
         verify { downloadJobLifecycle.complete(attempt(job), any()) }
-        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+        verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
     }
 
     @Test
@@ -159,7 +163,7 @@ class DownloadJobProcessorTest {
         processor(tempDir).process(attempt(job))
 
         verify { downloadJobLifecycle.rejectTooLarge(attempt(job), "too large") }
-        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+        verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
     }
 
     @Test
@@ -188,7 +192,7 @@ class DownloadJobProcessorTest {
         coVerify { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) }
         coVerify { telegramFileSender.send(job, preparedFile) }
         verify { downloadJobLifecycle.complete(attempt(job), any()) }
-        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+        verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
     }
 
     @Test
@@ -212,7 +216,7 @@ class DownloadJobProcessorTest {
 
         verify { downloadJobLifecycle.rejectTooLarge(attempt(job), match { it.contains("limitMb=45.00") }) }
         coVerify(exactly = 0) { telegramFileSender.send(any(), any()) }
-        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+        verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
     }
 
     @Test
@@ -236,7 +240,51 @@ class DownloadJobProcessorTest {
 
         verify { downloadJobLifecycle.rejectTooLarge(attempt(job), match { it.contains("limitMb=45.00") }) }
         coVerify(exactly = 0) { telegramFileSender.send(any(), any()) }
-        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+        verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
+    }
+
+    @Test
+    fun rejectsYtDlpDownloadWhenSafetyLimitIsExceeded(@TempDir tempDir: Path) = runTest {
+        val job = job()
+        val request = request()
+        val metadata = metadata()
+        coEvery { ytDlpService.extractMetadata(request) } returns metadata
+        every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
+        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
+        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        coEvery {
+            ytDlpService.download(request, jobDir(tempDir))
+        } throws YtDlpFileSizeLimitException(uploadLimits.maxUploadBytes)
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(attempt(job))
+
+        verify { downloadJobLifecycle.rejectTooLarge(attempt(job), match { it.contains("limitMb=45.00") }) }
+        verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any(), any()) }
+    }
+
+    @Test
+    fun rejectsInstagramDownloadWhenStreamExceedsLimit(@TempDir tempDir: Path) = runTest {
+        val url = "https://www.instagram.com/reel/ABC_123/"
+        val job = job(url = url)
+        val request = request(url = url)
+        val metadata = metadata()
+        val session: PreparedDownloadSession = mockk()
+        every { instagramExecutor.supports(request) } returns true
+        every { session.metadata } returns metadata
+        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.Ready(session)
+        every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
+        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
+        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        coEvery {
+            session.download(request, jobDir(tempDir))
+        } throws InstagramMediaTooLargeException(uploadLimits.maxUploadBytes + 1)
+        every { workDirCleaner.deleteRecursively(any()) } just runs
+
+        processor(tempDir).process(attempt(job))
+
+        verify { downloadJobLifecycle.rejectTooLarge(attempt(job), match { it.contains("limitMb=45.00") }) }
+        verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any(), any()) }
     }
 
     @Test
@@ -390,7 +438,7 @@ class DownloadJobProcessorTest {
                 null,
             )
         }
-        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+        verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
     }
 
     @Test
@@ -482,7 +530,7 @@ class DownloadJobProcessorTest {
 
         verify { downloadJobLifecycle.failAuthenticationRequired(attempt(job), "auth required") }
         verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any(), any()) }
-        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+        verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
     }
 
     @Test
@@ -496,7 +544,7 @@ class DownloadJobProcessorTest {
         }
 
         verify(exactly = 0) { downloadJobLifecycle.failOrRetry(any(), any(), any()) }
-        verify { workDirCleaner.deleteRecursively(jobDir(tempDir)) }
+        verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
     }
 
     @Test
@@ -551,6 +599,7 @@ class DownloadJobProcessorTest {
             downloadJobLifecycle = downloadJobLifecycle,
             downloadAnalytics = downloadAnalytics,
             workDirCleaner = workDirCleaner,
+            workDirCapacityGuard = workDirCapacityGuard,
             uploadLimits = uploadLimits,
             workDir = workDir.toString(),
             telegramFileCacheEnabled = telegramFileCacheEnabled,
@@ -562,6 +611,8 @@ class DownloadJobProcessorTest {
 
     private fun jobDir(workDir: Path): Path =
         workDir.resolve("1").resolve(LEASE_TOKEN.toString())
+
+    private fun jobRoot(workDir: Path): Path = workDir.resolve("1")
 
     private fun job(
         outputType: OutputType = OutputType.VIDEO,

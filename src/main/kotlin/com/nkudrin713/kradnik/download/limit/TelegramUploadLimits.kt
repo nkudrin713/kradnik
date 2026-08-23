@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.limit
 
 data class TelegramUploadLimits(
     val maxUploadBytes: Long,
+    val localMode: Boolean = false,
 ) {
     init {
         require(maxUploadBytes in 1..LOCAL_MAX_UPLOAD_BYTES) {

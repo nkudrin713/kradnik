@@ -32,7 +32,7 @@ class DownloadPreflightService(
             return DownloadPreflightDecision.Allowed(request)
         }
 
-        if (request.outputType == OutputType.VIDEO && metadata.isVertical()) {
+        if (!uploadLimits.localMode && request.outputType == OutputType.VIDEO && metadata.isVertical()) {
             return DownloadPreflightDecision.Allowed(request)
         }
 

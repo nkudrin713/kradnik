@@ -8,6 +8,9 @@ import org.springframework.context.annotation.Configuration
 class TelegramUploadLimitConfig {
     @Bean
     fun telegramUploadLimits(properties: TelegramBotProperties): TelegramUploadLimits {
-        return TelegramUploadLimits(properties.maxUploadBytes)
+        return TelegramUploadLimits(
+            maxUploadBytes = properties.maxUploadBytes,
+            localMode = properties.localMode,
+        )
     }
 }

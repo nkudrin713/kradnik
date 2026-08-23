@@ -1,6 +1,6 @@
 # Kradnik
 
-Kradnik is a Telegram bot that downloads media from links and sends the result back to the chat as video or audio.
+Kradnik is a Telegram bot that downloads media from links and sends the result back as video, audio, or cover art.
 
 The project is built as a backend service around Telegram Bot API, `yt-dlp`, `ffmpeg`, and PostgreSQL.
 It is designed to accept user-submitted links, process them asynchronously, and deliver Telegram-friendly files.
@@ -10,20 +10,20 @@ All current bot instructions and user-facing messages are in Russian. English lo
 ## What the Bot Does
 
 - Accepts public media links in Telegram.
-- Lets each chat choose video, audio, or ask-every-time mode.
+- Shows available video qualities, audio, cover art, and estimated sizes for every link.
 - Downloads media through `yt-dlp`.
 - Sends the downloaded result back through Telegram.
 - Reuses Telegram-uploaded files when possible.
 - Checks file size before expensive work when metadata is available.
 - Compresses some oversized vertical videos.
-- Stores job state, retries, settings, and cache metadata in PostgreSQL.
+- Stores choice sessions, job state, retries, and cache metadata in PostgreSQL.
 
 ## User Flow
 
 1. User opens the bot.
-2. User keeps the default ask-every-time mode or selects video/audio mode.
-3. User sends a link.
-4. Bot asks what to download when ask-every-time mode is enabled.
+2. User sends a link.
+3. Bot analyzes available formats and shows their sizes.
+4. User selects a video quality, audio, or cover art.
 5. Bot creates a download job.
 6. Worker processes the job in the background.
 7. Bot updates the status message.
@@ -33,7 +33,6 @@ All current bot instructions and user-facing messages are in Russian. English lo
 
 - `/start` - start message.
 - `/help` - usage help.
-- `/mode` - select video, audio, or ask-every-time mode.
 - `/legal` - legal disclaimer.
 - `/donate` - donation message.
 
@@ -48,6 +47,7 @@ The bot does not try to bypass private content, paid access, platform restrictio
 ```text
 Telegram updates
     -> command handlers
+    -> format analysis and choice session
     -> download job creation
     -> PostgreSQL queue
     -> background worker
@@ -145,7 +145,7 @@ The database stores:
 - job statuses and retry metadata;
 - source metadata;
 - Telegram upload metadata;
-- per-chat mode settings;
+- short-lived download choice sessions;
 - cache keys for Telegram file reuse;
 - analytics events and dashboard views.
 

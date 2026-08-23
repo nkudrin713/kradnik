@@ -16,6 +16,10 @@ class DownloadPreflightService(
         request: DownloadRequest,
         metadata: YtDlpMetadataDto,
     ): DownloadPreflightDecision {
+        if (request.outputType == OutputType.COVER) {
+            return DownloadPreflightDecision.Allowed(request)
+        }
+
         if (request.outputType == OutputType.AUDIO) {
             when (val plan = audioUploadPlanner.plan(metadata)) {
                 is AudioUploadPlan.Allowed -> return DownloadPreflightDecision.Allowed(

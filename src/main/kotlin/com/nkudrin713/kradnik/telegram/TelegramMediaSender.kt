@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.telegram
 import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.SendAudio
+import com.pengrad.telegrambot.request.SendDocument
 import com.pengrad.telegrambot.request.SendVideo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -116,6 +117,36 @@ class TelegramMediaSender(
             fileId = audio.fileId ?: throw TelegramSendException("Telegram audio file_id is empty"),
             fileSize = audio.fileSize,
         )
+    }
+
+    suspend fun sendDocument(
+        chatId: Long,
+        file: Path,
+        replyToMessageId: Int? = null,
+    ): TelegramSendResult {
+        val fileSize = fileSize(file)
+        val request = requestFactory.document(chatId, file)
+        addReplyParameters(request, replyToMessageId)
+        val response = apiClient.executeIo(
+            request,
+            errorContext = "(sizeMb=${formatMegabytes(fileSize)})",
+        )
+        val document = response.message()?.document()
+            ?: throw TelegramSendException("Telegram response does not contain document")
+        return TelegramSendResult(document.fileId(), document.fileSize())
+    }
+
+    suspend fun sendCachedDocument(
+        chatId: Long,
+        fileId: String,
+        replyToMessageId: Int? = null,
+    ): TelegramSendResult {
+        val request = SendDocument(chatId, fileId)
+        addReplyParameters(request, replyToMessageId)
+        val response = apiClient.executeIo(request)
+        val document = response.message()?.document()
+            ?: throw TelegramSendException("Telegram response does not contain document")
+        return TelegramSendResult(document.fileId(), document.fileSize())
     }
 
     private suspend fun fileSize(file: Path): Long {

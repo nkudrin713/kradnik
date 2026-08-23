@@ -1,6 +1,9 @@
 package com.nkudrin713.kradnik.download.repository
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionRepository
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.ratelimit.PostgresRateLimitBucketStore
@@ -46,6 +49,7 @@ import kotlin.test.assertNotEquals
 @TestPropertySource(properties = ["spring.jpa.hibernate.ddl-auto=validate"])
 class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     private val repository: DownloadJobRepository,
+    private val choiceSessionRepository: DownloadChoiceSessionRepository,
     private val jdbcTemplate: JdbcTemplate,
     private val rateLimitBucketStore: RateLimitBucketStore,
     private val downloadJobService: DownloadJobService,
@@ -56,6 +60,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     @BeforeEach
     fun cleanDatabase() {
         jdbcTemplate.update("DELETE FROM request_rate_limit_buckets")
+        choiceSessionRepository.deleteAll()
         repository.deleteAll()
     }
 
@@ -81,6 +86,42 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
         assertEquals(4, columnCount)
         assertEquals(1, rateLimitTableCount)
+    }
+
+    @Test
+    fun persistsDownloadChoiceSessionAndCoverOutputType() {
+        val option = DownloadChoiceOptionSnapshot(
+            key = "cover",
+            label = "Скачать обложку",
+            sizeBytes = null,
+            approximateSize = false,
+            available = true,
+            unavailableReason = null,
+            originalUrl = "https://example.com/video",
+            normalizedUrl = "https://example.com/video",
+            cacheKey = "cover-cache",
+            outputType = OutputType.COVER,
+            presetName = "youtube_cover",
+            formatSelector = "best",
+            extraArgs = emptyList(),
+        )
+        val session = choiceSessionRepository.saveAndFlush(
+            DownloadChoiceSession(
+                telegramUserId = 1,
+                telegramChatId = 2,
+                telegramUpdateId = 3,
+                telegramRequestMessageId = 4,
+                telegramMenuMessageId = 5,
+                originalUrl = option.originalUrl,
+                normalizedUrl = option.normalizedUrl,
+                options = listOf(option),
+                expiresAt = Instant.now().plusSeconds(60),
+            )
+        )
+        val coverJob = repository.saveAndFlush(job("cover").apply { outputType = OutputType.COVER })
+
+        assertEquals(OutputType.COVER, choiceSessionRepository.findById(session.token).orElseThrow().options.single().outputType)
+        assertEquals(OutputType.COVER, repository.findById(requireNotNull(coverJob.id)).orElseThrow().outputType)
     }
 
     @Test
@@ -311,7 +352,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
 @TestConfiguration
 @EnableAutoConfiguration
-@EntityScan(basePackageClasses = [DownloadJob::class])
-@EnableJpaRepositories(basePackageClasses = [DownloadJobRepository::class])
+@EntityScan(basePackageClasses = [DownloadJob::class, DownloadChoiceSession::class])
+@EnableJpaRepositories(basePackageClasses = [DownloadJobRepository::class, DownloadChoiceSessionRepository::class])
 @Import(PostgresRateLimitBucketStore::class, DownloadJobService::class)
 class DownloadJobRepositoryTestApplication

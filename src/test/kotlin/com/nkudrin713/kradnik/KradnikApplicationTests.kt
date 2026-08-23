@@ -1,9 +1,9 @@
 package com.nkudrin713.kradnik
 
 import com.nkudrin713.kradnik.analytics.AnalyticsEventRepository
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionRepository
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import com.nkudrin713.kradnik.process.ProcessRunner
-import com.nkudrin713.kradnik.settings.DownloadSettingsRepository
 import io.mockk.mockk
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
@@ -34,7 +34,7 @@ class KradnikApplicationTests {
 		fun downloadJobRepository(): DownloadJobRepository = mockk(relaxed = true)
 
 		@Bean
-		fun downloadSettingsRepository(): DownloadSettingsRepository = mockk(relaxed = true)
+		fun downloadChoiceSessionRepository(): DownloadChoiceSessionRepository = mockk(relaxed = true)
 
 		@Bean
 		fun processRunner(): ProcessRunner = mockk(relaxed = true)

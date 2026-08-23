@@ -11,6 +11,8 @@ import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 import java.net.URI
 
+internal const val INSTAGRAM_PRESET_PREFIX = "instagram_"
+
 @Component
 @Order(20)
 class InstagramDownloadHandler : PlatformDownloadHandler {
@@ -51,6 +53,14 @@ class InstagramDownloadHandler : PlatformDownloadHandler {
                 presetName = "instagram_audio",
                 formatSelector = "ba/bestaudio/best",
                 extraArgs = listOf("-x", "--audio-format", "mp3"),
+            )
+
+            OutputType.COVER -> DownloadRequest(
+                originalUrl = originalUrl,
+                normalizedUrl = normalizedUrl,
+                outputType = outputType,
+                presetName = "instagram_cover",
+                formatSelector = "best",
             )
         }
 

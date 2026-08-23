@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.settings.DownloadMode
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
@@ -8,19 +8,23 @@ import com.pengrad.telegrambot.request.DeleteMessage
 import com.pengrad.telegrambot.request.EditMessageText
 import com.pengrad.telegrambot.request.SendMessage
 import org.springframework.stereotype.Service
+import java.util.UUID
 
 @Service
 class TelegramSender(
     private val apiClient: TelegramApiClient,
-    private val modeView: TelegramModeView,
     private val downloadChoiceView: TelegramDownloadChoiceView,
 ) {
     fun sendMessage(chatId: Long, text: String) {
         sendText(chatId, text)
     }
 
-    fun sendStatus(chatId: Long, status: TelegramDownloadStatus): Int {
-        return sendText(chatId, status.text)
+    fun sendStatus(
+        chatId: Long,
+        status: TelegramDownloadStatus,
+        replyToMessageId: Int? = null,
+    ): Int {
+        return sendText(chatId, status.text, replyToMessageId = replyToMessageId)
     }
 
     fun editStatus(chatId: Long, messageId: Int?, status: TelegramDownloadStatus) {
@@ -28,21 +32,22 @@ class TelegramSender(
         editText(chatId, messageId, status.text)
     }
 
-    fun sendModeMenu(chatId: Long, mode: DownloadMode): Int {
-        return sendText(chatId, modeView.text(), modeView.keyboard(mode))
+    fun editDownloadChoice(
+        chatId: Long,
+        messageId: Int,
+        sessionToken: UUID,
+        options: List<DownloadChoiceOptionSnapshot>,
+    ) {
+        editText(
+            chatId = chatId,
+            messageId = messageId,
+            text = downloadChoiceView.text(),
+            keyboard = downloadChoiceView.keyboard(sessionToken, options),
+        )
     }
 
-    fun sendDownloadChoice(
-        chatId: Long,
-        replyToMessageId: Int,
-        telegramUpdateId: Int,
-    ): Int {
-        return sendText(
-            chatId = chatId,
-            text = downloadChoiceView.text(),
-            keyboard = downloadChoiceView.keyboard(telegramUpdateId),
-            replyToMessageId = replyToMessageId,
-        )
+    fun editMessage(chatId: Long, messageId: Int, text: String) {
+        editText(chatId, messageId, text)
     }
 
     fun answerCallback(
@@ -89,6 +94,7 @@ class TelegramSender(
 }
 
 enum class TelegramDownloadStatus(val text: String) {
+    ANALYZING("Анализирую варианты… ⏳"),
     QUEUED("В очереди ⏳"),
     DOWNLOADING("Скачиваю ⬇️"),
     UPLOADING("Загружаю в Telegram ⬆️"),

@@ -1,6 +1,8 @@
 package com.nkudrin713.kradnik.telegram.handler.command.impl
 
-import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
+import com.nkudrin713.kradnik.download.choice.SelectDownloadChoiceCommand
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramSender
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Component
 @Component
 @Order(16)
 class DownloadChoiceHandler(
+    private val sessionService: DownloadChoiceSessionService,
     private val telegramDownloadStarter: TelegramDownloadStarter,
     private val telegramSender: TelegramSender,
 ) : TelegramCommandHandler {
@@ -23,45 +26,62 @@ class DownloadChoiceHandler(
     }
 
     override fun handle(context: TelegramUpdateContext) {
-        val choice = requireNotNull(DownloadChoiceCallback.parse(context.text))
+        val callback = requireNotNull(DownloadChoiceCallback.parse(context.text))
         val callbackQuery = requireNotNull(context.callbackQuery)
         val menuMessageId = requireNotNull(context.messageId)
-        val requestMessage = context.message?.replyToMessage()
-        val requestUrl = requestMessage?.text()?.trim()
-        val requestUser = requestMessage?.from()
+        val selection = sessionService.select(
+            SelectDownloadChoiceCommand(
+                token = callback.sessionToken,
+                optionKey = callback.optionKey,
+                telegramUserId = callbackQuery.from().id(),
+                telegramChatId = context.chatId,
+                telegramMenuMessageId = menuMessageId,
+            )
+        )
 
-        if (requestUrl.isNullOrEmpty() || requestUser == null) {
-            telegramSender.answerCallback(
-                callbackQueryId = callbackQuery.id(),
-                text = "Ссылка недоступна. Отправьте её ещё раз",
+        when (selection) {
+            is DownloadChoiceSelection.Ready -> startDownload(context, callbackQuery.id(), callback, selection)
+            is DownloadChoiceSelection.Unavailable -> answer(callbackQuery.id(), selection.reason, showAlert = true)
+            DownloadChoiceSelection.Expired -> answer(
+                callbackQuery.id(),
+                "Меню устарело. Отправьте ссылку ещё раз",
                 showAlert = true,
             )
-            deleteMenuBestEffort(context.chatId, menuMessageId)
-            return
-        }
-
-        if (callbackQuery.from().id() != requestUser.id()) {
-            telegramSender.answerCallback(
-                callbackQueryId = callbackQuery.id(),
-                text = "Это меню другого пользователя",
+            DownloadChoiceSelection.NotOwner -> answer(
+                callbackQuery.id(),
+                "Это меню другого пользователя",
                 showAlert = true,
             )
-            return
+            DownloadChoiceSelection.AlreadySelected -> answer(callbackQuery.id(), "Загрузка уже выбрана")
+            DownloadChoiceSelection.Invalid -> answer(callbackQuery.id(), "Меню недействительно", showAlert = true)
+        }
+    }
+
+    private fun startDownload(
+        context: TelegramUpdateContext,
+        callbackQueryId: String,
+        callback: DownloadChoiceCallback,
+        selection: DownloadChoiceSelection.Ready,
+    ) {
+        try {
+            telegramDownloadStarter.startResolved(
+                telegramUserId = selection.session.telegramUserId,
+                telegramChatId = selection.session.telegramChatId,
+                telegramUpdateId = selection.session.telegramUpdateId,
+                telegramRequestMessageId = selection.session.telegramRequestMessageId,
+                resolvedDownload = selection.option.toResolvedDownload(),
+            )
+        } catch (error: Exception) {
+            sessionService.release(callback.sessionToken)
+            throw error
         }
 
-        telegramSender.answerCallback(
-            callbackQueryId = callbackQuery.id(),
-            text = "Выбрано: ${choice.outputType.displayName()}",
-        )
-        telegramDownloadStarter.start(
-            telegramUserId = requestUser.id(),
-            telegramChatId = context.chatId,
-            telegramUpdateId = choice.telegramUpdateId,
-            telegramRequestMessageId = requestMessage.messageId(),
-            url = requestUrl,
-            outputType = choice.outputType,
-        )
-        deleteMenuBestEffort(context.chatId, menuMessageId)
+        answer(callbackQueryId, "Выбрано: ${selection.option.label}")
+        deleteMenuBestEffort(context.chatId, requireNotNull(context.messageId))
+    }
+
+    private fun answer(callbackQueryId: String, text: String, showAlert: Boolean = false) {
+        telegramSender.answerCallback(callbackQueryId, text, showAlert)
     }
 
     private fun deleteMenuBestEffort(chatId: Long, messageId: Int) {
@@ -74,13 +94,6 @@ class DownloadChoiceHandler(
                 messageId,
                 it,
             )
-        }
-    }
-
-    private fun OutputType.displayName(): String {
-        return when (this) {
-            OutputType.VIDEO -> "Видео"
-            OutputType.AUDIO -> "Звук"
         }
     }
 }

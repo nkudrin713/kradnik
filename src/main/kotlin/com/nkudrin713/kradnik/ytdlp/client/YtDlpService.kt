@@ -56,14 +56,27 @@ class YtDlpService(
     }
 
     suspend fun extractMetadata(request: DownloadRequest): YtDlpMetadataDto {
+        return extractMetadata(request, request.formatSelector)
+    }
+
+    suspend fun extractCatalogMetadata(request: DownloadRequest): YtDlpMetadataDto {
+        return extractMetadata(request, formatSelector = null)
+    }
+
+    private suspend fun extractMetadata(
+        request: DownloadRequest,
+        formatSelector: String?,
+    ): YtDlpMetadataDto {
         val result = processRunner.run(
             YtDlpCommand(
                 args = buildList {
                     add(DUMP_SINGLE_JSON)
                     add(NO_PLAYLIST)
                     add(NO_WARNINGS)
-                    add(FORMAT)
-                    add(request.formatSelector)
+                    if (formatSelector != null) {
+                        add(FORMAT)
+                        add(formatSelector)
+                    }
                     addAll(youtubePoTokenArgs(request))
                     add(request.originalUrl)
                 },

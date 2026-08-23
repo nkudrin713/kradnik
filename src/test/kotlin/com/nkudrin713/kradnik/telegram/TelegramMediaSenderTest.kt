@@ -5,11 +5,13 @@ import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
 import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.Audio
+import com.pengrad.telegrambot.model.Document
 import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.Video
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.BaseRequest
 import com.pengrad.telegrambot.request.SendAudio
+import com.pengrad.telegrambot.request.SendDocument
 import com.pengrad.telegrambot.request.SendVideo
 import com.pengrad.telegrambot.response.SendResponse
 import io.kotest.matchers.shouldBe
@@ -112,12 +114,43 @@ class TelegramMediaSenderTest {
         result shouldBe TelegramSendResult("audio-id", 456)
     }
 
-    private fun sendResponse(video: Video? = null, audio: Audio? = null): SendResponse {
+    @Test
+    fun sendsCoverAsDocument(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("cover.jpg")
+        file.writeText("cover")
+        val request = slot<BaseRequest<*, *>>()
+        every { bot.execute(capture(request)) } returns sendResponse(document = document("cover-id", 456))
+
+        val result = sender.sendDocument(100, file, replyToMessageId = 200)
+
+        (request.captured as SendDocument).getParameters()["reply_parameters"]
+            .shouldBeInstanceOf<ReplyParameters>()
+        result shouldBe TelegramSendResult("cover-id", 456)
+    }
+
+    @Test
+    fun sendsCachedCoverDocument() = runTest {
+        val request = slot<BaseRequest<*, *>>()
+        every { bot.execute(capture(request)) } returns sendResponse(document = document("cover-id", 456))
+
+        val result = sender.sendCachedDocument(100, "cached-id", replyToMessageId = 200)
+
+        val actual = request.captured as SendDocument
+        actual.getParameters()["document"] shouldBe "cached-id"
+        result shouldBe TelegramSendResult("cover-id", 456)
+    }
+
+    private fun sendResponse(
+        video: Video? = null,
+        audio: Audio? = null,
+        document: Document? = null,
+    ): SendResponse {
         return mockk {
             every { isOk } returns true
             every { message() } returns mockk<Message> {
                 every { video() } returns video
                 every { audio() } returns audio
+                every { document() } returns document
             }
         }
     }
@@ -128,5 +161,12 @@ class TelegramMediaSenderTest {
 
     private fun audio(fileId: String, fileSize: Long): Audio {
         return Audio(fileId, "unique", null, null, null, null, null, fileSize, null)
+    }
+
+    private fun document(fileId: String, fileSize: Long): Document {
+        return mockk {
+            every { fileId() } returns fileId
+            every { fileSize() } returns fileSize
+        }
     }
 }

@@ -27,10 +27,10 @@ class VkDownloadExecutorTest {
     private val executor = VkDownloadExecutor(ytDlpService)
 
     @Test
-    fun supportsOnlyKnownVkPresets() {
+    fun supportsVkPresetFamilyIncludingQualityVariants() {
         assertTrue(executor.supports(request(VK_VIDEO_PRESET)))
         assertTrue(executor.supports(request(VK_AUDIO_PRESET)))
-        assertFalse(executor.supports(request("vk_unknown")))
+        assertTrue(executor.supports(request("vk_video_720")))
         assertFalse(executor.supports(request("youtube_audio")))
     }
 

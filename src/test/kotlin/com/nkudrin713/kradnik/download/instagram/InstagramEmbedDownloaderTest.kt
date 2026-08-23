@@ -19,7 +19,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class InstagramEmbedDownloaderTest {
-    private val httpClient: InstagramHttpClient = mockk()
+    private val httpClient: InstagramHttpClient = mockk(relaxed = true)
     private val downloader = InstagramEmbedDownloader(httpClient)
 
     @Test
@@ -45,6 +45,7 @@ class InstagramEmbedDownloaderTest {
         val request = request("https://www.instagram.com/reel/ABC_123/")
         val embedUri = URI.create("https://www.instagram.com/p/ABC_123/embed/captioned/")
         coEvery { httpClient.getText(embedUri) } returns embedHtml()
+        coEvery { httpClient.contentLength(URI.create(MEDIA_URL)) } returns 42_000_000
 
         val prepared = downloader.prepare(request)
 
@@ -56,6 +57,7 @@ class InstagramEmbedDownloaderTest {
         assertEquals(1280, prepared.metadata.height)
         assertEquals("owner", prepared.metadata.uploader)
         assertEquals(THUMBNAIL_URL, prepared.metadata.thumbnail)
+        assertEquals(42_000_000, prepared.metadata.filesize)
     }
 
     @Test

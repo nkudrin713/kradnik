@@ -19,7 +19,7 @@ class VkDownloadExecutor(
     private val ytDlpService: YtDlpService,
 ) : DownloadExecutor {
     override fun supports(request: DownloadRequest): Boolean {
-        return request.presetName == VK_VIDEO_PRESET || request.presetName == VK_AUDIO_PRESET
+        return request.presetName.startsWith("vk_")
     }
 
     override suspend fun prepare(request: DownloadRequest): DownloadPreparation {

@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.processing
 import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
+import com.nkudrin713.kradnik.download.cover.CoverTooLargeException
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
@@ -140,6 +141,12 @@ class DownloadJobProcessor(
                 attempt,
                 uploadLimitReason(job.outputType, error.sizeBytes),
             )
+        } catch (error: CoverTooLargeException) {
+            logger.warn("JOB[{}] cover exceeds upload limit", jobId)
+            downloadJobLifecycle.rejectTooLarge(
+                attempt,
+                uploadLimitReason(OutputType.COVER, error.sizeBytes),
+            )
         } catch (error: TelegramSendException) {
             logger.error("JOB[{}] Telegram send failed", jobId, error)
             val errorMessage = error.message ?: error.javaClass.simpleName
@@ -164,7 +171,7 @@ class DownloadJobProcessor(
     ): DownloadedFile {
         return when (job.outputType) {
             OutputType.VIDEO -> telegramVideoPreparer.prepare(downloadedFile, outputDir, jobId)
-            OutputType.AUDIO -> downloadedFile
+            OutputType.AUDIO, OutputType.COVER -> downloadedFile
         }
     }
 

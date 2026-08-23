@@ -95,6 +95,23 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun extractCatalogMetadataKeepsFormatsAndDoesNotPreselectFormat() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"video-id","formats":[{"format_id":"22","height":720,"filesize":1000}]}""",
+            timedOut = false,
+            exitCode = 0,
+            duration = 5.seconds,
+        )
+
+        val actual = service.extractCatalogMetadata(testRequest())
+
+        assertEquals("22", actual.formats?.single()?.formatId)
+        val command = slot<Command>()
+        coVerify { processRunner.run(capture(command)) }
+        assertFalse(command.captured.args.contains("-f"))
+    }
+
+    @Test
     fun extractMetadataIgnoresStderrOnSuccessfulProcess() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             stdout = """{"id":"video-id","title":"Test video"}""",

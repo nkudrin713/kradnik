@@ -1,60 +1,63 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
+import com.nkudrin713.kradnik.download.choice.DownloadSizeFormatter
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import org.springframework.stereotype.Component
+import java.nio.charset.StandardCharsets
+import java.util.UUID
 
-private const val DOWNLOAD_CALLBACK_PREFIX = "download"
+private const val DOWNLOAD_CALLBACK_PREFIX = "dl"
+private const val MAX_CALLBACK_BYTES = 64
 
 @Component
 class TelegramDownloadChoiceView {
-
     fun text(): String = "Что скачать?"
 
-    fun keyboard(telegramUpdateId: Int): InlineKeyboardMarkup {
-        return InlineKeyboardMarkup(
-            button("Видео", telegramUpdateId, OutputType.VIDEO),
-            button("Звук", telegramUpdateId, OutputType.AUDIO),
-        )
+    fun keyboard(
+        sessionToken: UUID,
+        options: List<DownloadChoiceOptionSnapshot>,
+    ): InlineKeyboardMarkup {
+        val rows = options.map { option ->
+            arrayOf(
+                InlineKeyboardButton(buttonText(option))
+                    .callbackData(DownloadChoiceCallback.encode(sessionToken, option.key))
+            )
+        }.toTypedArray()
+        return InlineKeyboardMarkup(*rows)
     }
 
-    private fun button(
-        text: String,
-        telegramUpdateId: Int,
-        outputType: OutputType,
-    ): InlineKeyboardButton {
-        return InlineKeyboardButton(text)
-            .callbackData(DownloadChoiceCallback.encode(telegramUpdateId, outputType))
+    private fun buttonText(option: DownloadChoiceOptionSnapshot): String {
+        val size = option.sizeBytes ?: return option.label
+        val prefix = if (option.approximateSize) "≈ " else ""
+        val unavailable = if (option.available) "" else " · недоступно"
+        return "${option.label} · $prefix${DownloadSizeFormatter.format(size)}$unavailable"
     }
 }
 
 data class DownloadChoiceCallback(
-    val telegramUpdateId: Int,
-    val outputType: OutputType,
+    val sessionToken: UUID,
+    val optionKey: String,
 ) {
     companion object {
-        fun encode(
-            telegramUpdateId: Int,
-            outputType: OutputType,
-        ): String = "$DOWNLOAD_CALLBACK_PREFIX:$telegramUpdateId:${outputType.dbValue}"
+        fun encode(sessionToken: UUID, optionKey: String): String {
+            val value = "$DOWNLOAD_CALLBACK_PREFIX:$sessionToken:$optionKey"
+            require(value.toByteArray(StandardCharsets.UTF_8).size <= MAX_CALLBACK_BYTES) {
+                "Download callback exceeds Telegram limit"
+            }
+            return value
+        }
 
         fun parse(value: String): DownloadChoiceCallback? {
-            val parts = value.split(':')
-            if (parts.size != 3 || parts[0] != DOWNLOAD_CALLBACK_PREFIX) {
+            val parts = value.split(':', limit = 3)
+            if (parts.size != 3 || parts[0] != DOWNLOAD_CALLBACK_PREFIX || parts[2].isBlank()) {
                 return null
             }
-
-            val telegramUpdateId = parts[1].toIntOrNull() ?: return null
-            val outputType = when (parts[2]) {
-                OutputType.VIDEO.dbValue -> OutputType.VIDEO
-                OutputType.AUDIO.dbValue -> OutputType.AUDIO
-                else -> return null
-            }
-
+            val token = runCatching { UUID.fromString(parts[1]) }.getOrNull() ?: return null
             return DownloadChoiceCallback(
-                telegramUpdateId = telegramUpdateId,
-                outputType = outputType,
+                sessionToken = token,
+                optionKey = parts[2],
             )
         }
     }

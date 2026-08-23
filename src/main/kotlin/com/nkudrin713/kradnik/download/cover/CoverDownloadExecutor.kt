@@ -1,0 +1,54 @@
+package com.nkudrin713.kradnik.download.cover
+
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadExecutor
+import com.nkudrin713.kradnik.download.executor.DownloadPreparation
+import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
+import com.nkudrin713.kradnik.download.instagram.InstagramDownloadExecutor
+import com.nkudrin713.kradnik.download.platform.INSTAGRAM_PRESET_PREFIX
+import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
+import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import org.springframework.core.annotation.Order
+import org.springframework.stereotype.Component
+import java.nio.file.Path
+
+@Component
+@Order(0)
+class CoverDownloadExecutor(
+    private val ytDlpService: YtDlpService,
+    private val instagramDownloadExecutor: InstagramDownloadExecutor,
+    private val coverDownloader: CoverDownloader,
+) : DownloadExecutor {
+    override fun supports(request: DownloadRequest): Boolean = request.outputType == OutputType.COVER
+
+    override suspend fun prepare(request: DownloadRequest): DownloadPreparation {
+        if (request.presetName.startsWith(INSTAGRAM_PRESET_PREFIX)) {
+            return when (val preparation = instagramDownloadExecutor.prepare(request)) {
+                is DownloadPreparation.Ready -> ready(preparation.session.metadata)
+                is DownloadPreparation.NotReady -> preparation
+                is DownloadPreparation.RetryableFailure -> preparation
+                is DownloadPreparation.SourceUnavailable -> preparation
+                is DownloadPreparation.TerminalFailure -> preparation
+            }
+        }
+
+        return ready(ytDlpService.extractCatalogMetadata(request))
+    }
+
+    private fun ready(metadata: YtDlpMetadataDto): DownloadPreparation {
+        if (metadata.thumbnail.isNullOrBlank()) {
+            return DownloadPreparation.TerminalFailure("Cover is unavailable")
+        }
+        return DownloadPreparation.Ready(CoverPreparedDownloadSession(metadata))
+    }
+
+    private inner class CoverPreparedDownloadSession(
+        override val metadata: YtDlpMetadataDto,
+    ) : PreparedDownloadSession {
+        override suspend fun download(request: DownloadRequest, outputDir: Path): DownloadedFile {
+            return coverDownloader.download(requireNotNull(metadata.thumbnail), outputDir)
+        }
+    }
+}

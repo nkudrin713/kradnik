@@ -67,6 +67,14 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
                     "--convert-thumbnails", "jpg"
                 ),
             )
+
+            OutputType.COVER -> DownloadRequest(
+                originalUrl = originalUrl,
+                normalizedUrl = normalizedUrl,
+                outputType = outputType,
+                presetName = "youtube_cover",
+                formatSelector = "best",
+            )
         }
 
         return ResolvedDownload(

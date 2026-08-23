@@ -26,6 +26,11 @@ class TelegramFileSender(
                 durationSeconds = job.sourceDurationSeconds,
                 replyToMessageId = job.telegramRequestMessageId,
             )
+            OutputType.COVER -> telegramMediaSender.sendDocument(
+                chatId = job.telegramChatId,
+                file = file.file,
+                replyToMessageId = job.telegramRequestMessageId,
+            )
         }
 
         return TelegramFileSendResult(
@@ -47,6 +52,11 @@ class TelegramFileSender(
                 replyToMessageId = job.telegramRequestMessageId,
             )
             OutputType.AUDIO -> telegramMediaSender.sendCachedAudio(
+                chatId = job.telegramChatId,
+                fileId = fileId,
+                replyToMessageId = job.telegramRequestMessageId,
+            )
+            OutputType.COVER -> telegramMediaSender.sendCachedDocument(
                 chatId = job.telegramChatId,
                 fileId = fileId,
                 replyToMessageId = job.telegramRequestMessageId,

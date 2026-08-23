@@ -45,6 +45,7 @@ class InstagramEmbedDownloader(
         if (mediaUri == null && context.findFirstBoolean(IS_VIDEO) != true) {
             throw InstagramEmbedException("Instagram embed response does not contain video")
         }
+        val mediaSize = mediaUri?.let { httpClient.contentLength(it) }
 
         val preparedDownload = InstagramPreparedDownload(
             shortcode = shortcode,
@@ -60,7 +61,7 @@ class InstagramEmbedDownloader(
                 width = context.findFirstInt(ORIGINAL_WIDTH, WIDTH),
                 height = context.findFirstInt(ORIGINAL_HEIGHT, HEIGHT),
                 fps = null,
-                filesize = null,
+                filesize = mediaSize,
                 vcodec = null,
                 acodec = null,
                 filesizeApprox = null,

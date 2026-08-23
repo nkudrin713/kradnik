@@ -75,6 +75,19 @@ class TelegramFileSenderTest {
     }
 
     @Test
+    fun sendsCoverFileAsDocument(@TempDir tempDir: Path) = runTest {
+        val file = DownloadedFile(tempDir.resolve("cover.jpg"), sizeBytes = 123)
+        coEvery {
+            telegramMediaSender.sendDocument(100, file.file, replyToMessageId = 200)
+        } returns TelegramSendResult("cover-id", 456)
+
+        val actual = sender.send(job(OutputType.COVER), file)
+
+        assertEquals("cover-id", actual.telegramFileId)
+        coVerify { telegramMediaSender.sendDocument(100, file.file, replyToMessageId = 200) }
+    }
+
+    @Test
     fun sendsCachedVideo() = runTest {
         coEvery {
             telegramMediaSender.sendCachedVideo(
@@ -120,6 +133,18 @@ class TelegramFileSenderTest {
                 replyToMessageId = 200,
             )
         }
+    }
+
+    @Test
+    fun sendsCachedCoverDocument() = runTest {
+        coEvery {
+            telegramMediaSender.sendCachedDocument(100, "cached-id", replyToMessageId = 200)
+        } returns TelegramSendResult("cover-id", 456)
+
+        val actual = sender.sendCached(job(OutputType.COVER), "cached-id", downloadedFileSize = 123)
+
+        assertEquals("cover-id", actual.telegramFileId)
+        coVerify { telegramMediaSender.sendCachedDocument(100, "cached-id", replyToMessageId = 200) }
     }
 
     @Test

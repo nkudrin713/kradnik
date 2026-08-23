@@ -22,6 +22,8 @@ import java.time.format.DateTimeFormatter
 interface InstagramHttpClient {
     suspend fun getText(uri: URI): String
 
+    suspend fun contentLength(uri: URI): Long?
+
     suspend fun download(
         uri: URI,
         outputFile: Path,
@@ -76,6 +78,22 @@ class JdkInstagramHttpClient(
             response.headers().firstValueAsLong("Content-Length").orElse(-1),
         )
         response.body()
+    }
+
+    override suspend fun contentLength(uri: URI): Long? = withContext(Dispatchers.IO) {
+        val request = HttpRequest.newBuilder(uri)
+            .timeout(metadataTimeout)
+            .header("Accept", "video/*")
+            .header("User-Agent", USER_AGENT)
+            .method("HEAD", HttpRequest.BodyPublishers.noBody())
+            .build()
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.discarding())
+        if (response.statusCode() !in SUCCESS_STATUS_CODES) {
+            return@withContext null
+        }
+        response.headers().firstValueAsLong("Content-Length")
+            .orElse(-1L)
+            .takeIf { it >= 0L }
     }
 
     override suspend fun download(

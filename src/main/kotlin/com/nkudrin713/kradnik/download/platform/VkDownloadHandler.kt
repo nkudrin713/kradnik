@@ -60,6 +60,14 @@ class VkDownloadHandler : PlatformDownloadHandler {
                 formatSelector = "ba/bestaudio/best",
                 extraArgs = listOf("-x", "--audio-format", "mp3"),
             )
+
+            OutputType.COVER -> DownloadRequest(
+                originalUrl = originalUrl,
+                normalizedUrl = normalizedUrl,
+                outputType = outputType,
+                presetName = "vk_cover",
+                formatSelector = "best",
+            )
         }
 
         return ResolvedDownload(

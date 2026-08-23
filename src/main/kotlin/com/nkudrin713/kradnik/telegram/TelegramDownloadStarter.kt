@@ -46,6 +46,22 @@ class TelegramDownloadStarter(
             url = url,
             outputType = outputType,
         ) ?: return false
+        return startResolved(
+            telegramUserId = telegramUserId,
+            telegramChatId = telegramChatId,
+            telegramUpdateId = telegramUpdateId,
+            telegramRequestMessageId = telegramRequestMessageId,
+            resolvedDownload = resolvedDownload,
+        )
+    }
+
+    fun startResolved(
+        telegramUserId: Long,
+        telegramChatId: Long,
+        telegramUpdateId: Int,
+        telegramRequestMessageId: Int,
+        resolvedDownload: ResolvedDownload,
+    ): Boolean {
         val request = resolvedDownload.request
         val identity = resolvedDownload.identity
         val statusMessageId = telegramSender.sendStatus(
@@ -61,7 +77,7 @@ class TelegramDownloadStarter(
             normalizedUrl = identity.normalizedUrl,
             cacheKey = when (request.outputType) {
                 OutputType.VIDEO -> TelegramVideoPolicy.versionCacheKey(identity.cacheKey)
-                OutputType.AUDIO -> identity.cacheKey
+                OutputType.AUDIO, OutputType.COVER -> identity.cacheKey
             },
             outputType = request.outputType,
             downloadPreset = request.presetName,

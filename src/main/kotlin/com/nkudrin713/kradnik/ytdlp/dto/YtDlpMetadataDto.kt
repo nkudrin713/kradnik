@@ -41,6 +41,8 @@ data class YtDlpMetadataDto(
 
     @JsonProperty("requested_formats")
     val requestedFormats: List<YtDlpFormatDto>?,
+
+    val formats: List<YtDlpFormatDto>? = null,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)

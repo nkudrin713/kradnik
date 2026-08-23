@@ -10,7 +10,8 @@ All current bot instructions and user-facing messages are in Russian. English lo
 ## What the Bot Does
 
 - Accepts public media links in Telegram.
-- Shows available video qualities, audio, cover art, and estimated sizes for every link.
+- Shows source information, available video qualities, audio, cover art, and estimated sizes for every link.
+- Reuses a short-lived, bounded metadata cache for repeated links.
 - Downloads media through `yt-dlp`.
 - Sends the downloaded result back through Telegram.
 - Reuses Telegram-uploaded files when possible.

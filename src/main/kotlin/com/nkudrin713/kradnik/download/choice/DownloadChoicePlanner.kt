@@ -26,11 +26,14 @@ class DownloadChoicePlanner(
     private val instagramDownloadExecutor: InstagramDownloadExecutor,
     private val audioUploadPlanner: AudioUploadPlanner,
     private val uploadLimits: TelegramUploadLimits,
+    private val metadataCache: DownloadChoiceMetadataCache,
 ) {
     suspend fun plan(url: String): DownloadChoicePlan {
         val video = platformResolver.resolve(url, OutputType.VIDEO)
         val audio = platformResolver.resolve(url, OutputType.AUDIO)
-        val metadata = extractCatalog(video.request)
+        val metadata = metadataCache.getOrLoad(video.identity.cacheKey) {
+            extractCatalog(video.request)
+        }
 
         val options = buildList {
             addAll(videoOptions(video, metadata))
@@ -44,6 +47,14 @@ class DownloadChoicePlanner(
         return DownloadChoicePlan(
             originalUrl = video.identity.originalUrl,
             normalizedUrl = video.identity.normalizedUrl,
+            mediaInfo = DownloadChoiceMediaInfo(
+                channelName = metadata.channel ?: metadata.uploader,
+                title = metadata.title,
+                durationSeconds = metadata.duration
+                    ?.takeIf { it >= BigDecimal.ZERO }
+                    ?.setScale(0, RoundingMode.DOWN)
+                    ?.toLong(),
+            ),
             options = options,
         )
     }
@@ -179,7 +190,7 @@ class DownloadChoicePlanner(
             resolved = resolved,
             request = request,
             key = AUDIO_KEY,
-            label = "Звук",
+            label = "Только звук",
             sizeBytes = plan.estimatedSizeBytes,
             approximateSize = true,
             cacheKeySuffix = "audio:${plan.audioQuality}",
@@ -201,7 +212,7 @@ class DownloadChoicePlanner(
             resolved = resolved,
             request = request,
             key = COVER_KEY,
-            label = "Скачать обложку",
+            label = "Обложка",
             sizeBytes = null,
             approximateSize = false,
             cacheKeySuffix = "cover:v1",

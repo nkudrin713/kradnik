@@ -55,6 +55,7 @@ class DownloadChoiceCoordinator(
                 chatId = command.telegramChatId,
                 messageId = statusMessageId,
                 sessionToken = session.token,
+                mediaInfo = plan.mediaInfo,
                 options = session.options,
             )
         } catch (error: Exception) {

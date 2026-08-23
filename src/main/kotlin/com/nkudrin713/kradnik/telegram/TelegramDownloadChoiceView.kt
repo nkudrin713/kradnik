@@ -1,7 +1,9 @@
 package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadSizeFormatter
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import org.springframework.stereotype.Component
@@ -13,7 +15,24 @@ private const val MAX_CALLBACK_BYTES = 64
 
 @Component
 class TelegramDownloadChoiceView {
-    fun text(): String = "Что скачать?"
+    fun text(mediaInfo: DownloadChoiceMediaInfo): String {
+        return buildString {
+            copyableTitle(mediaInfo)?.let {
+                append("<code>")
+                append(it.escapeHtml())
+                appendLine("</code>")
+            }
+            mediaInfo.durationSeconds?.let {
+                appendLine("Длительность: ${formatDuration(it)}")
+            }
+            if (isNotEmpty()) {
+                appendLine()
+            }
+            appendLine("Выберите, что скачать")
+            appendLine()
+            append("≈ — примерный размер файла")
+        }
+    }
 
     fun keyboard(
         sessionToken: UUID,
@@ -29,10 +48,46 @@ class TelegramDownloadChoiceView {
     }
 
     private fun buttonText(option: DownloadChoiceOptionSnapshot): String {
-        val size = option.sizeBytes ?: return option.label
+        val label = "${option.outputType.icon} ${option.label}"
+        val size = option.sizeBytes ?: return label
         val prefix = if (option.approximateSize) "≈ " else ""
         val unavailable = if (option.available) "" else " · недоступно"
-        return "${option.label} · $prefix${DownloadSizeFormatter.format(size)}$unavailable"
+        return "$label · $prefix${DownloadSizeFormatter.format(size)}$unavailable"
+    }
+
+    private fun copyableTitle(mediaInfo: DownloadChoiceMediaInfo): String? {
+        return listOfNotNull(
+            mediaInfo.channelName?.takeIf { it.isNotBlank() },
+            mediaInfo.title?.takeIf { it.isNotBlank() },
+        ).joinToString(" - ").takeIf { it.isNotBlank() }
+    }
+
+    private fun formatDuration(totalSeconds: Long): String {
+        val hours = totalSeconds / SECONDS_IN_HOUR
+        val minutes = totalSeconds % SECONDS_IN_HOUR / SECONDS_IN_MINUTE
+        val seconds = totalSeconds % SECONDS_IN_MINUTE
+        return if (hours > 0) {
+            "%d:%02d:%02d".format(hours, minutes, seconds)
+        } else {
+            "%d:%02d".format(minutes, seconds)
+        }
+    }
+
+    private fun String.escapeHtml(): String {
+        return replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+    }
+
+    private companion object {
+        private const val SECONDS_IN_MINUTE = 60L
+        private const val SECONDS_IN_HOUR = 60L * SECONDS_IN_MINUTE
+        private val OutputType.icon: String
+            get() = when (this) {
+                OutputType.VIDEO -> "🎬"
+                OutputType.AUDIO -> "🎧"
+                OutputType.COVER -> "🖼"
+            }
     }
 }
 

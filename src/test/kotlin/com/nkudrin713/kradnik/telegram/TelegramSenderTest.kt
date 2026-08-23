@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.pengrad.telegrambot.TelegramBot
@@ -79,7 +80,8 @@ class TelegramSenderTest {
         val request = slot<BaseRequest<*, *>>()
         val token = UUID.randomUUID()
         val options = listOf(option())
-        every { downloadChoiceView.text() } returns "choice"
+        val mediaInfo = DownloadChoiceMediaInfo("Channel", "Title", 120)
+        every { downloadChoiceView.text(mediaInfo) } returns "choice"
         every { downloadChoiceView.keyboard(token, options) } returns keyboard
         every { bot.execute(capture(request)) } returns okResponse()
 
@@ -87,12 +89,14 @@ class TelegramSenderTest {
             chatId = 100,
             messageId = 200,
             sessionToken = token,
+            mediaInfo = mediaInfo,
             options = options,
         )
 
         val actual = request.captured as EditMessageText
         actual.getParameters()["reply_markup"] shouldBe keyboard
         actual.getParameters()["message_id"] shouldBe 200
+        actual.getParameters()["parse_mode"] shouldBe "HTML"
     }
 
     @Test

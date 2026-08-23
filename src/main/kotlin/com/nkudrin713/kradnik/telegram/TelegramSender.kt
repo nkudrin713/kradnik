@@ -1,7 +1,9 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
+import com.pengrad.telegrambot.model.request.ParseMode
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
 import com.pengrad.telegrambot.request.DeleteMessage
@@ -36,13 +38,15 @@ class TelegramSender(
         chatId: Long,
         messageId: Int,
         sessionToken: UUID,
+        mediaInfo: DownloadChoiceMediaInfo,
         options: List<DownloadChoiceOptionSnapshot>,
     ) {
         editText(
             chatId = chatId,
             messageId = messageId,
-            text = downloadChoiceView.text(),
+            text = downloadChoiceView.text(mediaInfo),
             keyboard = downloadChoiceView.keyboard(sessionToken, options),
+            parseMode = ParseMode.HTML,
         )
     }
 
@@ -86,9 +90,11 @@ class TelegramSender(
         messageId: Int,
         text: String,
         keyboard: InlineKeyboardMarkup? = null,
+        parseMode: ParseMode? = null,
     ) {
         val request = EditMessageText(chatId, messageId, text)
         keyboard?.let(request::replyMarkup)
+        parseMode?.let(request::parseMode)
         apiClient.execute(request)
     }
 }

@@ -17,6 +17,8 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
+import java.time.Clock
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -33,6 +35,11 @@ class DownloadChoicePlannerTest {
         instagramDownloadExecutor = instagramExecutor,
         audioUploadPlanner = AudioUploadPlanner(uploadLimits),
         uploadLimits = uploadLimits,
+        metadataCache = DownloadChoiceMetadataCache(
+            clock = Clock.systemUTC(),
+            ttl = Duration.ofMinutes(30),
+            maxEntries = 20,
+        ),
     )
 
     @Test
@@ -66,6 +73,25 @@ class DownloadChoicePlannerTest {
         assertTrue(actual.options.first { it.key == "audio" }.approximateSize)
         assertEquals(OutputType.COVER, actual.options.last().outputType)
         assertEquals(actual.options.size, actual.options.map { it.cacheKey }.distinct().size)
+        assertEquals(DownloadChoiceMediaInfo("Channel", "Title", 120), actual.mediaInfo)
+        coVerify(exactly = 1) { ytDlpService.extractCatalogMetadata(video.request) }
+    }
+
+    @Test
+    fun reusesCatalogMetadataForRepeatedVideo() = runTest {
+        val video = resolved(OutputType.VIDEO)
+        every { platformResolver.resolve(URL, OutputType.VIDEO) } returns video
+        every { platformResolver.resolve(URL, OutputType.AUDIO) } returns resolved(OutputType.AUDIO)
+        coEvery { ytDlpService.extractCatalogMetadata(video.request) } returns metadata(
+            formats = listOf(
+                videoFormat("v720", 720, 200_000_000),
+                audioFormat("a1", 20_000_000),
+            ),
+        )
+
+        planner.plan(URL)
+        planner.plan(URL)
+
         coVerify(exactly = 1) { ytDlpService.extractCatalogMetadata(video.request) }
     }
 
@@ -200,8 +226,8 @@ class DownloadChoicePlannerTest {
             track = null,
             artist = null,
             creator = null,
-            uploader = null,
-            channel = null,
+            uploader = "Uploader",
+            channel = "Channel",
             requestedFormats = null,
             formats = formats,
         )

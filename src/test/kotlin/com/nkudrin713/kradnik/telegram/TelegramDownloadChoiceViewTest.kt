@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.OutputType
 import java.util.UUID
@@ -11,6 +12,29 @@ class TelegramDownloadChoiceViewTest {
     private val view = TelegramDownloadChoiceView()
 
     @Test
+    fun createsCopyableEscapedVideoInfoAndDuration() {
+        val actual = view.text(
+            DownloadChoiceMediaInfo(
+                channelName = "Channel <official>",
+                title = "Title & more",
+                durationSeconds = 3_723,
+            )
+        )
+
+        assertEquals(
+            """
+                <code>Channel &lt;official&gt; - Title &amp; more</code>
+                Длительность: 1:02:03
+
+                Выберите, что скачать
+
+                ≈ — примерный размер файла
+            """.trimIndent(),
+            actual,
+        )
+    }
+
+    @Test
     fun createsOneRowPerOptionWithFormattedSizes() {
         val token = UUID.randomUUID()
         val keyboard = view.keyboard(
@@ -18,13 +42,22 @@ class TelegramDownloadChoiceViewTest {
             options = listOf(
                 option("video_original", "Оригинал", 1_420_000_000, approximate = true),
                 option("video_720", "720p", 460_000_000, approximate = false),
-                option("cover", "Скачать обложку", null, approximate = false),
+                option("audio", "Только звук", 24_500_000, approximate = true),
+                option("cover", "Обложка", null, approximate = false),
             ),
         ).inlineKeyboard()
 
-        assertEquals(listOf("Оригинал · ≈ 1.42 GB", "720p · 460 MB", "Скачать обложку"), keyboard.map { it.single().text })
         assertEquals(
-            listOf("video_original", "video_720", "cover"),
+            listOf(
+                "🎬 Оригинал · ≈ 1,42 ГБ",
+                "🎬 720p · 460 МБ",
+                "🎧 Только звук · ≈ 24,5 МБ",
+                "🖼 Обложка",
+            ),
+            keyboard.map { it.single().text },
+        )
+        assertEquals(
+            listOf("video_original", "video_720", "audio", "cover"),
             keyboard.map { DownloadChoiceCallback.parse(requireNotNull(it.single().callbackData))?.optionKey },
         )
     }
@@ -62,7 +95,11 @@ class TelegramDownloadChoiceViewTest {
             originalUrl = URL,
             normalizedUrl = URL,
             cacheKey = "cache:$key",
-            outputType = if (key == "cover") OutputType.COVER else OutputType.VIDEO,
+            outputType = when (key) {
+                "audio" -> OutputType.AUDIO
+                "cover" -> OutputType.COVER
+                else -> OutputType.VIDEO
+            },
             presetName = key,
             formatSelector = "best",
             extraArgs = emptyList(),

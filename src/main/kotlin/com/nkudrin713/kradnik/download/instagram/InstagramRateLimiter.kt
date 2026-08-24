@@ -5,7 +5,6 @@ import com.nkudrin713.kradnik.download.ratelimit.RateLimitCoordinator
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitPolicy
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
-import com.nkudrin713.kradnik.download.ratelimit.RateLimiter
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.time.Duration
@@ -26,7 +25,7 @@ class InstagramRateLimiter(
     maxCooldown: Duration,
     @Value("\${download.instagram.rate-limit.cooldown-multiplier:2}")
     cooldownMultiplier: Int,
-) : RateLimiter {
+) {
     private val key = RateLimitBucketKey(
         provider = "instagram",
         operation = "embed",
@@ -39,13 +38,13 @@ class InstagramRateLimiter(
         maxCooldown = maxCooldown,
         cooldownMultiplier = cooldownMultiplier,
     )
-    override fun acquire(): RateLimitDecision = coordinator.acquire(key, policy)
+    fun acquire(): RateLimitDecision = coordinator.acquire(key, policy)
 
-    override fun recordSuccess(permit: RateLimitPermit) {
+    fun recordSuccess(permit: RateLimitPermit) {
         coordinator.recordSuccess(key, permit)
     }
 
-    override fun recordThrottle(permit: RateLimitPermit, retryAfter: Duration?): Instant {
+    fun recordThrottle(permit: RateLimitPermit, retryAfter: Duration?): Instant {
         return coordinator.recordThrottle(key, policy, permit, retryAfter)
     }
 }

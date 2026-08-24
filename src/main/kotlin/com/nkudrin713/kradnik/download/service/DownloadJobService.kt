@@ -327,16 +327,6 @@ class DownloadJobService(
 		return job
 	}
 
-	@Transactional(readOnly = true)
-	fun getJob(jobId: Long): DownloadJob {
-		return getJobInternal(jobId)
-	}
-
-	private fun getJobInternal(jobId: Long): DownloadJob {
-		return downloadJobRepository.findById(jobId)
-			.orElseThrow { DownloadJobNotFoundException(jobId) }
-	}
-
 	private fun ensureOwned(updatedRows: Int, attempt: ClaimedDownloadJob) {
 		if (updatedRows != 1) {
 			throw DownloadJobLeaseLostException(attempt.requiredId())
@@ -348,9 +338,6 @@ class DownloadJobService(
 		private const val MAX_ERROR_LENGTH = 1000
 	}
 }
-
-class DownloadJobNotFoundException(jobId: Long) :
-	RuntimeException("Download job not found: $jobId")
 
 class DownloadJobLeaseLostException(jobId: Long) :
 	CancellationException("Download job lease lost: $jobId")

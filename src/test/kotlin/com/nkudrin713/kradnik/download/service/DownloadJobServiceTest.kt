@@ -9,7 +9,6 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import java.time.Instant
-import java.util.Optional
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -230,23 +229,6 @@ class DownloadJobServiceTest {
 
         assertEquals(2, actual.requeued)
         assertEquals(1, actual.failed)
-    }
-
-    @Test
-    fun getsJob() {
-        val job = job()
-        every { repository.findById(1) } returns Optional.of(job)
-
-        assertEquals(job, service.getJob(1))
-    }
-
-    @Test
-    fun throwsWhenJobMissing() {
-        every { repository.findById(1) } returns Optional.empty()
-
-        assertFailsWith<DownloadJobNotFoundException> {
-            service.getJob(1)
-        }
     }
 
     private fun command(): CreateDownloadJobCommand {

@@ -3,17 +3,6 @@ package com.nkudrin713.kradnik.download.ratelimit
 import java.time.Duration
 import java.time.Instant
 
-interface RateLimiter {
-    fun acquire(): RateLimitDecision
-
-    fun recordSuccess(permit: RateLimitPermit)
-
-    fun recordThrottle(
-        permit: RateLimitPermit,
-        retryAfter: Duration? = null,
-    ): Instant
-}
-
 sealed interface RateLimitDecision {
     data class Granted(
         val permit: RateLimitPermit,

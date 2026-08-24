@@ -4,9 +4,7 @@ import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.identity.DownloadIdentity
-import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.ResolvedDownload
-import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
@@ -23,49 +21,18 @@ import kotlin.test.assertFailsWith
 
 class TelegramDownloadStarterTest {
     private val downloadJobService: DownloadJobService = mockk()
-    private val platformResolver: PlatformResolver = mockk()
     private val telegramSender: TelegramSender = mockk()
     private val downloadAnalytics: DownloadAnalytics = mockk(relaxed = true)
     private val starter = TelegramDownloadStarter(
         downloadJobService = downloadJobService,
-        platformResolver = platformResolver,
         telegramSender = telegramSender,
         downloadAnalytics = downloadAnalytics,
     )
 
     @Test
-    fun validatesUrlWithoutCreatingJob() {
-        every {
-            platformResolver.resolve(URL, OutputType.VIDEO)
-        } returns resolvedDownload(OutputType.VIDEO)
-
-        val valid = starter.validate(100, URL)
-
-        assertEquals(true, valid)
-        verify(exactly = 0) { downloadJobService.createJob(any()) }
-    }
-
-    @Test
-    fun reportsUnsupportedUrlDuringValidation() {
-        every {
-            platformResolver.resolve(URL, OutputType.VIDEO)
-        } throws UnsupportedPlatformException("Платформа не поддерживается")
-        every {
-            telegramSender.sendMessage(100, "Платформа не поддерживается")
-        } just runs
-
-        val valid = starter.validate(100, URL)
-
-        assertEquals(false, valid)
-    }
-
-    @Test
     fun createsJobWithRequestMessageAndRecordsAnalytics() {
         val command = slot<CreateDownloadJobCommand>()
         val job = DownloadJob(id = 1)
-        every {
-            platformResolver.resolve(URL, OutputType.VIDEO)
-        } returns resolvedDownload(OutputType.VIDEO)
         every {
             telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED)
         } returns 500
@@ -84,9 +51,6 @@ class TelegramDownloadStarterTest {
     @Test
     fun removesDuplicateStatusWithoutRecordingAnalytics() {
         every {
-            platformResolver.resolve(URL, OutputType.AUDIO)
-        } returns resolvedDownload(OutputType.AUDIO)
-        every {
             telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED)
         } returns 500
         every {
@@ -104,9 +68,6 @@ class TelegramDownloadStarterTest {
     @Test
     fun removesStatusWhenJobCreationFails() {
         every {
-            platformResolver.resolve(URL, OutputType.VIDEO)
-        } returns resolvedDownload(OutputType.VIDEO)
-        every {
             telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED)
         } returns 500
         every {
@@ -122,13 +83,12 @@ class TelegramDownloadStarterTest {
     }
 
     private fun start(outputType: OutputType): Boolean {
-        return starter.start(
+        return starter.startResolved(
             telegramUserId = 300,
             telegramChatId = 100,
             telegramUpdateId = 400,
             telegramRequestMessageId = 200,
-            url = URL,
-            outputType = outputType,
+            resolvedDownload = resolvedDownload(outputType),
         )
     }
 

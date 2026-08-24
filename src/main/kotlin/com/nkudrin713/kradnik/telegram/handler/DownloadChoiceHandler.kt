@@ -20,7 +20,7 @@ class DownloadChoiceHandler(
 
     fun handle(callbackQuery: CallbackQuery) {
         val callback = DownloadChoiceCallback.parse(callbackQuery.data().trim()) ?: return
-        val message = callbackQuery.message()
+        val message = callbackQuery.maybeInaccessibleMessage()
         val chatId = message.chat().id()
         val messageId = message.messageId()
         val selection = sessionService.select(

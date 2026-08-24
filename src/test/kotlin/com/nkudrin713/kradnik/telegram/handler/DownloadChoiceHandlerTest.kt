@@ -12,8 +12,8 @@ import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.Chat
-import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.User
+import com.pengrad.telegrambot.model.message.MaybeInaccessibleMessage
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -121,7 +121,7 @@ class DownloadChoiceHandlerTest {
         userId: Long,
         callbackData: String = DownloadChoiceCallback.encode(token, "video_720"),
     ): CallbackQuery {
-        val message = mockk<Message> {
+        val message = mockk<MaybeInaccessibleMessage> {
             every { chat() } returns mockk<Chat> { every { id() } returns 100 }
             every { messageId() } returns 500
         }
@@ -129,7 +129,7 @@ class DownloadChoiceHandlerTest {
             every { id() } returns "callback-id"
             every { data() } returns callbackData
             every { from() } returns mockk<User> { every { id() } returns userId }
-            every { message() } returns message
+            every { maybeInaccessibleMessage() } returns message
         }
     }
 

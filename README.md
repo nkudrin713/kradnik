@@ -48,7 +48,7 @@ TelegramPollingService
 | Отправка и лимиты Telegram | `telegram/TelegramMediaSender.kt`, `download/telegram/TelegramFileSender.kt`, `telegram/config/TelegramBotProperties.kt` |
 | Подготовка видео | `download/video/` |
 | Схема базы | `src/main/resources/db/migration/` |
-| Контейнеры и деплой | `docker-compose.yml`, `.github/workflows/`, `scripts/` |
+| Контейнеры и деплой | `docker-compose.yml`, `.github/workflows/`, `scripts/render-deploy-env.sh` |
 
 Чтобы добавить платформу, достаточно добавить значение в `DownloadPlatform`, реализацию `PlatformDownloadHandler` и тесты поддерживаемых URL. `PlatformResolver` получает обработчики через Spring. Параметры формата, нормализованный URL и cache key задаются в обработчике платформы.
 

@@ -3,12 +3,15 @@ package com.nkudrin713.kradnik
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionRepository
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import com.nkudrin713.kradnik.process.ProcessRunner
+import com.nkudrin713.kradnik.telegram.TelegramPollingService
+import com.nkudrin713.kradnik.telegram.config.TelegramCommandsInitializer
 import io.mockk.mockk
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.transaction.PlatformTransactionManager
 
 @SpringBootTest(
@@ -19,6 +22,12 @@ import org.springframework.transaction.PlatformTransactionManager
 	]
 )
 class KradnikApplicationTests {
+	@field:MockitoBean
+	private lateinit var telegramPollingService: TelegramPollingService
+
+	@field:MockitoBean
+	private lateinit var telegramCommandsInitializer: TelegramCommandsInitializer
+
 	@Test
 	fun contextLoads() {
 	}

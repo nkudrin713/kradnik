@@ -171,6 +171,11 @@ jobs:
             development:refs/heads/develop|production:refs/heads/main) ;;
             *) echo "Deploy target does not match branch: $TARGET_ENVIRONMENT from $GITHUB_REF" >&2; exit 1 ;;
           esac
+          if [ "$TARGET_ENVIRONMENT" = "production" ] &&
+            ! printf '%s\n' "$IMAGE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Production image tag must use the vX.Y.Z release format: $IMAGE_TAG" >&2
+            exit 1
+          fi
 
       - name: Login to GHCR for image verification
         if: ${{ github.event_name == 'workflow_dispatch' }}

@@ -108,10 +108,9 @@ class DownloadJobService(
 
 	@Transactional
 	fun markMetadata(attempt: ClaimedDownloadJob, metadata: MediaMetadata): DownloadJob {
-		val job = attempt.job
 		val jobId = attempt.requiredId()
 		val sourceDurationSeconds = metadata.durationSeconds?.toInt()
-		ensureOwned(
+		val updatedJob = requireOwned(
 			downloadJobRepository.updateOwnedMetadata(
 				jobId = jobId,
 				leaseToken = attempt.leaseToken,
@@ -124,37 +123,25 @@ class DownloadJobService(
 			attempt,
 		)
 
-		job.sourceTitle = metadata.title
-		job.sourceExtractor = metadata.extractor
-		job.sourceDurationSeconds = sourceDurationSeconds
-		job.sourceAudioTitle = metadata.audioTitle
-		job.sourceAudioPerformer = metadata.audioPerformer
-
 		logger.info(
 			"CHAT[{}] JOB[{}] metadata ok: source={}",
-			job.telegramChatId,
+			updatedJob.telegramChatId,
 			jobId,
 			metadata.extractor,
 		)
 
-		return job
+		return updatedJob
 	}
 
 	@Transactional
 	fun markUploading(attempt: ClaimedDownloadJob): DownloadJob {
-		val job = attempt.job
-		ensureOwned(
+		return requireOwned(
 			downloadJobRepository.markOwnedUploading(
 				jobId = attempt.requiredId(),
 				leaseToken = attempt.leaseToken,
 			),
 			attempt,
 		)
-
-		job.status = DownloadJobStatus.UPLOADING
-		job.uploadingStartedAt = Instant.now()
-
-		return job
 	}
 
 	@Transactional
@@ -162,9 +149,8 @@ class DownloadJobService(
 		attempt: ClaimedDownloadJob,
 		result: DownloadedFileResult,
 	): DownloadJob {
-		val job = attempt.job
 		val jobId = attempt.requiredId()
-		ensureOwned(
+		val updatedJob = requireOwned(
 			downloadJobRepository.markOwnedCompleted(
 				jobId = jobId,
 				leaseToken = attempt.leaseToken,
@@ -176,27 +162,14 @@ class DownloadJobService(
 			attempt,
 		)
 
-		job.status = DownloadJobStatus.COMPLETED
-
-		job.downloadedFileSize = result.downloadedFileSize
-
-		job.telegramFileId = result.telegramFileId
-		job.telegramFileSize = result.telegramFileSize
-
-		job.errorMessage = null
-		job.leaseToken = null
-		job.leaseExpiresAt = null
-		job.downloadedAt = result.downloadedAt ?: Instant.now()
-		job.completedAt = Instant.now()
-
 		logger.info(
 			"CHAT[{}] JOB[{}] done: telegramFileSize={}",
-			job.telegramChatId,
+			updatedJob.telegramChatId,
 			jobId,
 			result.telegramFileSize,
 		)
 
-		return job
+		return updatedJob
 	}
 
 	@Transactional
@@ -214,10 +187,9 @@ class DownloadJobService(
 		retryAt: Instant,
 		reason: String,
 	): DownloadJob {
-		val job = attempt.job
 		val jobId = attempt.requiredId()
 		val storedReason = reason.take(MAX_ERROR_LENGTH)
-		ensureOwned(
+		val updatedJob = requireOwned(
 			downloadJobRepository.deferOwnedJob(
 				jobId = jobId,
 				leaseToken = attempt.leaseToken,
@@ -226,21 +198,15 @@ class DownloadJobService(
 			),
 			attempt,
 		)
-		job.status = DownloadJobStatus.QUEUED
-		job.attempts = (job.attempts - 1).coerceAtLeast(0)
-		job.nextAttemptAt = retryAt
-		job.errorMessage = storedReason
-		job.leaseToken = null
-		job.leaseExpiresAt = null
 
 		logger.info(
 			"CHAT[{}] JOB[{}] deferred before request: retryAt={}",
-			job.telegramChatId,
+			updatedJob.telegramChatId,
 			jobId,
 			retryAt,
 		)
 
-		return job
+		return updatedJob
 	}
 
 	private fun resolveFailure(
@@ -250,7 +216,7 @@ class DownloadJobService(
 	): DownloadFailureResolution {
 		val job = attempt.job
 		val storedError = errorMessage.take(MAX_ERROR_LENGTH)
-		val updatedRows = if (job.attempts >= MAX_ATTEMPTS) {
+		val updatedJob = if (job.attempts >= MAX_ATTEMPTS) {
 			downloadJobRepository.failOwnedJob(
 				jobId = attempt.requiredId(),
 				leaseToken = attempt.leaseToken,
@@ -264,33 +230,21 @@ class DownloadJobService(
 				nextAttemptAt = retryAt,
 			)
 		}
-		ensureOwned(updatedRows, attempt)
-
-		job.errorMessage = storedError
-		job.leaseToken = null
-		job.leaseExpiresAt = null
-
-		if (job.attempts >= MAX_ATTEMPTS) {
-			job.status = DownloadJobStatus.FAILED
-			job.completedAt = Instant.now()
-		} else {
-			job.status = DownloadJobStatus.QUEUED
-			job.nextAttemptAt = retryAt
-		}
+		val resolvedJob = requireOwned(updatedJob, attempt)
 
 		logger.warn(
 			"CHAT[{}] JOB[{}] failed: status={}, attempts={}, error={}",
-			job.telegramChatId,
-			requireNotNull(job.id),
-			job.status,
-			job.attempts,
-			job.errorMessage,
+			resolvedJob.telegramChatId,
+			requireNotNull(resolvedJob.id),
+			resolvedJob.status,
+			resolvedJob.attempts,
+			resolvedJob.errorMessage,
 		)
 
-		return if (job.status == DownloadJobStatus.QUEUED) {
-			DownloadFailureResolution.RetryScheduled(job)
+		return if (resolvedJob.status == DownloadJobStatus.QUEUED) {
+			DownloadFailureResolution.RetryScheduled(resolvedJob)
 		} else {
-			DownloadFailureResolution.TerminalFailure(job)
+			DownloadFailureResolution.TerminalFailure(resolvedJob)
 		}
 	}
 
@@ -299,10 +253,9 @@ class DownloadJobService(
 		attempt: ClaimedDownloadJob,
 		errorMessage: String,
 	): DownloadJob {
-		val job = attempt.job
 		val jobId = attempt.requiredId()
 		val storedError = errorMessage.take(MAX_ERROR_LENGTH)
-		ensureOwned(
+		val updatedJob = requireOwned(
 			downloadJobRepository.failOwnedJob(
 				jobId = jobId,
 				leaseToken = attempt.leaseToken,
@@ -311,28 +264,20 @@ class DownloadJobService(
 			attempt,
 		)
 
-		job.status = DownloadJobStatus.FAILED
-		job.errorMessage = storedError
-		job.completedAt = Instant.now()
-		job.leaseToken = null
-		job.leaseExpiresAt = null
-
 		logger.warn(
 			"CHAT[{}] JOB[{}] failed: status={}, attempts={}, error={}",
-			job.telegramChatId,
+			updatedJob.telegramChatId,
 			jobId,
-			job.status,
-			job.attempts,
-			job.errorMessage,
+			updatedJob.status,
+			updatedJob.attempts,
+			updatedJob.errorMessage,
 		)
 
-		return job
+		return updatedJob
 	}
 
-	private fun ensureOwned(updatedRows: Int, attempt: ClaimedDownloadJob) {
-		if (updatedRows != 1) {
-			throw DownloadJobLeaseLostException(attempt.requiredId())
-		}
+	private fun requireOwned(updatedJob: DownloadJob?, attempt: ClaimedDownloadJob): DownloadJob {
+		return updatedJob ?: throw DownloadJobLeaseLostException(attempt.requiredId())
 	}
 
 	private companion object {

@@ -1,8 +1,8 @@
 package com.nkudrin713.kradnik.download.service
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
-import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
@@ -65,7 +65,17 @@ class DownloadJobServiceTest {
         val job = job()
         val attempt = attempt(job)
         val downloadedAt = Instant.parse("2026-01-01T00:00:00Z")
-        every { repository.markOwnedCompleted(1, LEASE_TOKEN, "file-id", 100, 200, downloadedAt) } returns 1
+        val storedJob = job().apply {
+            status = DownloadJobStatus.COMPLETED
+            telegramFileId = "file-id"
+            telegramFileSize = 100
+            downloadedFileSize = 200
+            this.downloadedAt = downloadedAt
+            completedAt = downloadedAt
+        }
+        every {
+            repository.markOwnedCompleted(1, LEASE_TOKEN, "file-id", 100, 200, downloadedAt)
+        } returns storedJob
 
         val actual = service.markCompleted(
             attempt = attempt,
@@ -89,7 +99,12 @@ class DownloadJobServiceTest {
     fun retriesFailedJobWhenAttemptsRemain() {
         val job = job(attempts = 1)
         val retryAt = Instant.parse("2026-01-01T01:00:00Z")
-        every { repository.requeueOwnedJob(1, LEASE_TOKEN, "failure", retryAt) } returns 1
+        val storedJob = job(attempts = 1).apply {
+            status = DownloadJobStatus.QUEUED
+            nextAttemptAt = retryAt
+            errorMessage = "failure"
+        }
+        every { repository.requeueOwnedJob(1, LEASE_TOKEN, "failure", retryAt) } returns storedJob
 
         val actual = service.retryAt(attempt(job), "failure", retryAt)
 
@@ -103,7 +118,12 @@ class DownloadJobServiceTest {
     fun failsJobWhenAttemptsExhausted() {
         val job = job(attempts = 3)
         val retryAt = Instant.parse("2026-01-01T01:00:00Z")
-        every { repository.failOwnedJob(1, LEASE_TOKEN, "failure") } returns 1
+        val storedJob = job(attempts = 3).apply {
+            status = DownloadJobStatus.FAILED
+            errorMessage = "failure"
+            completedAt = retryAt
+        }
+        every { repository.failOwnedJob(1, LEASE_TOKEN, "failure") } returns storedJob
 
         val actual = service.retryAt(attempt(job), "failure", retryAt)
 
@@ -117,7 +137,12 @@ class DownloadJobServiceTest {
     fun defersWithoutConsumingAttempt() {
         val retryAt = Instant.parse("2026-01-01T01:00:00Z")
         val job = job(attempts = 1)
-        every { repository.deferOwnedJob(1, LEASE_TOKEN, "rate limited", retryAt) } returns 1
+        val storedJob = job(attempts = 0).apply {
+            status = DownloadJobStatus.QUEUED
+            nextAttemptAt = retryAt
+            errorMessage = "rate limited"
+        }
+        every { repository.deferOwnedJob(1, LEASE_TOKEN, "rate limited", retryAt) } returns storedJob
 
         val actual = service.deferBeforeAttempt(attempt(job), retryAt, "rate limited")
 
@@ -150,7 +175,13 @@ class DownloadJobServiceTest {
                 "audio title",
                 "artist",
             )
-        } returns 1
+        } returns job().apply {
+            sourceTitle = "title"
+            sourceExtractor = "youtube"
+            sourceDurationSeconds = 120
+            sourceAudioTitle = "audio title"
+            sourceAudioPerformer = "artist"
+        }
 
         val actual = service.markMetadata(attempt(job), metadata)
 
@@ -164,7 +195,11 @@ class DownloadJobServiceTest {
     @Test
     fun marksUploading() {
         val job = job()
-        every { repository.markOwnedUploading(1, LEASE_TOKEN) } returns 1
+        val uploadingAt = Instant.parse("2026-01-01T00:00:00Z")
+        every { repository.markOwnedUploading(1, LEASE_TOKEN) } returns job().apply {
+            status = DownloadJobStatus.UPLOADING
+            uploadingStartedAt = uploadingAt
+        }
 
         val actual = service.markUploading(attempt(job))
 
@@ -175,7 +210,11 @@ class DownloadJobServiceTest {
     @Test
     fun marksFailed() {
         val job = job()
-        every { repository.failOwnedJob(1, LEASE_TOKEN, "failure") } returns 1
+        every { repository.failOwnedJob(1, LEASE_TOKEN, "failure") } returns job().apply {
+            status = DownloadJobStatus.FAILED
+            errorMessage = "failure"
+            completedAt = Instant.parse("2026-01-01T00:00:00Z")
+        }
 
         val actual = service.markFailed(attempt(job), "failure")
 
@@ -186,7 +225,7 @@ class DownloadJobServiceTest {
 
     @Test
     fun rejectsStateChangeAfterLeaseIsLost() {
-        every { repository.markOwnedUploading(1, LEASE_TOKEN) } returns 0
+        every { repository.markOwnedUploading(1, LEASE_TOKEN) } returns null
 
         assertFailsWith<DownloadJobLeaseLostException> {
             service.markUploading(attempt(job()))

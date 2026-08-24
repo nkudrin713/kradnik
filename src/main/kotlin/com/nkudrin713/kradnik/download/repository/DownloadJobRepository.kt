@@ -56,7 +56,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 
 	@Modifying
 	@Query(
-			value = """
+		value = """
 				UPDATE download_jobs
 				SET lease_expires_at = now() + (:leaseDurationMs * INTERVAL '1 millisecond'),
 				    updated_at = now()
@@ -72,7 +72,6 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 			leaseDurationMs: Long,
 	): Int
 
-	@Modifying
 	@Query(
 		value = """
 			UPDATE download_jobs
@@ -85,6 +84,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 			WHERE id = :jobId
 			  AND lease_token = :leaseToken
 			  AND status = 'processing'
+			RETURNING download_jobs.*
 		""",
 		nativeQuery = true,
 	)
@@ -96,9 +96,8 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 		sourceDurationSeconds: Int?,
 		sourceAudioTitle: String?,
 		sourceAudioPerformer: String?,
-	): Int
+	): DownloadJob?
 
-	@Modifying
 	@Query(
 		value = """
 			UPDATE download_jobs
@@ -108,15 +107,15 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 			WHERE id = :jobId
 			  AND lease_token = :leaseToken
 			  AND status = 'processing'
+			RETURNING download_jobs.*
 		""",
 		nativeQuery = true,
 	)
 	fun markOwnedUploading(
 		jobId: Long,
 		leaseToken: UUID,
-	): Int
+	): DownloadJob?
 
-	@Modifying
 	@Query(
 		value = """
 			UPDATE download_jobs
@@ -133,6 +132,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 			WHERE id = :jobId
 			  AND lease_token = :leaseToken
 			  AND status = 'uploading'
+			RETURNING download_jobs.*
 		""",
 		nativeQuery = true,
 	)
@@ -143,9 +143,8 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 		telegramFileSize: Long?,
 		downloadedFileSize: Long?,
 		downloadedAt: Instant?,
-	): Int
+	): DownloadJob?
 
-	@Modifying
 	@Query(
 		value = """
 			UPDATE download_jobs
@@ -158,6 +157,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 			WHERE id = :jobId
 			  AND lease_token = :leaseToken
 			  AND status IN ('processing', 'uploading')
+			RETURNING download_jobs.*
 		""",
 		nativeQuery = true,
 	)
@@ -166,9 +166,8 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 		leaseToken: UUID,
 		errorMessage: String,
 		nextAttemptAt: Instant,
-	): Int
+	): DownloadJob?
 
-	@Modifying
 	@Query(
 		value = """
 			UPDATE download_jobs
@@ -182,6 +181,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 			WHERE id = :jobId
 			  AND lease_token = :leaseToken
 			  AND status = 'processing'
+			RETURNING download_jobs.*
 		""",
 		nativeQuery = true,
 	)
@@ -190,9 +190,8 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 		leaseToken: UUID,
 		reason: String,
 		nextAttemptAt: Instant,
-	): Int
+	): DownloadJob?
 
-	@Modifying
 	@Query(
 		value = """
 			UPDATE download_jobs
@@ -205,6 +204,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 			WHERE id = :jobId
 			  AND lease_token = :leaseToken
 			  AND status IN ('processing', 'uploading')
+			RETURNING download_jobs.*
 		""",
 		nativeQuery = true,
 	)
@@ -212,7 +212,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 		jobId: Long,
 		leaseToken: UUID,
 		errorMessage: String,
-	): Int
+	): DownloadJob?
 
 	@Modifying
 	@Query(

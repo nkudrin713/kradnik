@@ -43,8 +43,9 @@ import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.UUID
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringJUnitConfig(DownloadJobRepositoryTestApplication::class)
@@ -248,8 +249,8 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             repository.markOwnedUploading(requireNotNull(saved.id), currentToken)
         }
 
-        assertEquals(0, staleUpdate)
-        assertEquals(1, ownedUpdate)
+        assertNull(staleUpdate)
+        assertEquals(DownloadJobStatus.UPLOADING, ownedUpdate?.status)
         assertEquals(DownloadJobStatus.UPLOADING, repository.findById(saved.id!!).orElseThrow().status)
     }
 

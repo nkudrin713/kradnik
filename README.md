@@ -1,187 +1,102 @@
 # Kradnik
 
-Kradnik is a Telegram bot that downloads media from links and sends the result back as video, audio, or cover art.
+Telegram-бот для скачивания публичных видео из YouTube, Instagram и VK. Пользователь отправляет ссылку, выбирает качество видео, звук или обложку и получает файл ответом на исходное сообщение.
 
-The project is built as a backend service around Telegram Bot API, `yt-dlp`, `ffmpeg`, and PostgreSQL.
-It is designed to accept user-submitted links, process them asynchronously, and deliver Telegram-friendly files.
+## Что умеет бот
 
-All current bot instructions and user-facing messages are in Russian. English localization may be added later.
+- разбирает ссылки YouTube, Instagram и VK без общего fallback-механизма;
+- показывает доступные варианты и примерный размер до создания задачи;
+- скачивает видео, аудио и обложки;
+- подготавливает видео под ограничения Telegram с помощью `ffmpeg`;
+- повторно использует уже загруженный в Telegram `file_id`;
+- хранит очередь, попытки, lease и короткоживущие сессии выбора в PostgreSQL;
+- работает как с облачным Telegram Bot API, так и с локальным сервером для файлов до 2 ГБ;
+- очищает временные каталоги и проверяет свободное место перед скачиванием.
 
-## What the Bot Does
+Бот работает только с публичными одиночными публикациями. Плейлисты, закрытый контент и обход авторизации не поддерживаются.
 
-- Accepts public media links in Telegram.
-- Shows source information, available video qualities, audio, cover art, and estimated sizes for every link.
-- Reuses a short-lived, bounded metadata cache for repeated links.
-- Downloads media through `yt-dlp`.
-- Sends the downloaded result back through Telegram.
-- Reuses Telegram-uploaded files when possible.
-- Checks file size before expensive work when metadata is available.
-- Compresses some oversized vertical videos.
-- Stores choice sessions, job state, retries, and cache metadata in PostgreSQL.
-
-## User Flow
-
-1. User opens the bot.
-2. User sends a link.
-3. Bot analyzes available formats and shows their sizes.
-4. User selects a video quality, audio, or cover art.
-5. Bot creates a download job.
-6. Worker processes the job in the background.
-7. Bot updates the status message.
-8. Bot replies to the link with the final file or a short error message.
-
-## Main Commands
-
-- `/start` - start message.
-- `/help` - usage help.
-- `/legal` - legal disclaimer.
-- `/donate` - donation message.
-
-## Supported Media
-
-The project has explicit YouTube handling and a generic fallback for other URLs supported by `yt-dlp`.
-YouTube handling covers common single-video URL shapes such as watch pages, short links, Shorts, live links, embeds, and music links.
-The bot does not try to bypass private content, paid access, platform restrictions, authentication, or unsupported URLs.
-
-## Architecture Overview
+## Как проходит запрос
 
 ```text
-Telegram updates
-    -> command handlers
-    -> format analysis and choice session
-    -> download job creation
-    -> PostgreSQL queue
-    -> background worker
-    -> yt-dlp metadata and download
-    -> optional ffmpeg preparation
-    -> Telegram upload
-    -> cache/job completion
+TelegramPollingService
+  -> TelegramUpdateHandler
+  -> DownloadChoiceCoordinator
+  -> DownloadChoicePlanner + DownloadChoiceSessionService
+
+выбор пользователя
+  -> DownloadChoiceHandler
+  -> TelegramDownloadStarter
+  -> DownloadJobService
+  -> DownloadQueueWorker
+  -> DownloadJobProcessor
+  -> DownloadEngine
+  -> TelegramFileSender
 ```
 
-## Stack
+Маршрут разделён на две части. До выбора бот определяет платформу, получает каталог форматов и сохраняет меню. После выбора создаётся задача в PostgreSQL; worker забирает её с lease, скачивает файл и отправляет его в Telegram.
 
-- Kotlin
-- Spring Boot
-- Spring Data JPA
-- PostgreSQL
-- Flyway
-- Gradle
-- Docker / Docker Compose
-- Telegram Bot API
-- `yt-dlp`
-- `ffmpeg`
-- JUnit 5
-- MockK
+## Где искать код
 
-## Local Development
+| Задача | Основные файлы |
+| --- | --- |
+| Приём команд и callback | `telegram/handler/TelegramUpdateHandler.kt`, `DownloadChoiceHandler.kt` |
+| Меню качества, аудио и обложки | `download/choice/DownloadChoicePlanner.kt`, `telegram/TelegramDownloadChoiceView.kt` |
+| Разбор ссылок и параметры платформ | `download/platform/*DownloadHandler.kt` |
+| Скачивание источника | `download/DownloadEngine.kt`, `ytdlp/client/YtDlpService.kt` |
+| Особенности Instagram | `download/instagram/` |
+| Очередь, lease и повторы | `download/service/DownloadJobService.kt`, `download/processing/` |
+| Отправка и лимиты Telegram | `telegram/TelegramMediaSender.kt`, `download/telegram/TelegramFileSender.kt`, `telegram/config/TelegramBotProperties.kt` |
+| Подготовка видео | `download/video/` |
+| Схема базы | `src/main/resources/db/migration/` |
+| Контейнеры и деплой | `docker-compose.yml`, `.github/workflows/`, `scripts/` |
 
-Requirements:
+Чтобы добавить платформу, достаточно добавить значение в `DownloadPlatform`, реализацию `PlatformDownloadHandler` и тесты поддерживаемых URL. `PlatformResolver` получает обработчики через Spring. Параметры формата, нормализованный URL и cache key задаются в обработчике платформы.
 
-- JDK
-- Docker and Docker Compose
-- `yt-dlp`
-- `ffmpeg`
-- Telegram bot token
+## Локальный запуск
 
-Start the database:
+Нужны Java 21, Docker, `yt-dlp`, `ffmpeg` и токен Telegram-бота.
 
 ```bash
+cp .env.example .env
+# заполнить TELEGRAM_BOT_TOKEN в .env
 docker compose up -d postgres
-```
-
-Run the app with the local profile:
-
-```bash
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
-Run tests:
-
-```bash
-./gradlew test
-```
-
-Run full checks:
+Проверки:
 
 ```bash
 ./gradlew check
 ```
 
-Build the application jar:
+`check` запускает тесты и проверяет суммарное покрытие JaCoCo. Интеграционные тесты используют PostgreSQL через Testcontainers, поэтому Docker должен быть запущен.
 
-```bash
-./gradlew bootJar
-```
+## Конфигурация
 
-## Docker
+Приложение не знает, является инстанс тестовым или production. Окружение передаёт конкретные адреса, токены, лимиты и пути через переменные среды.
 
-The Docker image contains the application runtime plus the external media tools needed by the bot.
+Основные группы настроек:
 
-Build the jar, prepare Docker context, and build the image:
+- `POSTGRES_*` — подключение к PostgreSQL;
+- `TELEGRAM_BOT_*`, `TELEGRAM_MAX_UPLOAD_BYTES` — Telegram API и лимит файла;
+- `DOWNLOAD_WORK_DIR`, `DOWNLOAD_*_TIMEOUT` — рабочий каталог и таймауты;
+- `DOWNLOAD_INSTAGRAM_RATE_LIMIT_*` — локальное ограничение запросов Instagram;
+- `YOUTUBE_PO_TOKEN_PROVIDER_URL` — необязательный PO Token Provider для YouTube.
+
+Локальный Telegram Bot API определяется по `TELEGRAM_BOT_API_URL` и `TELEGRAM_BOT_FILE_API_URL`. В этом режиме `DOWNLOAD_WORK_DIR` должен указывать на общий с контейнером Bot API volume.
+
+## Docker и деплой
+
+Образ содержит приложение, `yt-dlp`, `ffmpeg` и необходимые runtime-зависимости. Для локальной сборки полного стека:
 
 ```bash
 ./gradlew bootJar
 mkdir -p .deploy
 cp build/libs/app.jar .deploy/app.jar
 docker build -t kradnik:local .
+APP_IMAGE=kradnik:local docker compose up -d
 ```
 
-Run with Docker Compose:
+Compose-профили `telegram-local` и `youtube-pot` включают необязательные сервисы. В GitHub Actions ветка `develop` разворачивается в test-окружение, а `main` используется для release/deploy production. Значения окружений остаются в GitHub Environments и server-side `.env`, а не в Kotlin-коде.
 
-```bash
-docker compose up -d
-```
-
-View logs:
-
-```bash
-docker compose logs -f app
-```
-
-## Database
-
-The database stores:
-
-- download jobs;
-- job statuses and retry metadata;
-- source metadata;
-- Telegram upload metadata;
-- short-lived download choice sessions;
-- cache keys for Telegram file reuse.
-
-Schema changes are managed through Flyway migrations.
-
-## Deployment
-
-Deployment is automated through GitHub Actions.
-
-The workflow performs the usual production steps:
-
-1. run tests and checks;
-2. build the application jar;
-3. build and publish a Docker image;
-4. sync runtime configuration to the server;
-5. restart services with Docker Compose;
-6. verify that the application container is running.
-
-The repository keeps separate deployment paths for development and production environments.
-
-## Extending the Bot
-
-To add a new media platform:
-
-- add platform-specific download settings;
-- define URL normalization and cache-key rules;
-- keep generic `yt-dlp` fallback behavior;
-- add tests for supported and rejected URL shapes.
-
-To change persistence:
-
-- add a new Flyway migration;
-- keep existing migrations immutable for already deployed databases.
-
-## Notes
-
-- Temporary files are cleaned after job processing.
-- Cached Telegram uploads depend on Telegram `file_id` validity.
-- Playlists are intentionally not downloaded.
+Миграции базы выполняет Flyway. Уже применённые миграции не изменяются; любое изменение схемы добавляется новым файлом.

@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
+import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendDocument
@@ -17,7 +18,7 @@ import java.util.Locale
 class TelegramMediaSender(
     private val apiClient: TelegramApiClient,
     private val videoMetadataProbe: VideoMetadataProbe,
-    private val requestFactory: TelegramMediaRequestFactory,
+    private val properties: TelegramBotProperties,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -49,7 +50,7 @@ class TelegramMediaSender(
             metadata.colorTransfer,
             metadata.colorPrimaries,
         )
-        val request = requestFactory.video(chatId, file)
+        val request = videoRequest(chatId, file)
             .width(metadata.width)
             .height(metadata.height)
             .supportsStreaming(true)
@@ -85,7 +86,7 @@ class TelegramMediaSender(
         replyToMessageId: Int? = null,
     ): String {
         val fileSize = fileSize(file)
-        val request = requestFactory.audio(chatId, file)
+        val request = audioRequest(chatId, file)
         title?.let(request::title)
         performer?.let(request::performer)
         durationSeconds?.let(request::duration)
@@ -119,7 +120,7 @@ class TelegramMediaSender(
         replyToMessageId: Int? = null,
     ): String {
         val fileSize = fileSize(file)
-        val request = requestFactory.document(chatId, file)
+        val request = documentRequest(chatId, file)
         addReplyParameters(request, replyToMessageId)
         val response = apiClient.executeIo(
             request,
@@ -147,6 +148,34 @@ class TelegramMediaSender(
         return withContext(Dispatchers.IO) {
             Files.size(file)
         }
+    }
+
+    private fun videoRequest(chatId: Long, file: Path): SendVideo {
+        return if (properties.localApi) {
+            SendVideo(chatId, localFileUri(file))
+        } else {
+            SendVideo(chatId, file.toFile())
+        }
+    }
+
+    private fun audioRequest(chatId: Long, file: Path): SendAudio {
+        return if (properties.localApi) {
+            SendAudio(chatId, localFileUri(file))
+        } else {
+            SendAudio(chatId, file.toFile())
+        }
+    }
+
+    private fun documentRequest(chatId: Long, file: Path): SendDocument {
+        return if (properties.localApi) {
+            SendDocument(chatId, localFileUri(file))
+        } else {
+            SendDocument(chatId, file.toFile())
+        }
+    }
+
+    private fun localFileUri(file: Path): String {
+        return file.toAbsolutePath().normalize().toUri().toString()
     }
 
     private fun formatMegabytes(bytes: Long): String {

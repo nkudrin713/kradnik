@@ -32,7 +32,7 @@ class TelegramMediaSenderTest {
     private val sender = TelegramMediaSender(
         apiClient = TelegramApiClient(bot),
         videoMetadataProbe = videoMetadataProbe,
-        requestFactory = TelegramMediaRequestFactory(TelegramBotProperties(token = "test-token")),
+        properties = TelegramBotProperties(token = "test-token"),
     )
 
     @Test
@@ -138,6 +138,59 @@ class TelegramMediaSenderTest {
         val actual = request.captured as SendDocument
         actual.getParameters()["document"] shouldBe "cached-id"
         result shouldBe "cover-id"
+    }
+
+    @Test
+    fun sendsLocalFilesByUri(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("media file.mp4")
+        file.writeText("video")
+        val request = slot<BaseRequest<*, *>>()
+        coEvery { videoMetadataProbe.probe(file) } returns VideoMetadata(1920, 1080, "1:1", "16:9")
+        every { bot.execute(capture(request)) } returns sendResponse(video = video("video-id", 456))
+        val localSender = TelegramMediaSender(
+            apiClient = TelegramApiClient(bot),
+            videoMetadataProbe = videoMetadataProbe,
+            properties = TelegramBotProperties(
+                token = "test-token",
+                apiUrl = "http://telegram-bot-api:8081/bot",
+                fileApiUrl = "http://telegram-bot-api:8081/file/bot",
+            ),
+        )
+
+        localSender.sendVideo(chatId = 100, file = file)
+
+        val actual = request.captured as SendVideo
+        actual.isMultipart shouldBe false
+        actual.getParameters()["video"] shouldBe file.toAbsolutePath().toUri().toString()
+    }
+
+    @Test
+    fun sendsLocalAudioByUri(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("audio file.mp3")
+        file.writeText("audio")
+        val request = slot<BaseRequest<*, *>>()
+        every { bot.execute(capture(request)) } returns sendResponse(audio = audio("audio-id", 456))
+        val localSender = TelegramMediaSender(
+            apiClient = TelegramApiClient(bot),
+            videoMetadataProbe = videoMetadataProbe,
+            properties = TelegramBotProperties(
+                token = "test-token",
+                apiUrl = "http://telegram-bot-api:8081/bot",
+                fileApiUrl = "http://telegram-bot-api:8081/file/bot",
+            ),
+        )
+
+        localSender.sendAudio(
+            chatId = 100,
+            file = file,
+            title = null,
+            performer = null,
+            durationSeconds = null,
+        )
+
+        val actual = request.captured as SendAudio
+        actual.isMultipart shouldBe false
+        actual.getParameters()["audio"] shouldBe file.toAbsolutePath().toUri().toString()
     }
 
     private fun sendResponse(

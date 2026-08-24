@@ -146,7 +146,6 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          METABASE_ANALYTICS_DB_PASSWORD: ${{ secrets.METABASE_ANALYTICS_DB_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
@@ -175,7 +174,6 @@ jobs:
           test -n "$DEPLOY_PATH"
           test "$DEPLOY_PATH" != "/"
           app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
-          metabase_analytics_db_password="${METABASE_ANALYTICS_DB_PASSWORD:-$POSTGRES_PASSWORD}"
           telegram_local_api_enabled="${TELEGRAM_LOCAL_API_ENABLED:-false}"
           case "$telegram_local_api_enabled" in true|false) ;; *) echo 'TELEGRAM_LOCAL_API_ENABLED must be true or false' >&2; exit 1 ;; esac
           youtube_po_token_provider_enabled="${YOUTUBE_PO_TOKEN_PROVIDER_ENABLED:-false}"
@@ -213,9 +211,6 @@ jobs:
             postgres_db="kradnik_prod"
             postgres_volume_name="kradnik-prod-postgres-data"
             postgres_public_port="5434"
-            metabase_container_name="kradnik-prod-metabase"
-            metabase_volume_name="kradnik-prod-metabase-data"
-            metabase_public_port="3001"
             telegram_bot_api_container_name="kradnik-prod-telegram-bot-api"
             youtube_po_token_provider_container_name="kradnik-prod-youtube-pot-provider"
             telegram_bot_api_data_volume_name="kradnik-prod-telegram-bot-api-data"
@@ -227,9 +222,6 @@ jobs:
             postgres_db="kradnik_test"
             postgres_volume_name="kradnik-test-postgres-data"
             postgres_public_port="5433"
-            metabase_container_name="kradnik-test-metabase"
-            metabase_volume_name="kradnik-test-metabase-data"
-            metabase_public_port="3000"
             telegram_bot_api_container_name="kradnik-test-telegram-bot-api"
             youtube_po_token_provider_container_name="kradnik-test-youtube-pot-provider"
             telegram_bot_api_data_volume_name="kradnik-test-telegram-bot-api-data"
@@ -245,10 +237,6 @@ jobs:
             printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
             printf 'POSTGRES_VOLUME_NAME=%s\n' "$postgres_volume_name"
             printf 'POSTGRES_PUBLIC_PORT=%s\n' "$postgres_public_port"
-            printf 'METABASE_CONTAINER_NAME=%s\n' "$metabase_container_name"
-            printf 'METABASE_VOLUME_NAME=%s\n' "$metabase_volume_name"
-            printf 'METABASE_PUBLIC_PORT=%s\n' "$metabase_public_port"
-            printf 'METABASE_ANALYTICS_DB_PASSWORD=%s\n' "$metabase_analytics_db_password"
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
             printf 'TELEGRAM_BOT_API_IMAGE=%s\n' "$TELEGRAM_BOT_API_IMAGE"
             printf 'YOUTUBE_PO_TOKEN_PROVIDER_IMAGE=%s\n' "$YOUTUBE_PO_TOKEN_PROVIDER_IMAGE"
@@ -304,8 +292,7 @@ jobs:
           test "$DEPLOY_PATH" != "/"
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
             cd '$DEPLOY_PATH' && \
-            docker compose --profile analytics --profile telegram-local --profile youtube-pot down --volumes --rmi all --remove-orphans && \
-            rm -f .metabase-enabled && \
+            docker compose --profile telegram-local --profile youtube-pot down --volumes --rmi all --remove-orphans && \
             profiles='' && \
             if [ \"\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env)\" = 'true' ]; then profiles='telegram-local'; fi && \
             if [ \"\$(sed -n 's/^YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=//p' .env)\" = 'true' ]; then \
@@ -323,6 +310,5 @@ jobs:
               test -n \"\$youtube_pot_container\"; \
               test \"\$(docker inspect -f '{{.State.Health.Status}}' \"\$youtube_pot_container\")\" = healthy; \
             fi && \
-            docker compose exec -T postgres sh -c 'printf \"%s\n\" \"ALTER ROLE kradnik_analytics_reader WITH LOGIN PASSWORD :'\\''analytics_password'\\'';\" | PGPASSWORD=\"\$POSTGRES_PASSWORD\" psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -v analytics_password=\"\$METABASE_ANALYTICS_DB_PASSWORD\"' && \
             docker image prune -f\
           "

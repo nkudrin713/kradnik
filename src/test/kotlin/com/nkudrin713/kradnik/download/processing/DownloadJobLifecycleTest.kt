@@ -1,6 +1,5 @@
 package com.nkudrin713.kradnik.download.processing
 
-import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadFailureResolution
@@ -19,12 +18,10 @@ import kotlin.test.Test
 class DownloadJobLifecycleTest {
     private val downloadJobService: DownloadJobService = mockk()
     private val statusReporter: DownloadStatusReporter = mockk()
-    private val downloadAnalytics: DownloadAnalytics = mockk(relaxed = true)
     private val retryPolicy: DownloadRetryPolicy = mockk()
     private val lifecycle = DownloadJobLifecycle(
         downloadJobService = downloadJobService,
         statusReporter = statusReporter,
-        downloadAnalytics = downloadAnalytics,
         retryPolicy = retryPolicy,
     )
 
@@ -51,7 +48,6 @@ class DownloadJobLifecycleTest {
 
         verify { downloadJobService.markUploading(attempt) }
         verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.UPLOADING) }
-        verify { downloadAnalytics.recordUploadStarted(storedJob) }
     }
 
     @Test
@@ -66,7 +62,6 @@ class DownloadJobLifecycleTest {
 
         verify { downloadJobService.markFailed(attempt, "too large") }
         verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.REJECTED_TOO_LARGE) }
-        verify { downloadAnalytics.recordDownloadRejected(storedJob, "too large") }
     }
 
     @Test
@@ -123,15 +118,14 @@ class DownloadJobLifecycleTest {
         val storedJob = job()
         val attempt = attempt(job)
         val retryAt = Instant.parse("2026-01-01T01:00:00Z")
-        val resolution = DownloadFailureResolution.RetryScheduled(storedJob)
-        every { downloadJobService.retryAt(attempt, "throttled", retryAt) } returns resolution
+        every { downloadJobService.retryAt(attempt, "throttled", retryAt) } returns
+                DownloadFailureResolution.RetryScheduled(storedJob)
         every { statusReporter.setStatus(any(), any()) } just runs
 
         lifecycle.retryAt(attempt, retryAt, "throttled")
 
         verify { downloadJobService.retryAt(attempt, "throttled", retryAt) }
         verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.QUEUED) }
-        verify { downloadAnalytics.recordRetryableFailure(storedJob, "throttled", resolution) }
     }
 
     @Test
@@ -146,7 +140,6 @@ class DownloadJobLifecycleTest {
 
         verify { downloadJobService.markFailed(attempt, "unsupported") }
         verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.ERROR) }
-        verify { downloadAnalytics.recordTerminalFailure(storedJob, "unsupported") }
     }
 
     @Test
@@ -161,7 +154,6 @@ class DownloadJobLifecycleTest {
 
         verify { downloadJobService.markFailed(attempt, "source unavailable") }
         verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.SOURCE_UNAVAILABLE) }
-        verify { downloadAnalytics.recordTerminalFailure(storedJob, "source unavailable") }
     }
 
     @Test
@@ -176,7 +168,6 @@ class DownloadJobLifecycleTest {
 
         verify { downloadJobService.markFailed(attempt, "auth required") }
         verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.AUTHENTICATION_REQUIRED) }
-        verify { downloadAnalytics.recordAuthenticationRequiredFailure(storedJob, "auth required") }
     }
 
     @Test
@@ -196,7 +187,6 @@ class DownloadJobLifecycleTest {
 
         verify { downloadJobService.markCompleted(attempt, result) }
         verify { statusReporter.deleteStatus(storedJob) }
-        verify { downloadAnalytics.recordDownloadCompleted(storedJob, result) }
     }
 
     private fun job(): DownloadJob {

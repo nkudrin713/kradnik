@@ -1,6 +1,5 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Component
 class TelegramDownloadStarter(
     private val downloadJobService: DownloadJobService,
     private val telegramSender: TelegramSender,
-    private val downloadAnalytics: DownloadAnalytics,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -50,9 +48,8 @@ class TelegramDownloadStarter(
             throw error
         }
 
-        when (result) {
-            is CreateDownloadJobResult.Created -> downloadAnalytics.recordDownloadRequested(command, result.job)
-            is CreateDownloadJobResult.Existing -> deleteStatusBestEffort(telegramChatId, statusMessageId)
+        if (result is CreateDownloadJobResult.Existing) {
+            deleteStatusBestEffort(telegramChatId, statusMessageId)
         }
         return true
     }

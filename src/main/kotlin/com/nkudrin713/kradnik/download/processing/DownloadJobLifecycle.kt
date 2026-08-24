@@ -1,7 +1,5 @@
 package com.nkudrin713.kradnik.download.processing
 
-import com.nkudrin713.kradnik.analytics.DownloadAnalytics
-import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadFailureResolution
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -15,19 +13,16 @@ import java.time.Instant
 class DownloadJobLifecycle(
     private val downloadJobService: DownloadJobService,
     private val statusReporter: DownloadStatusReporter,
-    private val downloadAnalytics: DownloadAnalytics,
     private val retryPolicy: DownloadRetryPolicy,
 ) {
     fun markDownloading(attempt: ClaimedDownloadJob) {
         val job = attempt.job
         statusReporter.setStatus(job, TelegramDownloadStatus.DOWNLOADING)
-        downloadAnalytics.recordDownloadStarted(job)
     }
 
     fun markUploading(attempt: ClaimedDownloadJob) {
         val job = downloadJobService.markUploading(attempt)
         statusReporter.setStatus(job, TelegramDownloadStatus.UPLOADING)
-        downloadAnalytics.recordUploadStarted(job)
     }
 
     fun rejectTooLarge(
@@ -38,7 +33,6 @@ class DownloadJobLifecycle(
             attempt = attempt,
             errorMessage = reason,
             status = TelegramDownloadStatus.REJECTED_TOO_LARGE,
-            recordFailure = downloadAnalytics::recordDownloadRejected,
         )
     }
 
@@ -76,7 +70,6 @@ class DownloadJobLifecycle(
             attempt = attempt,
             errorMessage = errorMessage,
             status = TelegramDownloadStatus.ERROR,
-            recordFailure = downloadAnalytics::recordTerminalFailure,
         )
     }
 
@@ -88,7 +81,6 @@ class DownloadJobLifecycle(
             attempt = attempt,
             errorMessage = errorMessage,
             status = TelegramDownloadStatus.SOURCE_UNAVAILABLE,
-            recordFailure = downloadAnalytics::recordTerminalFailure,
         )
     }
 
@@ -100,7 +92,6 @@ class DownloadJobLifecycle(
             attempt = attempt,
             errorMessage = errorMessage,
             status = TelegramDownloadStatus.AUTHENTICATION_REQUIRED,
-            recordFailure = downloadAnalytics::recordAuthenticationRequiredFailure,
         )
     }
 
@@ -110,7 +101,6 @@ class DownloadJobLifecycle(
     ) {
         val job = downloadJobService.markCompleted(attempt, result)
         statusReporter.deleteStatus(job)
-        downloadAnalytics.recordDownloadCompleted(job, result)
     }
 
     private fun retry(
@@ -124,7 +114,6 @@ class DownloadJobLifecycle(
             is DownloadFailureResolution.TerminalFailure -> TelegramDownloadStatus.ERROR
         }
         statusReporter.setStatus(resolution.job, status)
-        downloadAnalytics.recordRetryableFailure(resolution.job, errorMessage, resolution)
         return resolution
     }
 
@@ -132,10 +121,8 @@ class DownloadJobLifecycle(
         attempt: ClaimedDownloadJob,
         errorMessage: String,
         status: TelegramDownloadStatus,
-        recordFailure: (DownloadJob, String) -> Unit,
     ) {
         val job = downloadJobService.markFailed(attempt, errorMessage)
         statusReporter.setStatus(job, status)
-        recordFailure(job, errorMessage)
     }
 }

@@ -1,6 +1,5 @@
 package com.nkudrin713.kradnik.download.processing
 
-import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.cover.CoverTooLargeException
@@ -41,7 +40,6 @@ class DownloadJobProcessor(
     private val downloadExecutorResolver: DownloadExecutorResolver,
     private val mediaMetadataMapper: MediaMetadataMapper,
     private val downloadJobLifecycle: DownloadJobLifecycle,
-    private val downloadAnalytics: DownloadAnalytics,
     private val workDirCleaner: WorkDirCleaner,
     private val workDirCapacityGuard: WorkDirCapacityGuard,
     private val uploadLimits: TelegramUploadLimits,
@@ -92,7 +90,6 @@ class DownloadJobProcessor(
             }
             val metadata = session.metadata
             val preflightDecision = downloadPreflightService.check(spec, metadata)
-            downloadAnalytics.recordPreflightDecision(spec, metadata, preflightDecision)
             if (preflightDecision is DownloadPreflightDecision.Rejected) {
                 downloadJobLifecycle.rejectTooLarge(attempt, preflightDecision.reason)
                 return
@@ -200,7 +197,6 @@ class DownloadJobProcessor(
         }
 
         val cachedJob = downloadJobService.findCachedJob(job)
-        downloadAnalytics.recordTelegramCacheLookup(job, cachedJob)
         cachedJob ?: return false
         val fileId = cachedJob.telegramFileId ?: return false
 
@@ -229,12 +225,10 @@ class DownloadJobProcessor(
         metadata: YtDlpMetadataDto,
     ): DownloadJob {
         val mappedMetadata = mediaMetadataMapper.toMediaMetadata(metadata)
-        val job = downloadJobService.markMetadata(
+        return downloadJobService.markMetadata(
             attempt = attempt,
             metadata = mappedMetadata,
         )
-        downloadAnalytics.recordMetadataExtracted(attempt.requiredId(), mappedMetadata, job)
-        return job
     }
 
     private fun formatMegabytes(bytes: Long): String {

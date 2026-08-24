@@ -1,6 +1,5 @@
 package com.nkudrin713.kradnik.download.processing
 
-import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
@@ -61,7 +60,6 @@ class DownloadJobProcessorTest {
     )
     private val mediaMetadataMapper: MediaMetadataMapper = mockk()
     private val downloadJobLifecycle: DownloadJobLifecycle = mockk(relaxed = true)
-    private val downloadAnalytics: DownloadAnalytics = mockk(relaxed = true)
     private val workDirCleaner: WorkDirCleaner = mockk()
     private val workDirCapacityGuard: WorkDirCapacityGuard = mockk(relaxed = true)
     private val uploadLimits = TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
@@ -591,7 +589,6 @@ class DownloadJobProcessorTest {
             downloadExecutorResolver = downloadExecutorResolver,
             mediaMetadataMapper = mediaMetadataMapper,
             downloadJobLifecycle = downloadJobLifecycle,
-            downloadAnalytics = downloadAnalytics,
             workDirCleaner = workDirCleaner,
             workDirCapacityGuard = workDirCapacityGuard,
             uploadLimits = uploadLimits,

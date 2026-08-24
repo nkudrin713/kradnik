@@ -1,6 +1,5 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
@@ -21,15 +20,13 @@ import kotlin.test.assertFailsWith
 class TelegramDownloadStarterTest {
     private val downloadJobService: DownloadJobService = mockk()
     private val telegramSender: TelegramSender = mockk()
-    private val downloadAnalytics: DownloadAnalytics = mockk(relaxed = true)
     private val starter = TelegramDownloadStarter(
         downloadJobService = downloadJobService,
         telegramSender = telegramSender,
-        downloadAnalytics = downloadAnalytics,
     )
 
     @Test
-    fun createsJobWithRequestMessageAndRecordsAnalytics() {
+    fun createsJobWithRequestMessage() {
         val command = slot<CreateDownloadJobCommand>()
         val job = DownloadJob(id = 1)
         every {
@@ -44,11 +41,10 @@ class TelegramDownloadStarterTest {
         assertEquals(true, started)
         assertEquals(200, command.captured.telegramRequestMessageId)
         assertEquals("video:telegram-video-h264-v1", command.captured.spec.cacheKey)
-        verify { downloadAnalytics.recordDownloadRequested(command.captured, job) }
     }
 
     @Test
-    fun removesDuplicateStatusWithoutRecordingAnalytics() {
+    fun removesDuplicateStatus() {
         every {
             telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED)
         } returns 500
@@ -61,7 +57,6 @@ class TelegramDownloadStarterTest {
 
         assertEquals(true, started)
         verify { telegramSender.deleteMessage(100, 500) }
-        verify(exactly = 0) { downloadAnalytics.recordDownloadRequested(any(), any()) }
     }
 
     @Test

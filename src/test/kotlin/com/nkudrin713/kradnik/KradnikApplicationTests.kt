@@ -1,6 +1,5 @@
 package com.nkudrin713.kradnik
 
-import com.nkudrin713.kradnik.analytics.AnalyticsEventRepository
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionRepository
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -27,9 +26,6 @@ class KradnikApplicationTests {
 
 	@TestConfiguration
 	class Mocks {
-		@Bean
-		fun analyticsEventRepository(): AnalyticsEventRepository = mockk(relaxed = true)
-
 		@Bean
 		fun downloadJobRepository(): DownloadJobRepository = mockk(relaxed = true)
 

@@ -2,7 +2,11 @@ package com.nkudrin713.kradnik.download.choice
 
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.identity.DownloadIdentity
+import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
+import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
+import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
+import com.nkudrin713.kradnik.download.executor.YtDlpDownloadExecutor
 import com.nkudrin713.kradnik.download.instagram.InstagramDownloadExecutor
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
@@ -28,12 +32,16 @@ import kotlin.test.assertTrue
 class DownloadChoicePlannerTest {
     private val platformResolver: PlatformResolver = mockk()
     private val ytDlpService: YtDlpService = mockk()
-    private val instagramExecutor: InstagramDownloadExecutor = mockk()
+    private val instagramExecutor: InstagramDownloadExecutor = mockk {
+        every { strategies } returns setOf(DownloadStrategy.INSTAGRAM_EMBED)
+    }
+    private val downloadExecutorResolver = DownloadExecutorResolver(
+        listOf(YtDlpDownloadExecutor(ytDlpService), instagramExecutor)
+    )
     private val uploadLimits = TelegramUploadLimits(2_000_000_000, localMode = true)
     private val planner = DownloadChoicePlanner(
         platformResolver = platformResolver,
-        ytDlpService = ytDlpService,
-        instagramDownloadExecutor = instagramExecutor,
+        downloadExecutorResolver = downloadExecutorResolver,
         audioUploadPlanner = AudioUploadPlanner(uploadLimits),
         uploadLimits = uploadLimits,
         metadataCache = DownloadChoiceMetadataCache(
@@ -136,6 +144,30 @@ class DownloadChoicePlannerTest {
         assertTrue(option.approximateSize)
     }
 
+    @Test
+    fun loadsInstagramCatalogThroughRegisteredStrategy() = runTest {
+        val video = resolved(OutputType.VIDEO).withInstagramStrategy()
+        val audio = resolved(OutputType.AUDIO).withInstagramStrategy()
+        val catalog = metadata(
+            formats = listOf(
+                videoFormat("v720", 720, 200_000_000),
+                audioFormat("a1", 20_000_000),
+            ),
+        )
+        val session: PreparedDownloadSession = mockk {
+            every { metadata } returns catalog
+        }
+        every { platformResolver.resolve(URL, OutputType.VIDEO) } returns video
+        every { platformResolver.resolve(URL, OutputType.AUDIO) } returns audio
+        coEvery { instagramExecutor.prepareCatalog(video.request) } returns DownloadPreparation.Ready(session)
+
+        val actual = planner.plan(URL)
+
+        assertEquals(DownloadStrategy.INSTAGRAM_EMBED, actual.options.first().strategy)
+        coVerify(exactly = 1) { instagramExecutor.prepareCatalog(video.request) }
+        coVerify(exactly = 0) { ytDlpService.extractCatalogMetadata(any()) }
+    }
+
     private fun resolved(outputType: OutputType): ResolvedDownload {
         val preset = if (outputType == OutputType.AUDIO) "youtube_audio" else "youtube_h264_mobile_2gb"
         return ResolvedDownload(
@@ -152,6 +184,19 @@ class DownloadChoicePlannerTest {
                     listOf("--merge-output-format", "mp4")
                 },
                 presetName = preset,
+            ),
+        )
+    }
+
+    private fun ResolvedDownload.withInstagramStrategy(): ResolvedDownload {
+        return copy(
+            request = request.copy(
+                strategy = DownloadStrategy.INSTAGRAM_EMBED,
+                presetName = if (request.outputType == OutputType.AUDIO) {
+                    "instagram_audio"
+                } else {
+                    "instagram_mobile_video"
+                },
             ),
         )
     }

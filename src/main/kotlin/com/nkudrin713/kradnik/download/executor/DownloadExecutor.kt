@@ -10,6 +10,8 @@ interface DownloadExecutor {
     val strategies: Set<DownloadStrategy>
 
     suspend fun prepare(request: DownloadRequest): DownloadPreparation
+
+    suspend fun prepareCatalog(request: DownloadRequest): DownloadPreparation = prepare(request)
 }
 
 interface PreparedDownloadSession {

@@ -15,7 +15,6 @@ import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
-internal const val VK_PRESET_PREFIX = "vk_"
 internal const val VK_VIDEO_PRESET = "vk_mobile_video"
 internal const val VK_AUDIO_PRESET = "vk_audio"
 

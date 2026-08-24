@@ -18,11 +18,15 @@ class YtDlpDownloadExecutor(
     )
 
     override suspend fun prepare(request: DownloadRequest): DownloadPreparation {
-        return DownloadPreparation.Ready(
-            YtDlpPreparedDownloadSession(
-                metadata = ytDlpService.extractMetadata(request),
-            )
-        )
+        return ready(ytDlpService.extractMetadata(request))
+    }
+
+    override suspend fun prepareCatalog(request: DownloadRequest): DownloadPreparation {
+        return ready(ytDlpService.extractCatalogMetadata(request))
+    }
+
+    private fun ready(metadata: YtDlpMetadataDto): DownloadPreparation {
+        return DownloadPreparation.Ready(YtDlpPreparedDownloadSession(metadata))
     }
 
     private inner class YtDlpPreparedDownloadSession(

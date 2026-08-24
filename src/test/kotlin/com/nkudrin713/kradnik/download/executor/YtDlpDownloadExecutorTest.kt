@@ -51,6 +51,19 @@ class YtDlpDownloadExecutorTest {
     }
 
     @Test
+    fun preparesCatalogThroughSameStrategy() = runTest {
+        val request = request()
+        val metadata: YtDlpMetadataDto = mockk()
+        coEvery { ytDlpService.extractCatalogMetadata(request) } returns metadata
+
+        val preparation = assertIs<DownloadPreparation.Ready>(executor.prepareCatalog(request))
+
+        assertEquals(metadata, preparation.session.metadata)
+        coVerify(exactly = 1) { ytDlpService.extractCatalogMetadata(request) }
+        coVerify(exactly = 0) { ytDlpService.extractMetadata(request) }
+    }
+
+    @Test
     fun propagatesFailureWithoutAnotherStrategy() = runTest {
         val request = request()
         coEvery { ytDlpService.extractMetadata(request) } throws YtDlpException("VK failed")

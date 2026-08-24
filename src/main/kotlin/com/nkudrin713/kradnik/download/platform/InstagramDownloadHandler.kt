@@ -12,8 +12,6 @@ import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 import java.net.URI
 
-internal const val INSTAGRAM_PRESET_PREFIX = "instagram_"
-
 @Component
 @Order(20)
 class InstagramDownloadHandler : PlatformDownloadHandler {

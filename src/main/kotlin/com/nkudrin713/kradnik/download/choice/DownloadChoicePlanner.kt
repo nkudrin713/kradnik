@@ -1,18 +1,15 @@
 package com.nkudrin713.kradnik.download.choice
 
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
-import com.nkudrin713.kradnik.download.instagram.InstagramDownloadExecutor
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlan
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.platform.INSTAGRAM_PRESET_PREFIX
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.ResolvedDownload
-import com.nkudrin713.kradnik.download.platform.VK_PRESET_PREFIX
-import com.nkudrin713.kradnik.download.platform.YOUTUBE_PRESET_PREFIX
 import com.nkudrin713.kradnik.download.request.DownloadRequest
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.springframework.stereotype.Component
@@ -22,8 +19,7 @@ import java.math.RoundingMode
 @Component
 class DownloadChoicePlanner(
     private val platformResolver: PlatformResolver,
-    private val ytDlpService: YtDlpService,
-    private val instagramDownloadExecutor: InstagramDownloadExecutor,
+    private val downloadExecutorResolver: DownloadExecutorResolver,
     private val audioUploadPlanner: AudioUploadPlanner,
     private val uploadLimits: TelegramUploadLimits,
     private val metadataCache: DownloadChoiceMetadataCache,
@@ -60,11 +56,8 @@ class DownloadChoicePlanner(
     }
 
     private suspend fun extractCatalog(request: DownloadRequest): YtDlpMetadataDto {
-        if (!request.presetName.startsWith(INSTAGRAM_PRESET_PREFIX)) {
-            return ytDlpService.extractCatalogMetadata(request)
-        }
-
-        return when (val preparation = instagramDownloadExecutor.prepare(request)) {
+        val executor = downloadExecutorResolver.resolve(request)
+        return when (val preparation = executor.prepareCatalog(request)) {
             is DownloadPreparation.Ready -> preparation.session.metadata
             is DownloadPreparation.NotReady -> throw DownloadChoicePlanningException(
                 "Instagram временно ограничил запросы. Попробуйте позже",
@@ -266,11 +259,13 @@ class DownloadChoicePlanner(
     }
 
     private fun presetPrefix(request: DownloadRequest): String {
-        return when {
-            request.presetName.startsWith(YOUTUBE_PRESET_PREFIX) -> "youtube"
-            request.presetName.startsWith(VK_PRESET_PREFIX) -> "vk"
-            request.presetName.startsWith(INSTAGRAM_PRESET_PREFIX) -> "instagram"
-            else -> "generic"
+        return when (request.strategy) {
+            DownloadStrategy.YOUTUBE_YT_DLP -> "youtube"
+            DownloadStrategy.VK_YT_DLP -> "vk"
+            DownloadStrategy.INSTAGRAM_EMBED -> "instagram"
+            DownloadStrategy.YT_DLP -> "generic"
+            DownloadStrategy.COVER_YT_DLP,
+            DownloadStrategy.COVER_INSTAGRAM_EMBED -> error("Cover strategy cannot be used to build download choices")
         }
     }
 

@@ -13,8 +13,6 @@ import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 import java.net.URI
 
-internal const val YOUTUBE_PRESET_PREFIX = "youtube_"
-
 @Component
 @Order(10)
 class YouTubeDownloadHandler : PlatformDownloadHandler {

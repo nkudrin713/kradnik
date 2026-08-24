@@ -14,7 +14,6 @@ import org.springframework.transaction.PlatformTransactionManager
 @SpringBootTest(
 	properties = [
 		"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
-		"app.environment=test",
 		"telegram.bot.token=test-token",
 		"download.worker.enabled=false",
 	]

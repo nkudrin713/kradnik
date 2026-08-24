@@ -202,7 +202,6 @@ jobs:
             youtube_po_token_provider_url=""
           fi
           if [ "${{ inputs.environment }}" = "production" ]; then
-            app_environment="prod"
             app_container_name="kradnik-prod-app"
             postgres_container_name="kradnik-prod-postgres"
             postgres_db="kradnik_prod"
@@ -213,7 +212,6 @@ jobs:
             telegram_bot_api_data_volume_name="kradnik-prod-telegram-bot-api-data"
             media_work_volume_name="kradnik-prod-media-work"
           else
-            app_environment="test"
             app_container_name="kradnik-test-app"
             postgres_container_name="kradnik-test-postgres"
             postgres_db="kradnik_test"
@@ -226,7 +224,6 @@ jobs:
           fi
           {
             printf 'APP_IMAGE=%s\n' "$app_image"
-            printf 'APP_ENV=%s\n' "$app_environment"
             printf 'APP_CONTAINER_NAME=%s\n' "$app_container_name"
             printf 'POSTGRES_CONTAINER_NAME=%s\n' "$postgres_container_name"
             printf 'POSTGRES_DB=%s\n' "$postgres_db"

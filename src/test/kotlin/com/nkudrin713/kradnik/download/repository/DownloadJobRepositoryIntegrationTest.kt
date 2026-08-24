@@ -6,6 +6,7 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionRepository
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.ratelimit.PostgresRateLimitBucketStore
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitBucketKey
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitBucketStore
@@ -101,6 +102,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             normalizedUrl = "https://example.com/video",
             cacheKey = "cover-cache",
             outputType = OutputType.COVER,
+            strategy = DownloadStrategy.COVER_YT_DLP,
             presetName = "youtube_cover",
             formatSelector = "best",
             extraArgs = emptyList(),
@@ -118,10 +120,19 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 expiresAt = Instant.now().plusSeconds(60),
             )
         )
-        val coverJob = repository.saveAndFlush(job("cover").apply { outputType = OutputType.COVER })
+        val coverJob = repository.saveAndFlush(
+            job("cover").apply {
+                outputType = OutputType.COVER
+                downloadStrategy = DownloadStrategy.COVER_YT_DLP
+            }
+        )
 
-        assertEquals(OutputType.COVER, choiceSessionRepository.findById(session.token).orElseThrow().options.single().outputType)
-        assertEquals(OutputType.COVER, repository.findById(requireNotNull(coverJob.id)).orElseThrow().outputType)
+        val persistedOption = choiceSessionRepository.findById(session.token).orElseThrow().options.single()
+        val persistedJob = repository.findById(requireNotNull(coverJob.id)).orElseThrow()
+        assertEquals(OutputType.COVER, persistedOption.outputType)
+        assertEquals(DownloadStrategy.COVER_YT_DLP, persistedOption.strategy)
+        assertEquals(OutputType.COVER, persistedJob.outputType)
+        assertEquals(DownloadStrategy.COVER_YT_DLP, persistedJob.downloadStrategy)
     }
 
     @Test
@@ -185,6 +196,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             normalizedUrl = "https://example.com/normalized",
             cacheKey = "same-update",
             outputType = OutputType.VIDEO,
+            downloadStrategy = DownloadStrategy.YT_DLP,
             downloadPreset = "preset",
             selectedFormat = "format",
         )

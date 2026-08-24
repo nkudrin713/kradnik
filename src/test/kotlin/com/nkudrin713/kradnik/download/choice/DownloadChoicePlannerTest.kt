@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.choice
 
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.identity.DownloadIdentity
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.instagram.InstagramDownloadExecutor
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
@@ -72,6 +73,7 @@ class DownloadChoicePlannerTest {
         assertEquals("v720+a1", actual.options.first { it.key == "video_720" }.formatSelector)
         assertTrue(actual.options.first { it.key == "audio" }.approximateSize)
         assertEquals(OutputType.COVER, actual.options.last().outputType)
+        assertEquals(DownloadStrategy.COVER_YT_DLP, actual.options.last().strategy)
         assertEquals(actual.options.size, actual.options.map { it.cacheKey }.distinct().size)
         assertEquals(DownloadChoiceMediaInfo("Channel", "Title", 120), actual.mediaInfo)
         coVerify(exactly = 1) { ytDlpService.extractCatalogMetadata(video.request) }
@@ -142,6 +144,7 @@ class DownloadChoicePlannerTest {
                 originalUrl = URL,
                 normalizedUrl = URL,
                 outputType = outputType,
+                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
                 formatSelector = if (outputType == OutputType.AUDIO) "ba" else "best",
                 extraArgs = if (outputType == OutputType.AUDIO) {
                     listOf("-x", "--audio-format", "mp3")

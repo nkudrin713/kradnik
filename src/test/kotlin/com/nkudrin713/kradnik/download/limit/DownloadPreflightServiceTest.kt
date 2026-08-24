@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.limit
 
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import java.math.BigDecimal
@@ -378,6 +379,7 @@ class DownloadPreflightServiceTest {
             originalUrl = "https://example.com",
             normalizedUrl = "https://example.com",
             outputType = outputType,
+            strategy = DownloadStrategy.YT_DLP,
             formatSelector = "format",
             extraArgs = extraArgs,
             presetName = "preset",

@@ -1,10 +1,7 @@
-package com.nkudrin713.kradnik.download.vk
+package com.nkudrin713.kradnik.download.executor
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.executor.DownloadPreparation
-import com.nkudrin713.kradnik.download.executor.YtDlpDownloadExecutor
-import com.nkudrin713.kradnik.download.platform.VK_AUDIO_PRESET
 import com.nkudrin713.kradnik.download.platform.VK_VIDEO_PRESET
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpException
@@ -18,25 +15,27 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertIs
-import kotlin.test.assertTrue
 
-class VkDownloadExecutorTest {
+class YtDlpDownloadExecutorTest {
     private val ytDlpService: YtDlpService = mockk()
-    private val executor = VkDownloadExecutor(ytDlpService)
+    private val executor = YtDlpDownloadExecutor(ytDlpService)
 
     @Test
-    fun supportsVkPresetFamilyIncludingQualityVariants() {
-        assertTrue(executor.supports(request(VK_VIDEO_PRESET)))
-        assertTrue(executor.supports(request(VK_AUDIO_PRESET)))
-        assertTrue(executor.supports(request("vk_video_720")))
-        assertFalse(executor.supports(request("youtube_audio")))
+    fun registersAllYtDlpStrategies() {
+        assertEquals(
+            setOf(
+                DownloadStrategy.YT_DLP,
+                DownloadStrategy.YOUTUBE_YT_DLP,
+                DownloadStrategy.VK_YT_DLP,
+            ),
+            executor.strategies,
+        )
     }
 
     @Test
     fun preparesAndDownloadsOriginalVkUrl() = runTest {
-        val request = request(VK_VIDEO_PRESET)
+        val request = request()
         val metadata: YtDlpMetadataDto = mockk()
         val outputDir = Path.of("/tmp/vk-output")
         val downloadedFile = DownloadedFile(outputDir.resolve("video.mp4"), 100)
@@ -52,8 +51,8 @@ class VkDownloadExecutorTest {
     }
 
     @Test
-    fun propagatesYtDlpFailureWithoutAnotherStrategy() = runTest {
-        val request = request(VK_VIDEO_PRESET)
+    fun propagatesFailureWithoutAnotherStrategy() = runTest {
+        val request = request()
         coEvery { ytDlpService.extractMetadata(request) } throws YtDlpException("VK failed")
 
         assertFailsWith<YtDlpException> {
@@ -63,22 +62,14 @@ class VkDownloadExecutorTest {
         coVerify(exactly = 1) { ytDlpService.extractMetadata(request) }
     }
 
-    @Test
-    fun genericExecutorDoesNotSupportVkPresets() {
-        val genericExecutor = YtDlpDownloadExecutor(ytDlpService)
-
-        assertFalse(genericExecutor.supports(request(VK_VIDEO_PRESET)))
-        assertFalse(genericExecutor.supports(request("vk_unknown")))
-        assertTrue(genericExecutor.supports(request("youtube_audio")))
-    }
-
-    private fun request(presetName: String): DownloadRequest {
+    private fun request(): DownloadRequest {
         return DownloadRequest(
             originalUrl = "https://m.vk.com/video-1_2?list=access-token",
             normalizedUrl = "https://vk.com/video-1_2",
             outputType = OutputType.VIDEO,
+            strategy = DownloadStrategy.VK_YT_DLP,
             formatSelector = "format",
-            presetName = presetName,
+            presetName = VK_VIDEO_PRESET,
         )
     }
 }

@@ -4,6 +4,7 @@ import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.identity.DownloadIdentity
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.platform.ResolvedDownload
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
@@ -103,6 +104,7 @@ class TelegramDownloadStarterTest {
                 originalUrl = URL,
                 normalizedUrl = URL,
                 outputType = outputType,
+                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
                 formatSelector = "format",
                 presetName = "preset",
             ),

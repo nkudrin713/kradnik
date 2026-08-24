@@ -1,30 +1,30 @@
 package com.nkudrin713.kradnik.download.cover
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadExecutor
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.instagram.InstagramDownloadExecutor
-import com.nkudrin713.kradnik.download.platform.INSTAGRAM_PRESET_PREFIX
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 import java.nio.file.Path
 
 @Component
-@Order(0)
 class CoverDownloadExecutor(
     private val ytDlpService: YtDlpService,
     private val instagramDownloadExecutor: InstagramDownloadExecutor,
     private val coverDownloader: CoverDownloader,
 ) : DownloadExecutor {
-    override fun supports(request: DownloadRequest): Boolean = request.outputType == OutputType.COVER
+    override val strategies = setOf(
+        DownloadStrategy.COVER_YT_DLP,
+        DownloadStrategy.COVER_INSTAGRAM_EMBED,
+    )
 
     override suspend fun prepare(request: DownloadRequest): DownloadPreparation {
-        if (request.presetName.startsWith(INSTAGRAM_PRESET_PREFIX)) {
+        if (request.strategy == DownloadStrategy.COVER_INSTAGRAM_EMBED) {
             return when (val preparation = instagramDownloadExecutor.prepare(request)) {
                 is DownloadPreparation.Ready -> ready(preparation.session.metadata)
                 is DownloadPreparation.NotReady -> preparation

@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.platform
 
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,6 +33,7 @@ class VkDownloadHandlerTest {
         assertEquals("https://new.vk.com/video-123_456?utm_source=test", actual.originalUrl)
         assertEquals("https://vk.com/video-123_456", actual.normalizedUrl)
         assertEquals(OutputType.VIDEO, actual.outputType)
+        assertEquals(DownloadStrategy.VK_YT_DLP, actual.strategy)
         assertEquals(VK_VIDEO_PRESET, actual.presetName)
         assertEquals(listOf("--merge-output-format", "mp4"), actual.extraArgs)
         assertEquals(
@@ -51,6 +53,7 @@ class VkDownloadHandlerTest {
 
         assertEquals("https://vk.com/clip30014565_456240946", actual.normalizedUrl)
         assertEquals(OutputType.AUDIO, actual.outputType)
+        assertEquals(DownloadStrategy.VK_YT_DLP, actual.strategy)
         assertEquals(VK_AUDIO_PRESET, actual.presetName)
         assertEquals("ba/bestaudio/best", actual.formatSelector)
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.extraArgs)

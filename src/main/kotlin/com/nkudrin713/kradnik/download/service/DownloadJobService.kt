@@ -4,6 +4,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
@@ -37,6 +38,7 @@ class DownloadJobService(
 				normalizedUrl = command.normalizedUrl,
 				cacheKey = command.cacheKey,
 				outputType = command.outputType,
+				downloadStrategy = command.downloadStrategy,
 				downloadPreset = command.downloadPreset,
 				selectedFormat = command.selectedFormat,
 				downloadExtraArgs = command.downloadExtraArgs,
@@ -358,6 +360,7 @@ data class CreateDownloadJobCommand(
 	val normalizedUrl: String,
 	val cacheKey: String,
 	val outputType: OutputType,
+	val downloadStrategy: DownloadStrategy,
 	val downloadPreset: String,
 	val selectedFormat: String,
 	val downloadExtraArgs: List<String> = emptyList(),

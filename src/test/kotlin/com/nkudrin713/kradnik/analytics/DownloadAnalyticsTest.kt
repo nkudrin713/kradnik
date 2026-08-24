@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.analytics
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
@@ -37,6 +38,7 @@ class DownloadAnalyticsTest {
             normalizedUrl = "https://youtu.be/source",
             cacheKey = "youtube:video:id:video:preset",
             outputType = OutputType.VIDEO,
+            downloadStrategy = DownloadStrategy.YOUTUBE_YT_DLP,
             downloadPreset = "youtube_mobile_video",
             selectedFormat = "best",
         )
@@ -85,6 +87,7 @@ class DownloadAnalyticsTest {
                 originalUrl = "https://youtu.be/source",
                 normalizedUrl = "https://youtu.be/source",
                 outputType = OutputType.AUDIO,
+                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
                 formatSelector = "ba/bestaudio",
                 presetName = "youtube_audio",
             ),

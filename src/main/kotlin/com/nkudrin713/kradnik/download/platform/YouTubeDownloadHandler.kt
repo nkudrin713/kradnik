@@ -7,6 +7,7 @@ import com.nkudrin713.kradnik.download.identity.extractQueryParameter
 import com.nkudrin713.kradnik.download.identity.parseHttpUrl
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -45,6 +46,7 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
                 outputType = outputType,
+                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
                 presetName = "youtube_h264_mobile_2gb",
                 formatSelector =
                     "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
@@ -57,6 +59,7 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
                 outputType = outputType,
+                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
                 presetName = "youtube_audio",
                 formatSelector = "ba/bestaudio",
                 extraArgs = listOf(
@@ -72,6 +75,7 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
                 outputType = outputType,
+                strategy = DownloadStrategy.COVER_YT_DLP,
                 presetName = "youtube_cover",
                 formatSelector = "best",
             )

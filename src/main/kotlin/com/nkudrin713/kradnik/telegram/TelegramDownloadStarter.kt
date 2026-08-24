@@ -43,6 +43,7 @@ class TelegramDownloadStarter(
                 OutputType.AUDIO, OutputType.COVER -> identity.cacheKey
             },
             outputType = request.outputType,
+            downloadStrategy = request.strategy,
             downloadPreset = request.presetName,
             selectedFormat = request.formatSelector,
             downloadExtraArgs = request.extraArgs,

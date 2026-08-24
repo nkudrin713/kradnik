@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.platform
 
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.identity.DownloadIdentity
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import kotlin.test.Test
@@ -86,6 +87,7 @@ class PlatformResolverTest {
         assertEquals("https://youtube.com/watch?v=id", actual.originalUrl)
         assertEquals("https://www.youtube.com/watch?v=id", actual.normalizedUrl)
         assertEquals(OutputType.AUDIO, actual.outputType)
+        assertEquals(DownloadStrategy.YOUTUBE_YT_DLP, actual.strategy)
         assertEquals("youtube_audio", actual.presetName)
         assertEquals("ba/bestaudio", actual.formatSelector)
         assertEquals(
@@ -109,6 +111,7 @@ class PlatformResolverTest {
 
         assertEquals("https://youtube.com/watch?v=id", actual.originalUrl)
         assertEquals(OutputType.VIDEO, actual.outputType)
+        assertEquals(DownloadStrategy.YOUTUBE_YT_DLP, actual.strategy)
         assertEquals("youtube_h264_mobile_2gb", actual.presetName)
         assertEquals(listOf("--merge-output-format", "mp4"), actual.extraArgs)
         assertEquals(
@@ -138,6 +141,7 @@ class PlatformResolverTest {
         assertEquals("https://www.instagram.com/reel/abc/?igshid=tracking", actual.originalUrl)
         assertEquals("https://www.instagram.com/reel/abc/", actual.normalizedUrl)
         assertEquals(OutputType.VIDEO, actual.outputType)
+        assertEquals(DownloadStrategy.INSTAGRAM_EMBED, actual.strategy)
         assertEquals("instagram_mobile_video", actual.presetName)
         assertEquals(listOf("--merge-output-format", "mp4"), actual.extraArgs)
         assertEquals(true, actual.formatSelector.contains("vcodec^=avc1"))
@@ -153,6 +157,7 @@ class PlatformResolverTest {
 
         assertEquals("https://www.instagram.com/p/abc/", actual.normalizedUrl)
         assertEquals(OutputType.AUDIO, actual.outputType)
+        assertEquals(DownloadStrategy.INSTAGRAM_EMBED, actual.strategy)
         assertEquals("instagram_audio", actual.presetName)
         assertEquals("ba/bestaudio/best", actual.formatSelector)
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.extraArgs)
@@ -175,6 +180,7 @@ class PlatformResolverTest {
                     originalUrl = url,
                     normalizedUrl = url,
                     outputType = outputType,
+                    strategy = DownloadStrategy.YT_DLP,
                     formatSelector = "format",
                     presetName = "preset-${platform.name.lowercase()}",
                 )

@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.request
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -14,6 +15,7 @@ class DownloadRequestTest {
                 originalUrl = "https://example.com/raw",
                 normalizedUrl = "https://example.com/normalized",
                 outputType = OutputType.AUDIO,
+                downloadStrategy = DownloadStrategy.YOUTUBE_YT_DLP,
                 downloadPreset = "preset",
                 selectedFormat = "format",
                 downloadExtraArgs = listOf("-x", "--audio-format", "mp3"),
@@ -23,6 +25,7 @@ class DownloadRequestTest {
         assertEquals("https://example.com/raw", actual.originalUrl)
         assertEquals("https://example.com/normalized", actual.normalizedUrl)
         assertEquals(OutputType.AUDIO, actual.outputType)
+        assertEquals(DownloadStrategy.YOUTUBE_YT_DLP, actual.strategy)
         assertEquals("preset", actual.presetName)
         assertEquals("format", actual.formatSelector)
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.extraArgs)
@@ -65,6 +68,7 @@ class DownloadRequestTest {
             originalUrl = "https://example.com/raw",
             normalizedUrl = "https://example.com/normalized",
             outputType = OutputType.AUDIO,
+            strategy = DownloadStrategy.YT_DLP,
             formatSelector = "format",
             extraArgs = extraArgs,
             presetName = "preset",

@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.ytdlp.client
 
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
@@ -582,6 +583,7 @@ class YtDlpServiceTest {
             originalUrl = "https://example.com",
             normalizedUrl = "https://example.com",
             outputType = OutputType.VIDEO,
+            strategy = DownloadStrategy.YT_DLP,
             formatSelector = "bv*+ba/b",
             extraArgs = listOf("--merge-output-format", "mp4"),
             presetName = "test",
@@ -592,6 +594,7 @@ class YtDlpServiceTest {
         return testRequest().copy(
             originalUrl = "https://youtube.com/watch?v=video-id",
             normalizedUrl = "https://youtube.com/watch?v=video-id",
+            strategy = DownloadStrategy.YOUTUBE_YT_DLP,
             presetName = "youtube_h264_mobile_2gb",
         )
     }

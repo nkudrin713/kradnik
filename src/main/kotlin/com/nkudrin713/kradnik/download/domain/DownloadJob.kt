@@ -1,7 +1,9 @@
 package com.nkudrin713.kradnik.download.domain
 
-import com.nkudrin713.kradnik.download.repository.DownloadOutputTypeConverter
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.repository.DownloadJobStatusConverter
+import com.nkudrin713.kradnik.download.repository.DownloadOutputTypeConverter
+import com.nkudrin713.kradnik.download.repository.DownloadStrategyConverter
 import com.nkudrin713.kradnik.download.repository.StringListJsonConverter
 import jakarta.persistence.Column
 import jakarta.persistence.Convert
@@ -46,6 +48,10 @@ class DownloadJob(
 	@Convert(converter = DownloadOutputTypeConverter::class)
 	@Column(name = "output_type", nullable = false)
 	var outputType: OutputType = OutputType.VIDEO,
+
+	@Convert(converter = DownloadStrategyConverter::class)
+	@Column(name = "download_strategy", nullable = false)
+	var downloadStrategy: DownloadStrategy = DownloadStrategy.YT_DLP,
 
 	@Convert(converter = DownloadJobStatusConverter::class)
 	@Column(nullable = false)

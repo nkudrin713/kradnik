@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.telegram
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -108,6 +109,11 @@ class TelegramDownloadChoiceViewTest {
                 "audio" -> OutputType.AUDIO
                 "cover" -> OutputType.COVER
                 else -> OutputType.VIDEO
+            },
+            strategy = if (key == "cover") {
+                DownloadStrategy.COVER_YT_DLP
+            } else {
+                DownloadStrategy.YOUTUBE_YT_DLP
             },
             presetName = key,
             formatSelector = "best",

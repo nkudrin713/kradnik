@@ -1,22 +1,21 @@
 package com.nkudrin713.kradnik.download.executor
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
-import com.nkudrin713.kradnik.download.platform.VK_PRESET_PREFIX
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 import java.nio.file.Path
 
 @Component
-@Order(1000)
 class YtDlpDownloadExecutor(
     private val ytDlpService: YtDlpService,
 ) : DownloadExecutor {
-    override fun supports(request: DownloadRequest): Boolean {
-        return !request.presetName.startsWith(VK_PRESET_PREFIX)
-    }
+    override val strategies = setOf(
+        DownloadStrategy.YT_DLP,
+        DownloadStrategy.YOUTUBE_YT_DLP,
+        DownloadStrategy.VK_YT_DLP,
+    )
 
     override suspend fun prepare(request: DownloadRequest): DownloadPreparation {
         return DownloadPreparation.Ready(

@@ -204,6 +204,7 @@ class DownloadChoicePlanner(
         metadata.thumbnail?.takeIf { it.isNotBlank() } ?: return null
         val request = resolved.request.copy(
             outputType = OutputType.COVER,
+            strategy = resolved.request.strategy.coverStrategy(),
             formatSelector = "best",
             extraArgs = emptyList(),
             presetName = "${presetPrefix(resolved.request)}_cover",
@@ -244,6 +245,7 @@ class DownloadChoicePlanner(
             normalizedUrl = resolved.identity.normalizedUrl,
             cacheKey = "${resolved.identity.cacheKey}:$cacheKeySuffix",
             outputType = request.outputType,
+            strategy = request.strategy,
             presetName = request.presetName,
             formatSelector = request.formatSelector,
             extraArgs = request.extraArgs,

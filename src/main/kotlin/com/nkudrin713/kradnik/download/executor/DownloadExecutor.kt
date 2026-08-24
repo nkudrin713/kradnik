@@ -7,7 +7,7 @@ import java.nio.file.Path
 import java.time.Instant
 
 interface DownloadExecutor {
-    fun supports(request: DownloadRequest): Boolean
+    val strategies: Set<DownloadStrategy>
 
     suspend fun prepare(request: DownloadRequest): DownloadPreparation
 }

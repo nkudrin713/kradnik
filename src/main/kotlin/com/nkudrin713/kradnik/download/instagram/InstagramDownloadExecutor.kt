@@ -4,26 +4,23 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadExecutor
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 import java.nio.file.Path
 
 @Component
-@Order(10)
 class InstagramDownloadExecutor(
     private val embedDownloader: InstagramEmbedDownloader,
     private val rateLimiter: InstagramRateLimiter,
     private val ytDlpService: YtDlpService,
 ) : DownloadExecutor {
-    override fun supports(request: DownloadRequest): Boolean {
-        return embedDownloader.isInstagramRequest(request)
-    }
+    override val strategies = setOf(DownloadStrategy.INSTAGRAM_EMBED)
 
     override suspend fun prepare(request: DownloadRequest): DownloadPreparation {
         if (!embedDownloader.supports(request)) {

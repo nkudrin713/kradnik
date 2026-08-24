@@ -7,6 +7,7 @@ import com.nkudrin713.kradnik.download.identity.extractQueryParameter
 import com.nkudrin713.kradnik.download.identity.parseHttpUrl
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -44,6 +45,7 @@ class VkDownloadHandler : PlatformDownloadHandler {
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
                 outputType = outputType,
+                strategy = DownloadStrategy.VK_YT_DLP,
                 presetName = VK_VIDEO_PRESET,
                 formatSelector =
                     "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/" +
@@ -56,6 +58,7 @@ class VkDownloadHandler : PlatformDownloadHandler {
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
                 outputType = outputType,
+                strategy = DownloadStrategy.VK_YT_DLP,
                 presetName = VK_AUDIO_PRESET,
                 formatSelector = "ba/bestaudio/best",
                 extraArgs = listOf("-x", "--audio-format", "mp3"),
@@ -65,6 +68,7 @@ class VkDownloadHandler : PlatformDownloadHandler {
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
                 outputType = outputType,
+                strategy = DownloadStrategy.COVER_YT_DLP,
                 presetName = "vk_cover",
                 formatSelector = "best",
             )

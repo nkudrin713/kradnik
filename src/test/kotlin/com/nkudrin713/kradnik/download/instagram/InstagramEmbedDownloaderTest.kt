@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.instagram
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -164,6 +165,7 @@ class InstagramEmbedDownloaderTest {
             originalUrl = url,
             normalizedUrl = url,
             outputType = outputType,
+            strategy = DownloadStrategy.INSTAGRAM_EMBED,
             formatSelector = "format",
             presetName = "instagram",
         )

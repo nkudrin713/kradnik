@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.instagram
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
 import com.nkudrin713.kradnik.download.request.DownloadRequest
@@ -152,6 +153,7 @@ class InstagramDownloadExecutorTest {
             originalUrl = url,
             normalizedUrl = url,
             outputType = outputType,
+            strategy = DownloadStrategy.INSTAGRAM_EMBED,
             formatSelector = "format",
             presetName = "instagram",
         )

@@ -2,11 +2,13 @@ package com.nkudrin713.kradnik.download.request
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 
 data class DownloadRequest(
     val originalUrl: String,
     val normalizedUrl: String,
     val outputType: OutputType,
+    val strategy: DownloadStrategy,
     val formatSelector: String,
     val extraArgs: List<String> = emptyList(),
     val presetName: String,
@@ -29,6 +31,7 @@ data class DownloadRequest(
                 originalUrl = job.originalUrl,
                 normalizedUrl = job.normalizedUrl,
                 outputType = job.outputType,
+                strategy = job.downloadStrategy,
                 formatSelector = selectedFormat,
                 extraArgs = job.downloadExtraArgs,
                 presetName = job.downloadPreset ?: "default",

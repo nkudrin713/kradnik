@@ -4,6 +4,7 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import jakarta.persistence.AttributeConverter
 import jakarta.persistence.Converter
 
@@ -23,6 +24,15 @@ class DownloadJobStatusConverter : AttributeConverter<DownloadJobStatus, String>
 
 	override fun convertToEntityAttribute(dbData: String?): DownloadJobStatus? =
 		dbData?.let(DownloadJobStatus::fromDb)
+}
+
+@Converter
+class DownloadStrategyConverter : AttributeConverter<DownloadStrategy, String> {
+	override fun convertToDatabaseColumn(attribute: DownloadStrategy?): String? =
+		attribute?.dbValue
+
+	override fun convertToEntityAttribute(dbData: String?): DownloadStrategy? =
+		dbData?.let(DownloadStrategy::fromDb)
 }
 
 @Converter

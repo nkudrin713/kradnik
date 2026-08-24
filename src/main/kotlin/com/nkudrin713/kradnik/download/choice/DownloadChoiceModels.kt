@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.choice
 
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.identity.DownloadIdentity
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.platform.ResolvedDownload
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 
@@ -29,6 +30,7 @@ data class DownloadChoiceOptionSnapshot(
     val normalizedUrl: String,
     val cacheKey: String,
     val outputType: OutputType,
+    val strategy: DownloadStrategy,
     val presetName: String,
     val formatSelector: String,
     val extraArgs: List<String>,
@@ -44,6 +46,7 @@ data class DownloadChoiceOptionSnapshot(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
                 outputType = outputType,
+                strategy = strategy,
                 formatSelector = formatSelector,
                 extraArgs = extraArgs,
                 presetName = presetName,

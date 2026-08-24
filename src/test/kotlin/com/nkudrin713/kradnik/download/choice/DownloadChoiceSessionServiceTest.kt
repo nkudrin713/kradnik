@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.choice
 
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -122,6 +123,7 @@ class DownloadChoiceSessionServiceTest {
             normalizedUrl = URL,
             cacheKey = "cache",
             outputType = OutputType.VIDEO,
+            strategy = DownloadStrategy.YOUTUBE_YT_DLP,
             presetName = "youtube_video_720",
             formatSelector = "22",
             extraArgs = emptyList(),

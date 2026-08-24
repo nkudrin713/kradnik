@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramSender
@@ -93,6 +94,7 @@ class DownloadChoiceHandlerTest {
             normalizedUrl = URL,
             cacheKey = "cache:720",
             outputType = OutputType.VIDEO,
+            strategy = DownloadStrategy.YOUTUBE_YT_DLP,
             presetName = "video_720",
             formatSelector = "22",
             extraArgs = emptyList(),

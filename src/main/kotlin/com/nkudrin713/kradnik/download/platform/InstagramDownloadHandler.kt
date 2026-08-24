@@ -6,6 +6,7 @@ import com.nkudrin713.kradnik.download.identity.normalizeGeneric
 import com.nkudrin713.kradnik.download.identity.parseHttpUrl
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.request.DownloadRequest
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -38,6 +39,7 @@ class InstagramDownloadHandler : PlatformDownloadHandler {
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
                 outputType = outputType,
+                strategy = DownloadStrategy.INSTAGRAM_EMBED,
                 presetName = "instagram_mobile_video",
                 formatSelector =
                     "bv*[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
@@ -50,6 +52,7 @@ class InstagramDownloadHandler : PlatformDownloadHandler {
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
                 outputType = outputType,
+                strategy = DownloadStrategy.INSTAGRAM_EMBED,
                 presetName = "instagram_audio",
                 formatSelector = "ba/bestaudio/best",
                 extraArgs = listOf("-x", "--audio-format", "mp3"),
@@ -59,6 +62,7 @@ class InstagramDownloadHandler : PlatformDownloadHandler {
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
                 outputType = outputType,
+                strategy = DownloadStrategy.COVER_INSTAGRAM_EMBED,
                 presetName = "instagram_cover",
                 formatSelector = "best",
             )

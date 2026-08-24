@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.cover
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
+import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.instagram.InstagramDownloadExecutor
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.request.DownloadRequest
@@ -49,9 +50,11 @@ class CoverDownloadExecutorTest {
     }
 
     @Test
-    fun supportsOnlyCoverRequests() {
-        assertEquals(true, executor.supports(request("youtube_cover")))
-        assertEquals(false, executor.supports(request("youtube_video").copy(outputType = OutputType.VIDEO)))
+    fun registersExplicitCoverStrategies() {
+        assertEquals(
+            setOf(DownloadStrategy.COVER_YT_DLP, DownloadStrategy.COVER_INSTAGRAM_EMBED),
+            executor.strategies,
+        )
     }
 
     private fun request(preset: String): DownloadRequest {
@@ -59,6 +62,7 @@ class CoverDownloadExecutorTest {
             originalUrl = "https://example.com/video",
             normalizedUrl = "https://example.com/video",
             outputType = OutputType.COVER,
+            strategy = DownloadStrategy.COVER_YT_DLP,
             formatSelector = "best",
             presetName = preset,
         )

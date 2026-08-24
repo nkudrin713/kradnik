@@ -42,147 +42,161 @@ class DownloadJobLifecycleTest {
     @Test
     fun marksUploading() {
         val job = job()
+        val storedJob = job()
         val attempt = attempt(job)
-        every { downloadJobService.markUploading(attempt) } returns job
+        every { downloadJobService.markUploading(attempt) } returns storedJob
         every { statusReporter.setStatus(any(), any()) } just runs
 
         lifecycle.markUploading(attempt)
 
         verify { downloadJobService.markUploading(attempt) }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.UPLOADING) }
+        verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.UPLOADING) }
+        verify { downloadAnalytics.recordUploadStarted(storedJob) }
     }
 
     @Test
     fun rejectsTooLarge() {
         val job = job()
+        val storedJob = job()
         val attempt = attempt(job)
-        every { downloadJobService.markFailed(attempt, "too large") } returns job
+        every { downloadJobService.markFailed(attempt, "too large") } returns storedJob
         every { statusReporter.setStatus(any(), any()) } just runs
 
         lifecycle.rejectTooLarge(attempt, "too large")
 
         verify { downloadJobService.markFailed(attempt, "too large") }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.REJECTED_TOO_LARGE) }
+        verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.REJECTED_TOO_LARGE) }
+        verify { downloadAnalytics.recordDownloadRejected(storedJob, "too large") }
     }
 
     @Test
     fun reportsQueuedStatusWhenRetryIsScheduled() {
         val job = job()
+        val storedJob = job()
         val attempt = attempt(job)
         val retryAt = Instant.parse("2026-01-01T01:00:00Z")
         every { retryPolicy.retryAt(job.attempts, null) } returns retryAt
         every { downloadJobService.retryAt(attempt, "error", retryAt) } returns
-                DownloadFailureResolution.RetryScheduled(job)
+                DownloadFailureResolution.RetryScheduled(storedJob)
         every { statusReporter.setStatus(any(), any()) } just runs
 
         lifecycle.failOrRetry(attempt, "error")
 
         verify { downloadJobService.retryAt(attempt, "error", retryAt) }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.QUEUED) }
+        verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.QUEUED) }
     }
 
     @Test
     fun reportsErrorStatusWhenAttemptsAreExhausted() {
         val job = job()
+        val storedJob = job()
         val attempt = attempt(job)
         val retryAt = Instant.parse("2026-01-01T01:00:00Z")
         every { retryPolicy.retryAt(job.attempts, null) } returns retryAt
         every { downloadJobService.retryAt(attempt, "error", retryAt) } returns
-                DownloadFailureResolution.TerminalFailure(job)
+                DownloadFailureResolution.TerminalFailure(storedJob)
         every { statusReporter.setStatus(any(), any()) } just runs
 
         lifecycle.failOrRetry(attempt, "error")
 
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.ERROR) }
+        verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.ERROR) }
     }
 
     @Test
     fun defersBeforeAttemptAndKeepsQueuedStatus() {
         val job = job()
+        val storedJob = job()
         val attempt = attempt(job)
         val retryAt = Instant.parse("2026-01-01T01:00:00Z")
-        every { downloadJobService.deferBeforeAttempt(attempt, retryAt, "rate limited") } returns job
+        every { downloadJobService.deferBeforeAttempt(attempt, retryAt, "rate limited") } returns storedJob
         every { statusReporter.setStatus(any(), any()) } just runs
 
         lifecycle.deferBeforeAttempt(attempt, retryAt, "rate limited")
 
         verify { downloadJobService.deferBeforeAttempt(attempt, retryAt, "rate limited") }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.QUEUED) }
+        verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.QUEUED) }
     }
 
     @Test
     fun schedulesRetryAtRequestedTime() {
         val job = job()
+        val storedJob = job()
         val attempt = attempt(job)
         val retryAt = Instant.parse("2026-01-01T01:00:00Z")
-        val resolution = DownloadFailureResolution.RetryScheduled(job)
+        val resolution = DownloadFailureResolution.RetryScheduled(storedJob)
         every { downloadJobService.retryAt(attempt, "throttled", retryAt) } returns resolution
         every { statusReporter.setStatus(any(), any()) } just runs
 
         lifecycle.retryAt(attempt, retryAt, "throttled")
 
         verify { downloadJobService.retryAt(attempt, "throttled", retryAt) }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.QUEUED) }
-        verify { downloadAnalytics.recordRetryableFailure(job, "throttled", resolution) }
+        verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.QUEUED) }
+        verify { downloadAnalytics.recordRetryableFailure(storedJob, "throttled", resolution) }
     }
 
     @Test
     fun failsTerminallyWithoutRetry() {
         val job = job()
+        val storedJob = job()
         val attempt = attempt(job)
-        every { downloadJobService.markFailed(attempt, "unsupported") } returns job
+        every { downloadJobService.markFailed(attempt, "unsupported") } returns storedJob
         every { statusReporter.setStatus(any(), any()) } just runs
 
         lifecycle.failTerminal(attempt, "unsupported")
 
         verify { downloadJobService.markFailed(attempt, "unsupported") }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.ERROR) }
-        verify { downloadAnalytics.recordTerminalFailure(job, "unsupported") }
+        verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.ERROR) }
+        verify { downloadAnalytics.recordTerminalFailure(storedJob, "unsupported") }
     }
 
     @Test
     fun reportsUnavailableSourceWithoutRetry() {
         val job = job()
+        val storedJob = job()
         val attempt = attempt(job)
-        every { downloadJobService.markFailed(attempt, "source unavailable") } returns job
+        every { downloadJobService.markFailed(attempt, "source unavailable") } returns storedJob
         every { statusReporter.setStatus(any(), any()) } just runs
 
         lifecycle.failSourceUnavailable(attempt, "source unavailable")
 
         verify { downloadJobService.markFailed(attempt, "source unavailable") }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.SOURCE_UNAVAILABLE) }
-        verify { downloadAnalytics.recordTerminalFailure(job, "source unavailable") }
+        verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.SOURCE_UNAVAILABLE) }
+        verify { downloadAnalytics.recordTerminalFailure(storedJob, "source unavailable") }
     }
 
     @Test
     fun failsAuthenticationRequiredWithoutRetry() {
         val job = job()
+        val storedJob = job()
         val attempt = attempt(job)
-        every { downloadJobService.markFailed(attempt, "auth required") } returns job
+        every { downloadJobService.markFailed(attempt, "auth required") } returns storedJob
         every { statusReporter.setStatus(any(), any()) } just runs
 
         lifecycle.failAuthenticationRequired(attempt, "auth required")
 
         verify { downloadJobService.markFailed(attempt, "auth required") }
-        verify { statusReporter.setStatus(job, TelegramDownloadStatus.AUTHENTICATION_REQUIRED) }
+        verify { statusReporter.setStatus(storedJob, TelegramDownloadStatus.AUTHENTICATION_REQUIRED) }
+        verify { downloadAnalytics.recordAuthenticationRequiredFailure(storedJob, "auth required") }
     }
 
     @Test
     fun completes() {
         val job = job()
+        val storedJob = job()
         val attempt = attempt(job)
         val result = DownloadedFileResult(
             telegramFileId = "file-id",
             telegramFileSize = 90,
             downloadedFileSize = 100,
         )
-        every { downloadJobService.markCompleted(attempt, result) } returns job
-        every { statusReporter.deleteStatus(job) } just runs
+        every { downloadJobService.markCompleted(attempt, result) } returns storedJob
+        every { statusReporter.deleteStatus(storedJob) } just runs
 
         lifecycle.complete(attempt, result)
 
         verify { downloadJobService.markCompleted(attempt, result) }
-        verify { statusReporter.deleteStatus(job) }
+        verify { statusReporter.deleteStatus(storedJob) }
+        verify { downloadAnalytics.recordDownloadCompleted(storedJob, result) }
     }
 
     private fun job(): DownloadJob {

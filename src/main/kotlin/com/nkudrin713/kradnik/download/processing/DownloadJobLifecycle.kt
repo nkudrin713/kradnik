@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.analytics.DownloadAnalytics
+import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadFailureResolution
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -24,8 +25,7 @@ class DownloadJobLifecycle(
     }
 
     fun markUploading(attempt: ClaimedDownloadJob) {
-        val job = attempt.job
-        downloadJobService.markUploading(attempt)
+        val job = downloadJobService.markUploading(attempt)
         statusReporter.setStatus(job, TelegramDownloadStatus.UPLOADING)
         downloadAnalytics.recordUploadStarted(job)
     }
@@ -34,10 +34,12 @@ class DownloadJobLifecycle(
         attempt: ClaimedDownloadJob,
         reason: String,
     ) {
-        val job = attempt.job
-        downloadJobService.markFailed(attempt, reason)
-        statusReporter.setStatus(job, TelegramDownloadStatus.REJECTED_TOO_LARGE)
-        downloadAnalytics.recordDownloadRejected(job, reason)
+        fail(
+            attempt = attempt,
+            errorMessage = reason,
+            status = TelegramDownloadStatus.REJECTED_TOO_LARGE,
+            recordFailure = downloadAnalytics::recordDownloadRejected,
+        )
     }
 
     fun failOrRetry(
@@ -45,16 +47,8 @@ class DownloadJobLifecycle(
         errorMessage: String,
         retryAfter: Duration? = null,
     ): DownloadFailureResolution {
-        val job = attempt.job
-        val retryAt = retryPolicy.retryAt(job.attempts, retryAfter)
-        val resolution = downloadJobService.retryAt(attempt, errorMessage, retryAt)
-        val status = when (resolution) {
-            is DownloadFailureResolution.RetryScheduled -> TelegramDownloadStatus.QUEUED
-            is DownloadFailureResolution.TerminalFailure -> TelegramDownloadStatus.ERROR
-        }
-        statusReporter.setStatus(job, status)
-        downloadAnalytics.recordRetryableFailure(job, errorMessage, resolution)
-        return resolution
+        val retryAt = retryPolicy.retryAt(attempt.job.attempts, retryAfter)
+        return retry(attempt, retryAt, errorMessage)
     }
 
     fun deferBeforeAttempt(
@@ -62,8 +56,7 @@ class DownloadJobLifecycle(
         retryAt: Instant,
         reason: String,
     ) {
-        val job = attempt.job
-        downloadJobService.deferBeforeAttempt(attempt, retryAt, reason)
+        val job = downloadJobService.deferBeforeAttempt(attempt, retryAt, reason)
         statusReporter.setStatus(job, TelegramDownloadStatus.QUEUED)
     }
 
@@ -72,54 +65,77 @@ class DownloadJobLifecycle(
         retryAt: Instant,
         errorMessage: String,
     ): DownloadFailureResolution {
-        val job = attempt.job
-        val resolution = downloadJobService.retryAt(attempt, errorMessage, retryAt)
-        val status = when (resolution) {
-            is DownloadFailureResolution.RetryScheduled -> TelegramDownloadStatus.QUEUED
-            is DownloadFailureResolution.TerminalFailure -> TelegramDownloadStatus.ERROR
-        }
-        statusReporter.setStatus(job, status)
-        downloadAnalytics.recordRetryableFailure(job, errorMessage, resolution)
-        return resolution
+        return retry(attempt, retryAt, errorMessage)
     }
 
     fun failTerminal(
         attempt: ClaimedDownloadJob,
         errorMessage: String,
     ) {
-        val job = attempt.job
-        downloadJobService.markFailed(attempt, errorMessage)
-        statusReporter.setStatus(job, TelegramDownloadStatus.ERROR)
-        downloadAnalytics.recordTerminalFailure(job, errorMessage)
+        fail(
+            attempt = attempt,
+            errorMessage = errorMessage,
+            status = TelegramDownloadStatus.ERROR,
+            recordFailure = downloadAnalytics::recordTerminalFailure,
+        )
     }
 
     fun failSourceUnavailable(
         attempt: ClaimedDownloadJob,
         errorMessage: String,
     ) {
-        val job = attempt.job
-        downloadJobService.markFailed(attempt, errorMessage)
-        statusReporter.setStatus(job, TelegramDownloadStatus.SOURCE_UNAVAILABLE)
-        downloadAnalytics.recordTerminalFailure(job, errorMessage)
+        fail(
+            attempt = attempt,
+            errorMessage = errorMessage,
+            status = TelegramDownloadStatus.SOURCE_UNAVAILABLE,
+            recordFailure = downloadAnalytics::recordTerminalFailure,
+        )
     }
 
     fun failAuthenticationRequired(
         attempt: ClaimedDownloadJob,
         errorMessage: String,
     ) {
-        val job = attempt.job
-        downloadJobService.markFailed(attempt, errorMessage)
-        statusReporter.setStatus(job, TelegramDownloadStatus.AUTHENTICATION_REQUIRED)
-        downloadAnalytics.recordAuthenticationRequiredFailure(job, errorMessage)
+        fail(
+            attempt = attempt,
+            errorMessage = errorMessage,
+            status = TelegramDownloadStatus.AUTHENTICATION_REQUIRED,
+            recordFailure = downloadAnalytics::recordAuthenticationRequiredFailure,
+        )
     }
 
     fun complete(
         attempt: ClaimedDownloadJob,
         result: DownloadedFileResult,
     ) {
-        val job = attempt.job
-        downloadJobService.markCompleted(attempt, result)
+        val job = downloadJobService.markCompleted(attempt, result)
         statusReporter.deleteStatus(job)
         downloadAnalytics.recordDownloadCompleted(job, result)
+    }
+
+    private fun retry(
+        attempt: ClaimedDownloadJob,
+        retryAt: Instant,
+        errorMessage: String,
+    ): DownloadFailureResolution {
+        val resolution = downloadJobService.retryAt(attempt, errorMessage, retryAt)
+        val status = when (resolution) {
+            is DownloadFailureResolution.RetryScheduled -> TelegramDownloadStatus.QUEUED
+            is DownloadFailureResolution.TerminalFailure -> TelegramDownloadStatus.ERROR
+        }
+        statusReporter.setStatus(resolution.job, status)
+        downloadAnalytics.recordRetryableFailure(resolution.job, errorMessage, resolution)
+        return resolution
+    }
+
+    private fun fail(
+        attempt: ClaimedDownloadJob,
+        errorMessage: String,
+        status: TelegramDownloadStatus,
+        recordFailure: (DownloadJob, String) -> Unit,
+    ) {
+        val job = downloadJobService.markFailed(attempt, errorMessage)
+        statusReporter.setStatus(job, status)
+        recordFailure(job, errorMessage)
     }
 }

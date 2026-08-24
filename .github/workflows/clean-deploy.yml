@@ -11,7 +11,7 @@ on:
           - development
           - production
       confirm:
-        description: "Type RESET to drop server containers, images, and database volume"
+        description: "Type RESET to drop server containers and volumes"
         required: true
         type: string
 
@@ -29,11 +29,27 @@ env:
   YOUTUBE_PO_TOKEN_PROVIDER_IMAGE: brainicism/bgutil-ytdlp-pot-provider:1.3.2-deno
 
 jobs:
+  validate:
+    name: Validate clean deploy target
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation and branch
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          CONFIRMATION: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "RESET"
+          case "$TARGET_ENVIRONMENT:$GITHUB_REF" in
+            development:refs/heads/develop|production:refs/heads/main) ;;
+            *) echo "Clean deploy target does not match branch: $TARGET_ENVIRONMENT from $GITHUB_REF" >&2; exit 1 ;;
+          esac
+
   checks:
     name: Tests and checks
     runs-on: ubuntu-latest
+    needs: validate
     environment: ${{ inputs.environment }}
-    if: ${{ inputs.confirm == 'RESET' }}
 
     steps:
       - name: Checkout
@@ -283,7 +299,7 @@ jobs:
           test "$DEPLOY_PATH" != "/"
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
             cd '$DEPLOY_PATH' && \
-            docker compose --profile telegram-local --profile youtube-pot down --volumes --rmi all --remove-orphans && \
+            docker compose --profile telegram-local --profile youtube-pot down --volumes --remove-orphans && \
             profiles='' && \
             if [ \"\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env)\" = 'true' ]; then profiles='telegram-local'; fi && \
             if [ \"\$(sed -n 's/^YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=//p' .env)\" = 'true' ]; then \

@@ -20,12 +20,10 @@ import java.time.Duration
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.TimeSource
 
 @Service
 class DefaultProcessRunner : ProcessRunner {
     override suspend fun run(command: Command): ProcessExecutionResult = coroutineScope {
-        val start = TimeSource.Monotonic.markNow()
         val process = ProcessBuilder(command.executable, *command.args.toTypedArray())
             .directory(command.workingDir?.toFile())
             .start()
@@ -67,7 +65,6 @@ class DefaultProcessRunner : ProcessRunner {
                 stdoutTruncated = capturedStreams.first.truncated,
                 stderrTruncated = capturedStreams.second.truncated,
                 workingDirectoryLimitExceeded = workingDirectoryLimitExceeded.get(),
-                duration = start.elapsedNow(),
             )
         } finally {
             workingDirectoryMonitor?.cancelAndJoin()

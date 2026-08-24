@@ -23,7 +23,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.seconds
 
 class YtDlpServiceTest {
     private val processRunner: ProcessRunner = mockk()
@@ -64,7 +63,6 @@ class YtDlpServiceTest {
             stdout = output,
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.extractMetadata(testRequest())
@@ -82,7 +80,6 @@ class YtDlpServiceTest {
             stdout = """{"id":"video-id","title":"Test video","formats":[{"format_id":"1"}]}""",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.extractMetadata(testRequest())
@@ -96,7 +93,6 @@ class YtDlpServiceTest {
             stdout = """{"id":"video-id","formats":[{"format_id":"22","height":720,"filesize":1000}]}""",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.extractCatalogMetadata(testRequest())
@@ -114,7 +110,6 @@ class YtDlpServiceTest {
             stderr = "runtime warning",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.extractMetadata(testRequest())
@@ -129,7 +124,6 @@ class YtDlpServiceTest {
             stdoutTruncated = true,
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -145,7 +139,6 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = true,
             exitCode = null,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -161,7 +154,6 @@ class YtDlpServiceTest {
             stderr = "yt-dlp error",
             timedOut = false,
             exitCode = 1,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -178,7 +170,6 @@ class YtDlpServiceTest {
             stderr = "ERROR: [Instagram] id: login required. Use --cookies-from-browser or --cookies",
             timedOut = false,
             exitCode = 1,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpAuthenticationRequiredException> {
@@ -195,7 +186,6 @@ class YtDlpServiceTest {
             stderr = "ERROR: [Instagram] id: Requested content is not available, rate-limit reached or login required",
             timedOut = false,
             exitCode = 1,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpAuthenticationRequiredException> {
@@ -211,7 +201,6 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -227,7 +216,6 @@ class YtDlpServiceTest {
             stdout = """{"id":"video-id","title":"Test video"}""",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         service.extractMetadata(testRequest())
@@ -252,7 +240,6 @@ class YtDlpServiceTest {
             stdout = """{"id":"video-id","title":"Test video"}""",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         serviceWithProvider.extractMetadata(youtubeRequest())
@@ -268,7 +255,6 @@ class YtDlpServiceTest {
             stdout = """{"id":"video-id","title":"Test video"}""",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         serviceWithProvider.extractMetadata(testRequest())
@@ -285,7 +271,6 @@ class YtDlpServiceTest {
             stdout = """{"id":"video-id","title":"Test video"}""",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         service.extractMetadata(youtubeRequest())
@@ -302,7 +287,6 @@ class YtDlpServiceTest {
             stdout = """{"id":"video-id","title":"Test video","filesize":1000}""",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.extractMetadata(testRequest())
@@ -317,7 +301,6 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = true,
             exitCode = null,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -333,7 +316,6 @@ class YtDlpServiceTest {
             stderr = "inspect error",
             timedOut = false,
             exitCode = 1,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -350,7 +332,6 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -369,7 +350,6 @@ class YtDlpServiceTest {
             stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.download(testRequest(), tempDir)
@@ -387,7 +367,6 @@ class YtDlpServiceTest {
             stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         localService.download(testRequest(), tempDir)
@@ -425,7 +404,6 @@ class YtDlpServiceTest {
             stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         service.download(testRequest(), tempDir)
@@ -444,7 +422,6 @@ class YtDlpServiceTest {
             stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         serviceWithProvider.download(youtubeRequest(), tempDir)
@@ -467,7 +444,6 @@ class YtDlpServiceTest {
             """.trimIndent(),
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.download(testRequest(), tempDir)
@@ -481,7 +457,6 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -499,7 +474,6 @@ class YtDlpServiceTest {
             stdout = "KRADNIK_FILEPATH:\"${missingFile.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -515,7 +489,6 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = true,
             exitCode = null,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -531,7 +504,6 @@ class YtDlpServiceTest {
             timedOut = false,
             exitCode = 137,
             workingDirectoryLimitExceeded = true,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpFileSizeLimitException> {
@@ -547,7 +519,6 @@ class YtDlpServiceTest {
             stderr = "download error",
             timedOut = false,
             exitCode = 1,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -564,7 +535,6 @@ class YtDlpServiceTest {
             stdout = "KRADNIK_FILEPATH:not-json",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         assertFailsWith<Exception> {

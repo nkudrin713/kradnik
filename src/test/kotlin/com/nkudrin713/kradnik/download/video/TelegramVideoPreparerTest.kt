@@ -18,7 +18,6 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.time.Duration.Companion.seconds
 
 class TelegramVideoPreparerTest {
     private val processRunner: ProcessRunner = mockk()
@@ -122,7 +121,6 @@ class TelegramVideoPreparerTest {
             timedOut = true,
             exitCode = null,
             stderr = "ffmpeg timeout",
-            duration = 1.seconds,
         )
 
         assertFailsWith<VideoPrepareException> {
@@ -196,7 +194,6 @@ class TelegramVideoPreparerTest {
             timedOut = false,
             exitCode = exitCode,
             stderr = output,
-            duration = 1.seconds,
         )
     }
 }

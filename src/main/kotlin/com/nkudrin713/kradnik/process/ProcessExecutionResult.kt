@@ -1,7 +1,5 @@
 package com.nkudrin713.kradnik.process
 
-import kotlin.time.Duration
-
 data class ProcessExecutionResult(
     val timedOut: Boolean,
     val exitCode: Int?,
@@ -10,7 +8,6 @@ data class ProcessExecutionResult(
     val stdoutTruncated: Boolean = false,
     val stderrTruncated: Boolean = false,
     val workingDirectoryLimitExceeded: Boolean = false,
-    val duration: Duration,
 ) {
     val diagnosticOutput: String
         get() = buildList {

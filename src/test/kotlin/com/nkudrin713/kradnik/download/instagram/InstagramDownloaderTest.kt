@@ -32,7 +32,6 @@ class InstagramDownloaderTest {
     fun returnsNotReadyWithoutCallingInstagramWhenPermitIsDeferred() = runTest {
         val request = request()
         val retryAt = Instant.parse("2026-07-15T10:00:30Z")
-        every { embedDownloader.supports(request) } returns true
         every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Deferred(retryAt)
 
         val result = assertIs<DownloadPreparation.NotReady>(downloader.prepare(request))
@@ -47,7 +46,6 @@ class InstagramDownloaderTest {
         val prepared = preparedDownload()
         val outputDir = Path.of("/tmp/output")
         val downloaded = DownloadedFile(outputDir.resolve("video.mp4"), 100)
-        every { embedDownloader.supports(request) } returns true
         every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } returns prepared
         every { rateLimiter.recordSuccess(PERMIT) } returns Unit
@@ -67,7 +65,6 @@ class InstagramDownloaderTest {
         val prepared = preparedDownload(mediaUri = null)
         val outputDir = Path.of("/tmp/output")
         val downloaded = DownloadedFile(outputDir.resolve("video.mp4"), 100)
-        every { embedDownloader.supports(request) } returns true
         every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } returns prepared
         every { rateLimiter.recordSuccess(PERMIT) } returns Unit
@@ -87,7 +84,6 @@ class InstagramDownloaderTest {
         val prepared = preparedDownload()
         val outputDir = Path.of("/tmp/output")
         val downloaded = DownloadedFile(outputDir.resolve("audio.mp3"), 100)
-        every { embedDownloader.supports(request) } returns true
         every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } returns prepared
         every { rateLimiter.recordSuccess(PERMIT) } returns Unit
@@ -109,7 +105,6 @@ class InstagramDownloaderTest {
             statusCode = 429,
             retryAfter = Duration.ofMinutes(10),
         )
-        every { embedDownloader.supports(request) } returns true
         every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } throws error
         every { rateLimiter.recordThrottle(PERMIT, Duration.ofMinutes(10)) } returns retryAt
@@ -123,7 +118,6 @@ class InstagramDownloaderTest {
     @Test
     fun reportsUnavailableInstagramContentWithoutRetry() = runTest {
         val request = request()
-        every { embedDownloader.supports(request) } returns true
         every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } throws InstagramContentUnavailableException()
 
@@ -131,16 +125,6 @@ class InstagramDownloaderTest {
 
         assertEquals("Instagram content is unavailable without authentication", result.reason)
         verify(exactly = 0) { rateLimiter.recordThrottle(any(), any()) }
-    }
-
-    @Test
-    fun rejectsUnsupportedInstagramRequestBeforeLimiter() = runTest {
-        val request = request(url = "https://www.instagram.com/stories/user/123/")
-        every { embedDownloader.supports(request) } returns false
-
-        assertIs<DownloadPreparation.TerminalFailure>(downloader.prepare(request))
-
-        verify(exactly = 0) { rateLimiter.acquire() }
     }
 
     private fun request(

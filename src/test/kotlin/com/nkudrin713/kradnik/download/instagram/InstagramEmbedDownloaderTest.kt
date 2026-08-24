@@ -15,29 +15,11 @@ import java.net.URI
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
 
 class InstagramEmbedDownloaderTest {
     private val httpClient: InstagramHttpClient = mockk(relaxed = true)
     private val downloader = InstagramEmbedDownloader(httpClient)
-
-    @Test
-    fun supportsPublicInstagramVideoUrls() {
-        assertTrue(downloader.supports(request("https://www.instagram.com/reel/ABC_123/")))
-        assertTrue(downloader.supports(request("https://instagram.com/p/ABC-123?utm_source=test")))
-        assertFalse(downloader.supports(request("https://www.instagram.com/stories/user/123/")))
-        assertFalse(downloader.supports(request("https://example.com/reel/ABC_123/")))
-        assertTrue(
-            downloader.supports(
-                request(
-                    url = "https://www.instagram.com/reel/ABC_123/",
-                    outputType = OutputType.AUDIO,
-                ),
-            ),
-        )
-    }
 
     @Test
     fun preparesDownloadFromEmbedPayload() = runTest {

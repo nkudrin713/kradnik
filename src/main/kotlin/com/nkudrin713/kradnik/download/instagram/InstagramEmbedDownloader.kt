@@ -18,10 +18,6 @@ class InstagramEmbedDownloader(
     private val objectMapper = jacksonObjectMapper()
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun supports(spec: DownloadSpec): Boolean {
-        return parseInstagramMediaUrl(spec.originalUrl) != null
-    }
-
     suspend fun prepare(spec: DownloadSpec): InstagramPreparedDownload {
         val shortcode = parseInstagramMediaUrl(spec.originalUrl)?.shortcode
             ?: throw InstagramEmbedException("Instagram URL is not supported by embed downloader")

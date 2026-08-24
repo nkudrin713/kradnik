@@ -18,10 +18,6 @@ class InstagramDownloader(
     private val ytDlpService: YtDlpService,
 ) {
     suspend fun prepare(spec: DownloadSpec): DownloadPreparation {
-        if (!embedDownloader.supports(spec)) {
-            return DownloadPreparation.TerminalFailure(UNSUPPORTED_MESSAGE)
-        }
-
         val acquiredAt = when (val decision = rateLimiter.acquire()) {
             is InstagramRateLimitDecision.Granted -> decision.acquiredAt
             is InstagramRateLimitDecision.Deferred -> return DownloadPreparation.NotReady(
@@ -77,7 +73,6 @@ class InstagramDownloader(
     }
 
     private companion object {
-        private const val UNSUPPORTED_MESSAGE = "Instagram request is not supported by embed downloader"
         private const val RATE_LIMIT_MESSAGE = "Instagram request deferred by rate limiter"
     }
 }

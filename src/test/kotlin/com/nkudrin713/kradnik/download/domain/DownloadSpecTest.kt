@@ -3,7 +3,6 @@ package com.nkudrin713.kradnik.download.domain
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 
 class DownloadSpecTest {
     @Test
@@ -47,20 +46,6 @@ class DownloadSpecTest {
         ).withAudioQuality("40K")
 
         assertEquals(listOf("-x", "--audio-format", "mp3", "--audio-quality", "40K"), actual.extraArgs)
-    }
-
-    @Test
-    fun failsWhenSelectedFormatIsMissing() {
-        assertFailsWith<IllegalArgumentException> {
-            DownloadSpec.fromJob(
-                DownloadJob(
-                    originalUrl = "https://example.com/raw",
-                    normalizedUrl = "https://example.com/normalized",
-                    outputType = OutputType.VIDEO,
-                    selectedFormat = null,
-                )
-            )
-        }
     }
 
     private fun spec(extraArgs: List<String>): DownloadSpec {

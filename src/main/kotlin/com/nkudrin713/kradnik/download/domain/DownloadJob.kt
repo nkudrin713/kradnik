@@ -69,11 +69,11 @@ class DownloadJob(
 	@Column(name = "source_audio_performer")
 	var sourceAudioPerformer: String? = null,
 
-	@Column(name = "download_preset")
-	var downloadPreset: String? = null,
+	@Column(name = "download_preset", nullable = false)
+	var downloadPreset: String = "",
 
-	@Column(name = "selected_format")
-	var selectedFormat: String? = null,
+	@Column(name = "selected_format", nullable = false)
+	var selectedFormat: String = "",
 
 	@Convert(converter = StringListJsonConverter::class)
 	@Column(name = "download_extra_args", nullable = false)

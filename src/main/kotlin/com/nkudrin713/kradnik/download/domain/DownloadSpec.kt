@@ -22,19 +22,15 @@ data class DownloadSpec(
 
     companion object {
         fun fromJob(job: DownloadJob): DownloadSpec {
-            val selectedFormat = requireNotNull(job.selectedFormat?.takeIf { it.isNotBlank() }) {
-                "Download job selected format is missing"
-            }
-
             return DownloadSpec(
                 originalUrl = job.originalUrl,
                 normalizedUrl = job.normalizedUrl,
                 cacheKey = job.cacheKey,
                 outputType = job.outputType,
                 platform = job.platform,
-                formatSelector = selectedFormat,
+                formatSelector = job.selectedFormat,
                 extraArgs = job.downloadExtraArgs,
-                presetName = job.downloadPreset ?: "default",
+                presetName = job.downloadPreset,
             )
         }
 

@@ -401,23 +401,6 @@ class DownloadJobProcessorTest {
     }
 
     @Test
-    fun marksFailedOrRetryOnError(@TempDir tempDir: Path) = runTest {
-        val job = job().apply { selectedFormat = null }
-        every { workDirCleaner.deleteRecursively(any()) } just runs
-
-        processor(tempDir).process(attempt(job))
-
-        verify {
-            downloadJobLifecycle.failOrRetry(
-                attempt(job),
-                "Download job selected format is missing",
-                null,
-            )
-        }
-        verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
-    }
-
-    @Test
     fun skipsCacheWhenCachedJobIsMissing(@TempDir tempDir: Path) = runTest {
         val job = job()
         val request = request()

@@ -5,8 +5,9 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
-import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -21,6 +22,7 @@ import kotlin.io.path.isRegularFile
 import kotlin.time.toKotlinDuration
 
 private const val DUMP_SINGLE_JSON = "--dump-single-json"
+private const val YT_DLP = "yt-dlp"
 private const val NO_PLAYLIST = "--no-playlist"
 private const val NO_WARNINGS = "--no-warnings"
 private const val NO_RESTRICT_FILENAMES = "--no-restrict-filenames"
@@ -34,6 +36,14 @@ private const val EXTRACTOR_ARGS = "--extractor-args"
 private const val YOUTUBE_PLAYER_CLIENT = "youtube:player_client=mweb"
 
 private const val TITLE_EXT = "%(title)s.%(ext)s"
+
+private data class YtDlpCommand(
+    override val args: List<String>,
+    override val workingDir: Path?,
+    override val timeout: kotlin.time.Duration,
+    override val maxWorkingDirectoryBytes: Long? = null,
+    override val executable: String = YT_DLP,
+) : Command
 
 @Service
 class YtDlpService(

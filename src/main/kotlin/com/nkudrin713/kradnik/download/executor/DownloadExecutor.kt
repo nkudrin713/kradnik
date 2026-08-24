@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.download.executor
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import java.nio.file.Path
 import java.time.Instant
@@ -9,16 +9,16 @@ import java.time.Instant
 interface DownloadExecutor {
     val strategies: Set<DownloadStrategy>
 
-    suspend fun prepare(request: DownloadRequest): DownloadPreparation
+    suspend fun prepare(spec: DownloadSpec): DownloadPreparation
 
-    suspend fun prepareCatalog(request: DownloadRequest): DownloadPreparation = prepare(request)
+    suspend fun prepareCatalog(spec: DownloadSpec): DownloadPreparation = prepare(spec)
 }
 
 interface PreparedDownloadSession {
     val metadata: YtDlpMetadataDto
 
     suspend fun download(
-        request: DownloadRequest,
+        spec: DownloadSpec,
         outputDir: Path,
     ): DownloadedFile
 }

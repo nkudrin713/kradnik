@@ -3,8 +3,8 @@ package com.nkudrin713.kradnik.download.instagram
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -25,8 +25,6 @@ class InstagramEmbedDownloaderTest {
 
     @Test
     fun supportsPublicInstagramVideoUrls() {
-        assertTrue(downloader.isInstagramRequest(request("https://www.instagram.com/stories/user/123/")))
-        assertFalse(downloader.isInstagramRequest(request("https://example.com/reel/ABC_123/")))
         assertTrue(downloader.supports(request("https://www.instagram.com/reel/ABC_123/")))
         assertTrue(downloader.supports(request("https://instagram.com/p/ABC-123?utm_source=test")))
         assertFalse(downloader.supports(request("https://www.instagram.com/stories/user/123/")))
@@ -160,10 +158,11 @@ class InstagramEmbedDownloaderTest {
     private fun request(
         url: String,
         outputType: OutputType = OutputType.VIDEO,
-    ): DownloadRequest {
-        return DownloadRequest(
+    ): DownloadSpec {
+        return DownloadSpec(
             originalUrl = url,
             normalizedUrl = url,
+            cacheKey = "instagram",
             outputType = outputType,
             strategy = DownloadStrategy.INSTAGRAM_EMBED,
             formatSelector = "format",

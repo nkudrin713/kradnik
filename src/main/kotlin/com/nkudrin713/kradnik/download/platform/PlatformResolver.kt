@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.platform
 
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import org.springframework.stereotype.Service
 
@@ -12,7 +13,7 @@ class PlatformResolver(
     fun resolve(
         url: String,
         outputType: OutputType,
-    ): ResolvedDownload {
+    ): DownloadSpec {
         val handler = handlers.firstOrNull { it.supports(url) }
             ?: throw UnsupportedPlatformException(unsupportedPlatformMessage())
 

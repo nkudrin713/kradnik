@@ -1,8 +1,7 @@
 package com.nkudrin713.kradnik.download.platform
 
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.identity.DownloadIdentity
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 
 interface PlatformDownloadHandler {
 
@@ -13,10 +12,5 @@ interface PlatformDownloadHandler {
     fun resolve(
         url: String,
         outputType: OutputType,
-    ): ResolvedDownload
+    ): DownloadSpec
 }
-
-data class ResolvedDownload(
-    val identity: DownloadIdentity,
-    val request: DownloadRequest,
-)

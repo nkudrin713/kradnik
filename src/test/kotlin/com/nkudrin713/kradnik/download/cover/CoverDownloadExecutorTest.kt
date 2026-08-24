@@ -1,12 +1,12 @@
 package com.nkudrin713.kradnik.download.cover
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.instagram.InstagramDownloadExecutor
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import io.mockk.coEvery
@@ -57,10 +57,11 @@ class CoverDownloadExecutorTest {
         )
     }
 
-    private fun request(preset: String): DownloadRequest {
-        return DownloadRequest(
+    private fun request(preset: String): DownloadSpec {
+        return DownloadSpec(
             originalUrl = "https://example.com/video",
             normalizedUrl = "https://example.com/video",
+            cacheKey = "cover",
             outputType = OutputType.COVER,
             strategy = DownloadStrategy.COVER_YT_DLP,
             formatSelector = "best",

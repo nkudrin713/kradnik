@@ -1,10 +1,10 @@
 package com.nkudrin713.kradnik.analytics
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadedFileResult
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -34,13 +34,15 @@ class DownloadAnalyticsTest {
         val command = CreateDownloadJobCommand(
             telegramUserId = 100,
             telegramChatId = 200,
-            originalUrl = "https://youtu.be/source",
-            normalizedUrl = "https://youtu.be/source",
-            cacheKey = "youtube:video:id:video:preset",
-            outputType = OutputType.VIDEO,
-            downloadStrategy = DownloadStrategy.YOUTUBE_YT_DLP,
-            downloadPreset = "youtube_mobile_video",
-            selectedFormat = "best",
+            spec = DownloadSpec(
+                originalUrl = "https://youtu.be/source",
+                normalizedUrl = "https://youtu.be/source",
+                cacheKey = "youtube:video:id:video:preset",
+                outputType = OutputType.VIDEO,
+                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+                presetName = "youtube_mobile_video",
+                formatSelector = "best",
+            ),
         )
 
         analytics.recordDownloadRequested(
@@ -83,9 +85,10 @@ class DownloadAnalyticsTest {
         val commandSlot = slot<RecordAnalyticsEventCommand>()
 
         analytics.recordPreflightDecision(
-            request = DownloadRequest(
+            spec = DownloadSpec(
                 originalUrl = "https://youtu.be/source",
                 normalizedUrl = "https://youtu.be/source",
+                cacheKey = "youtube:audio",
                 outputType = OutputType.AUDIO,
                 strategy = DownloadStrategy.YOUTUBE_YT_DLP,
                 formatSelector = "ba/bestaudio",

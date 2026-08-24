@@ -39,7 +39,7 @@ class TelegramDownloadChoiceView {
     }
 
     private fun buttonText(option: DownloadChoiceOptionSnapshot): String {
-        val label = "${option.outputType.icon} ${option.label}"
+        val label = "${option.spec.outputType.icon} ${option.label}"
         val size = option.sizeBytes ?: return label
         val prefix = if (option.approximateSize) "≈ " else ""
         val unavailable = if (option.available) "" else " · недоступно"

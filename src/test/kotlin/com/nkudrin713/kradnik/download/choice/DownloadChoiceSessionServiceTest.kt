@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.choice
 
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import io.mockk.every
@@ -84,8 +85,6 @@ class DownloadChoiceSessionServiceTest {
             telegramRequestMessageId = 200,
             telegramMenuMessageId = 500,
             plan = DownloadChoicePlan(
-                originalUrl = URL,
-                normalizedUrl = URL,
                 mediaInfo = DownloadChoiceMediaInfo("Channel", "Title", 120),
                 options = listOf(option()),
             ),
@@ -104,8 +103,6 @@ class DownloadChoiceSessionServiceTest {
             telegramUpdateId = 400,
             telegramRequestMessageId = 200,
             telegramMenuMessageId = 500,
-            originalUrl = URL,
-            normalizedUrl = URL,
             options = listOf(option),
             expiresAt = Instant.now().plusSeconds(60),
         )
@@ -119,14 +116,15 @@ class DownloadChoiceSessionServiceTest {
             approximateSize = false,
             available = available,
             unavailableReason = if (available) null else "too large",
-            originalUrl = URL,
-            normalizedUrl = URL,
-            cacheKey = "cache",
-            outputType = OutputType.VIDEO,
-            strategy = DownloadStrategy.YOUTUBE_YT_DLP,
-            presetName = "youtube_video_720",
-            formatSelector = "22",
-            extraArgs = emptyList(),
+            spec = DownloadSpec(
+                originalUrl = URL,
+                normalizedUrl = URL,
+                cacheKey = "cache",
+                outputType = OutputType.VIDEO,
+                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+                presetName = "youtube_video_720",
+                formatSelector = "22",
+            ),
         )
     }
 

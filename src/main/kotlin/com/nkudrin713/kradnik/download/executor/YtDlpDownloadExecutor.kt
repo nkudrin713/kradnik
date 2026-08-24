@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.download.executor
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.springframework.stereotype.Component
@@ -17,12 +17,12 @@ class YtDlpDownloadExecutor(
         DownloadStrategy.VK_YT_DLP,
     )
 
-    override suspend fun prepare(request: DownloadRequest): DownloadPreparation {
-        return ready(ytDlpService.extractMetadata(request))
+    override suspend fun prepare(spec: DownloadSpec): DownloadPreparation {
+        return ready(ytDlpService.extractMetadata(spec))
     }
 
-    override suspend fun prepareCatalog(request: DownloadRequest): DownloadPreparation {
-        return ready(ytDlpService.extractCatalogMetadata(request))
+    override suspend fun prepareCatalog(spec: DownloadSpec): DownloadPreparation {
+        return ready(ytDlpService.extractCatalogMetadata(spec))
     }
 
     private fun ready(metadata: YtDlpMetadataDto): DownloadPreparation {
@@ -33,10 +33,10 @@ class YtDlpDownloadExecutor(
         override val metadata: YtDlpMetadataDto,
     ) : PreparedDownloadSession {
         override suspend fun download(
-            request: DownloadRequest,
+            spec: DownloadSpec,
             outputDir: Path,
         ): DownloadedFile {
-            return ytDlpService.download(request, outputDir)
+            return ytDlpService.download(spec, outputDir)
         }
     }
 }

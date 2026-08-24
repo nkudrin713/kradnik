@@ -2,9 +2,8 @@ package com.nkudrin713.kradnik.download.service
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
-import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
@@ -28,20 +27,21 @@ class DownloadJobService(
 			}
 		}
 
+		val spec = command.spec
 		val job = downloadJobRepository.save(
 			DownloadJob(
 				telegramUserId = command.telegramUserId,
 				telegramChatId = command.telegramChatId,
 				telegramUpdateId = command.telegramUpdateId,
 				telegramRequestMessageId = command.telegramRequestMessageId,
-				originalUrl = command.originalUrl,
-				normalizedUrl = command.normalizedUrl,
-				cacheKey = command.cacheKey,
-				outputType = command.outputType,
-				downloadStrategy = command.downloadStrategy,
-				downloadPreset = command.downloadPreset,
-				selectedFormat = command.selectedFormat,
-				downloadExtraArgs = command.downloadExtraArgs,
+				originalUrl = spec.originalUrl,
+				normalizedUrl = spec.normalizedUrl,
+				cacheKey = spec.cacheKey,
+				outputType = spec.outputType,
+				downloadStrategy = spec.strategy,
+				downloadPreset = spec.presetName,
+				selectedFormat = spec.formatSelector,
+				downloadExtraArgs = spec.extraArgs,
 				telegramStatusMessageId = command.telegramStatusMessageId,
 			)
 		)
@@ -356,14 +356,7 @@ data class CreateDownloadJobCommand(
 	val telegramChatId: Long,
 	val telegramUpdateId: Int? = null,
 	val telegramRequestMessageId: Int? = null,
-	val originalUrl: String,
-	val normalizedUrl: String,
-	val cacheKey: String,
-	val outputType: OutputType,
-	val downloadStrategy: DownloadStrategy,
-	val downloadPreset: String,
-	val selectedFormat: String,
-	val downloadExtraArgs: List<String> = emptyList(),
+	val spec: DownloadSpec,
 	val telegramStatusMessageId: Int? = null,
 )
 

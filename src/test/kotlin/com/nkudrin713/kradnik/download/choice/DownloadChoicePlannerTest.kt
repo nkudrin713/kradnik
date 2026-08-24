@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.download.choice
 
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.identity.DownloadIdentity
 import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
@@ -11,8 +11,6 @@ import com.nkudrin713.kradnik.download.instagram.InstagramDownloadExecutor
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
-import com.nkudrin713.kradnik.download.platform.ResolvedDownload
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -57,7 +55,7 @@ class DownloadChoicePlannerTest {
         val audio = resolved(OutputType.AUDIO)
         every { platformResolver.resolve(URL, OutputType.VIDEO) } returns video
         every { platformResolver.resolve(URL, OutputType.AUDIO) } returns audio
-        coEvery { ytDlpService.extractCatalogMetadata(video.request) } returns metadata(
+        coEvery { ytDlpService.extractCatalogMetadata(video) } returns metadata(
             formats = listOf(
                 videoFormat("v1440", 1440, 600_000_000),
                 videoFormat("v1080", 1080, 400_000_000),
@@ -75,16 +73,16 @@ class DownloadChoicePlannerTest {
             actual.options.map { it.key },
         )
         val original = actual.options.first()
-        assertEquals("v1440+a1", original.formatSelector)
+        assertEquals("v1440+a1", original.spec.formatSelector)
         assertEquals(620_000_000, original.sizeBytes)
         assertFalse(original.approximateSize)
-        assertEquals("v720+a1", actual.options.first { it.key == "video_720" }.formatSelector)
+        assertEquals("v720+a1", actual.options.first { it.key == "video_720" }.spec.formatSelector)
         assertTrue(actual.options.first { it.key == "audio" }.approximateSize)
-        assertEquals(OutputType.COVER, actual.options.last().outputType)
-        assertEquals(DownloadStrategy.COVER_YT_DLP, actual.options.last().strategy)
-        assertEquals(actual.options.size, actual.options.map { it.cacheKey }.distinct().size)
+        assertEquals(OutputType.COVER, actual.options.last().spec.outputType)
+        assertEquals(DownloadStrategy.COVER_YT_DLP, actual.options.last().spec.strategy)
+        assertEquals(actual.options.size, actual.options.map { it.spec.cacheKey }.distinct().size)
         assertEquals(DownloadChoiceMediaInfo("Channel", "Title", 120), actual.mediaInfo)
-        coVerify(exactly = 1) { ytDlpService.extractCatalogMetadata(video.request) }
+        coVerify(exactly = 1) { ytDlpService.extractCatalogMetadata(video) }
     }
 
     @Test
@@ -92,7 +90,7 @@ class DownloadChoicePlannerTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL, OutputType.VIDEO) } returns video
         every { platformResolver.resolve(URL, OutputType.AUDIO) } returns resolved(OutputType.AUDIO)
-        coEvery { ytDlpService.extractCatalogMetadata(video.request) } returns metadata(
+        coEvery { ytDlpService.extractCatalogMetadata(video) } returns metadata(
             formats = listOf(
                 videoFormat("v720", 720, 200_000_000),
                 audioFormat("a1", 20_000_000),
@@ -102,7 +100,7 @@ class DownloadChoicePlannerTest {
         planner.plan(URL)
         planner.plan(URL)
 
-        coVerify(exactly = 1) { ytDlpService.extractCatalogMetadata(video.request) }
+        coVerify(exactly = 1) { ytDlpService.extractCatalogMetadata(video) }
     }
 
     @Test
@@ -110,7 +108,7 @@ class DownloadChoicePlannerTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL, OutputType.VIDEO) } returns video
         every { platformResolver.resolve(URL, OutputType.AUDIO) } returns resolved(OutputType.AUDIO)
-        coEvery { ytDlpService.extractCatalogMetadata(video.request) } returns metadata(
+        coEvery { ytDlpService.extractCatalogMetadata(video) } returns metadata(
             formats = listOf(
                 videoFormat("v1440", 1440, 1_990_000_000),
                 videoFormat("v720", 720, 200_000_000),
@@ -131,7 +129,7 @@ class DownloadChoicePlannerTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL, OutputType.VIDEO) } returns video
         every { platformResolver.resolve(URL, OutputType.AUDIO) } returns resolved(OutputType.AUDIO)
-        coEvery { ytDlpService.extractCatalogMetadata(video.request) } returns metadata(
+        coEvery { ytDlpService.extractCatalogMetadata(video) } returns metadata(
             formats = listOf(
                 videoFormat("v720", 720, size = null, bitrate = 1_000),
                 audioFormat("a1", size = null, bitrate = 100),
@@ -159,45 +157,41 @@ class DownloadChoicePlannerTest {
         }
         every { platformResolver.resolve(URL, OutputType.VIDEO) } returns video
         every { platformResolver.resolve(URL, OutputType.AUDIO) } returns audio
-        coEvery { instagramExecutor.prepareCatalog(video.request) } returns DownloadPreparation.Ready(session)
+        coEvery { instagramExecutor.prepareCatalog(video) } returns DownloadPreparation.Ready(session)
 
         val actual = planner.plan(URL)
 
-        assertEquals(DownloadStrategy.INSTAGRAM_EMBED, actual.options.first().strategy)
-        coVerify(exactly = 1) { instagramExecutor.prepareCatalog(video.request) }
+        assertEquals(DownloadStrategy.INSTAGRAM_EMBED, actual.options.first().spec.strategy)
+        coVerify(exactly = 1) { instagramExecutor.prepareCatalog(video) }
         coVerify(exactly = 0) { ytDlpService.extractCatalogMetadata(any()) }
     }
 
-    private fun resolved(outputType: OutputType): ResolvedDownload {
+    private fun resolved(outputType: OutputType): DownloadSpec {
         val preset = if (outputType == OutputType.AUDIO) "youtube_audio" else "youtube_h264_mobile_2gb"
-        return ResolvedDownload(
-            identity = DownloadIdentity(URL, URL, "youtube:video:id:${outputType.dbValue}:$preset"),
-            request = DownloadRequest(
-                originalUrl = URL,
-                normalizedUrl = URL,
-                outputType = outputType,
-                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
-                formatSelector = if (outputType == OutputType.AUDIO) "ba" else "best",
-                extraArgs = if (outputType == OutputType.AUDIO) {
-                    listOf("-x", "--audio-format", "mp3")
-                } else {
-                    listOf("--merge-output-format", "mp4")
-                },
-                presetName = preset,
-            ),
+        return DownloadSpec(
+            originalUrl = URL,
+            normalizedUrl = URL,
+            cacheKey = "youtube:video:id:${outputType.dbValue}:$preset",
+            outputType = outputType,
+            strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+            formatSelector = if (outputType == OutputType.AUDIO) "ba" else "best",
+            extraArgs = if (outputType == OutputType.AUDIO) {
+                listOf("-x", "--audio-format", "mp3")
+            } else {
+                listOf("--merge-output-format", "mp4")
+            },
+            presetName = preset,
         )
     }
 
-    private fun ResolvedDownload.withInstagramStrategy(): ResolvedDownload {
+    private fun DownloadSpec.withInstagramStrategy(): DownloadSpec {
         return copy(
-            request = request.copy(
-                strategy = DownloadStrategy.INSTAGRAM_EMBED,
-                presetName = if (request.outputType == OutputType.AUDIO) {
-                    "instagram_audio"
-                } else {
-                    "instagram_mobile_video"
-                },
-            ),
+            strategy = DownloadStrategy.INSTAGRAM_EMBED,
+            presetName = if (outputType == OutputType.AUDIO) {
+                "instagram_audio"
+            } else {
+                "instagram_mobile_video"
+            },
         )
     }
 

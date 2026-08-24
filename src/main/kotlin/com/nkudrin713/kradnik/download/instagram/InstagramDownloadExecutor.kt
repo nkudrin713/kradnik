@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.instagram
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadExecutor
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
@@ -8,7 +9,6 @@ import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.springframework.stereotype.Component
@@ -22,8 +22,8 @@ class InstagramDownloadExecutor(
 ) : DownloadExecutor {
     override val strategies = setOf(DownloadStrategy.INSTAGRAM_EMBED)
 
-    override suspend fun prepare(request: DownloadRequest): DownloadPreparation {
-        if (!embedDownloader.supports(request)) {
+    override suspend fun prepare(spec: DownloadSpec): DownloadPreparation {
+        if (!embedDownloader.supports(spec)) {
             return DownloadPreparation.TerminalFailure(UNSUPPORTED_MESSAGE)
         }
 
@@ -36,7 +36,7 @@ class InstagramDownloadExecutor(
         }
 
         return try {
-            val prepared = embedDownloader.prepare(request)
+            val prepared = embedDownloader.prepare(spec)
             rateLimiter.recordSuccess(permit)
             DownloadPreparation.Ready(
                 InstagramPreparedDownloadSession(prepared)
@@ -72,13 +72,13 @@ class InstagramDownloadExecutor(
         override val metadata: YtDlpMetadataDto = prepared.metadata
 
         override suspend fun download(
-            request: DownloadRequest,
+            spec: DownloadSpec,
             outputDir: Path,
         ): DownloadedFile {
-            return if (request.outputType == OutputType.VIDEO && prepared.mediaUri != null) {
+            return if (spec.outputType == OutputType.VIDEO && prepared.mediaUri != null) {
                 embedDownloader.download(prepared, outputDir)
             } else {
-                ytDlpService.download(request, outputDir)
+                ytDlpService.download(spec, outputDir)
             }
         }
     }

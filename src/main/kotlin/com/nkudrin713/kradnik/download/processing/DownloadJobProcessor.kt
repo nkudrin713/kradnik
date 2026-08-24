@@ -6,6 +6,7 @@ import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.cover.CoverTooLargeException
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.requiredId
 import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
@@ -14,7 +15,6 @@ import com.nkudrin713.kradnik.download.instagram.InstagramMediaTooLargeException
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
@@ -66,8 +66,8 @@ class DownloadJobProcessor(
                 return
             }
 
-            val request = DownloadRequest.fromJob(job)
-            val preparation = downloadExecutorResolver.resolve(request).prepare(request)
+            val spec = DownloadSpec.fromJob(job)
+            val preparation = downloadExecutorResolver.resolve(spec).prepare(spec)
             val session = when (preparation) {
                 is DownloadPreparation.Ready -> preparation.session
                 is DownloadPreparation.NotReady -> {
@@ -91,20 +91,20 @@ class DownloadJobProcessor(
                 }
             }
             val metadata = session.metadata
-            val preflightDecision = downloadPreflightService.check(request, metadata)
-            downloadAnalytics.recordPreflightDecision(request, metadata, preflightDecision)
+            val preflightDecision = downloadPreflightService.check(spec, metadata)
+            downloadAnalytics.recordPreflightDecision(spec, metadata, preflightDecision)
             if (preflightDecision is DownloadPreflightDecision.Rejected) {
                 downloadJobLifecycle.rejectTooLarge(attempt, preflightDecision.reason)
                 return
             }
-            val downloadRequest = (preflightDecision as DownloadPreflightDecision.Allowed).request
+            val downloadSpec = (preflightDecision as DownloadPreflightDecision.Allowed).spec
 
             workDirCapacityGuard.ensureDownloadCapacity(outputDir)
             downloadJobLifecycle.markDownloading(attempt)
 
             val uploadJob = markMetadata(attempt, metadata)
 
-            val downloadedFile = session.download(downloadRequest, outputDir)
+            val downloadedFile = session.download(downloadSpec, outputDir)
             val uploadFile = prepareForUpload(uploadJob, downloadedFile, outputDir, jobId)
             if (uploadFile.sizeBytes > uploadLimits.maxUploadBytes) {
                 downloadJobLifecycle.rejectTooLarge(

@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionRepository
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.ratelimit.PostgresRateLimitBucketStore
@@ -72,7 +73,13 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 SELECT COUNT(*)
                 FROM information_schema.columns
                 WHERE table_name = 'download_jobs'
-                  AND column_name IN ('telegram_update_id', 'lease_token', 'lease_expires_at', 'next_attempt_at')
+                  AND column_name IN (
+                      'telegram_update_id',
+                      'lease_token',
+                      'lease_expires_at',
+                      'next_attempt_at',
+                      'download_strategy'
+                  )
             """.trimIndent(),
             Int::class.java,
         )
@@ -85,7 +92,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             Int::class.java,
         )
 
-        assertEquals(4, columnCount)
+        assertEquals(5, columnCount)
         assertEquals(1, rateLimitTableCount)
     }
 
@@ -98,14 +105,15 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             approximateSize = false,
             available = true,
             unavailableReason = null,
-            originalUrl = "https://example.com/video",
-            normalizedUrl = "https://example.com/video",
-            cacheKey = "cover-cache",
-            outputType = OutputType.COVER,
-            strategy = DownloadStrategy.COVER_YT_DLP,
-            presetName = "youtube_cover",
-            formatSelector = "best",
-            extraArgs = emptyList(),
+            spec = DownloadSpec(
+                originalUrl = "https://example.com/video",
+                normalizedUrl = "https://example.com/video",
+                cacheKey = "cover-cache",
+                outputType = OutputType.COVER,
+                strategy = DownloadStrategy.COVER_YT_DLP,
+                presetName = "youtube_cover",
+                formatSelector = "best",
+            ),
         )
         val session = choiceSessionRepository.saveAndFlush(
             DownloadChoiceSession(
@@ -114,8 +122,6 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 telegramUpdateId = 3,
                 telegramRequestMessageId = 4,
                 telegramMenuMessageId = 5,
-                originalUrl = option.originalUrl,
-                normalizedUrl = option.normalizedUrl,
                 options = listOf(option),
                 expiresAt = Instant.now().plusSeconds(60),
             )
@@ -129,8 +135,8 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
         val persistedOption = choiceSessionRepository.findById(session.token).orElseThrow().options.single()
         val persistedJob = repository.findById(requireNotNull(coverJob.id)).orElseThrow()
-        assertEquals(OutputType.COVER, persistedOption.outputType)
-        assertEquals(DownloadStrategy.COVER_YT_DLP, persistedOption.strategy)
+        assertEquals(OutputType.COVER, persistedOption.spec.outputType)
+        assertEquals(DownloadStrategy.COVER_YT_DLP, persistedOption.spec.strategy)
         assertEquals(OutputType.COVER, persistedJob.outputType)
         assertEquals(DownloadStrategy.COVER_YT_DLP, persistedJob.downloadStrategy)
     }
@@ -192,13 +198,15 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             telegramUserId = 1,
             telegramChatId = 2,
             telegramUpdateId = 123,
-            originalUrl = "https://example.com/raw",
-            normalizedUrl = "https://example.com/normalized",
-            cacheKey = "same-update",
-            outputType = OutputType.VIDEO,
-            downloadStrategy = DownloadStrategy.YT_DLP,
-            downloadPreset = "preset",
-            selectedFormat = "format",
+            spec = DownloadSpec(
+                originalUrl = "https://example.com/raw",
+                normalizedUrl = "https://example.com/normalized",
+                cacheKey = "same-update",
+                outputType = OutputType.VIDEO,
+                strategy = DownloadStrategy.YT_DLP,
+                presetName = "preset",
+                formatSelector = "format",
+            ),
         )
         val executor = Executors.newFixedThreadPool(2)
 

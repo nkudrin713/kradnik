@@ -3,9 +3,9 @@ package com.nkudrin713.kradnik.download.instagram
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -20,17 +20,12 @@ class InstagramEmbedDownloader(
     private val objectMapper = jacksonObjectMapper()
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun isInstagramRequest(request: DownloadRequest): Boolean {
-        val uri = parseUrlOrNull(request.originalUrl.trim()) ?: return false
-        return isInstagramHost(uri.host)
+    fun supports(spec: DownloadSpec): Boolean {
+        return extractShortcode(spec.originalUrl) != null
     }
 
-    fun supports(request: DownloadRequest): Boolean {
-        return extractShortcode(request.originalUrl) != null
-    }
-
-    suspend fun prepare(request: DownloadRequest): InstagramPreparedDownload {
-        val shortcode = extractShortcode(request.originalUrl)
+    suspend fun prepare(spec: DownloadSpec): InstagramPreparedDownload {
+        val shortcode = extractShortcode(spec.originalUrl)
             ?: throw InstagramEmbedException("Instagram URL is not supported by embed downloader")
         val embedUri = URI.create("https://www.instagram.com/p/$shortcode/embed/captioned/")
         val html = try {
@@ -54,7 +49,7 @@ class InstagramEmbedDownloader(
                 id = shortcode,
                 title = "Instagram $shortcode",
                 extractor = "instagram:embed",
-                webpageUrl = request.normalizedUrl,
+                webpageUrl = spec.normalizedUrl,
                 thumbnail = context.findFirstText(DISPLAY_URL, THUMBNAIL_URL),
                 duration = context.findFirstDecimal(VIDEO_DURATION),
                 ext = "mp4",

@@ -28,7 +28,7 @@ class VkDownloadHandlerTest {
         val actual = handler.resolve(
             url = "https://new.vk.com/video-123_456?utm_source=test",
             outputType = OutputType.VIDEO,
-        ).request
+        )
 
         assertEquals("https://new.vk.com/video-123_456?utm_source=test", actual.originalUrl)
         assertEquals("https://vk.com/video-123_456", actual.normalizedUrl)
@@ -49,7 +49,7 @@ class VkDownloadHandlerTest {
         val actual = handler.resolve(
             url = "https://vk.ru/clip30014565_456240946",
             outputType = OutputType.AUDIO,
-        ).request
+        )
 
         assertEquals("https://vk.com/clip30014565_456240946", actual.normalizedUrl)
         assertEquals(OutputType.AUDIO, actual.outputType)
@@ -66,10 +66,10 @@ class VkDownloadHandlerTest {
             outputType = OutputType.VIDEO,
         )
 
-        assertEquals("https://vk.com/clip-74006511_456247211", actual.identity.normalizedUrl)
+        assertEquals("https://vk.com/clip-74006511_456247211", actual.normalizedUrl)
         assertEquals(
             "vk:clip:-74006511_456247211:video:$VK_VIDEO_PRESET",
-            actual.identity.cacheKey,
+            actual.cacheKey,
         )
     }
 
@@ -80,10 +80,10 @@ class VkDownloadHandlerTest {
             outputType = OutputType.VIDEO,
         )
 
-        assertEquals("https://vk.com/video-43215063_166094326", actual.identity.normalizedUrl)
+        assertEquals("https://vk.com/video-43215063_166094326", actual.normalizedUrl)
         assertEquals(
             "vk:video:-43215063_166094326:video:$VK_VIDEO_PRESET",
-            actual.identity.cacheKey,
+            actual.cacheKey,
         )
     }
 

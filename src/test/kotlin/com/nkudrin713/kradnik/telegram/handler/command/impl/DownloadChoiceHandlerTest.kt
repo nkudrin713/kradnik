@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
@@ -39,19 +40,19 @@ class DownloadChoiceHandlerTest {
     fun startsSelectedDownloadAndDeletesMenu() {
         val selection = readySelection()
         every { sessionService.select(any()) } returns selection
-        every { starter.startResolved(any(), any(), any(), any(), any()) } returns true
+        every { starter.start(any(), any(), any(), any(), any()) } returns true
         every { telegramSender.answerCallback("callback-id", "Выбрано: 720p", false) } just runs
         every { telegramSender.deleteMessage(100, 500) } just runs
 
         handler.handle(context(callbackData(), callbackQuery(300)))
 
         verify {
-            starter.startResolved(
+            starter.start(
                 telegramUserId = 300,
                 telegramChatId = 100,
                 telegramUpdateId = 400,
                 telegramRequestMessageId = 200,
-                resolvedDownload = selection.option.toResolvedDownload(),
+                spec = selection.option.spec,
             )
             telegramSender.deleteMessage(100, 500)
         }
@@ -64,7 +65,7 @@ class DownloadChoiceHandlerTest {
 
         handler.handle(context(callbackData(), callbackQuery(301)))
 
-        verify(exactly = 0) { starter.startResolved(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { starter.start(any(), any(), any(), any(), any()) }
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
     }
 
@@ -90,14 +91,15 @@ class DownloadChoiceHandlerTest {
             approximateSize = false,
             available = true,
             unavailableReason = null,
-            originalUrl = URL,
-            normalizedUrl = URL,
-            cacheKey = "cache:720",
-            outputType = OutputType.VIDEO,
-            strategy = DownloadStrategy.YOUTUBE_YT_DLP,
-            presetName = "video_720",
-            formatSelector = "22",
-            extraArgs = emptyList(),
+            spec = DownloadSpec(
+                originalUrl = URL,
+                normalizedUrl = URL,
+                cacheKey = "cache:720",
+                outputType = OutputType.VIDEO,
+                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+                presetName = "video_720",
+                formatSelector = "22",
+            ),
         )
         return DownloadChoiceSelection.Ready(
             session = DownloadChoiceSession(
@@ -107,8 +109,6 @@ class DownloadChoiceHandlerTest {
                 telegramUpdateId = 400,
                 telegramRequestMessageId = 200,
                 telegramMenuMessageId = 500,
-                originalUrl = URL,
-                normalizedUrl = URL,
                 options = listOf(option),
                 expiresAt = Instant.now().plusSeconds(60),
             ),

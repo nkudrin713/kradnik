@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.choice
 
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
@@ -8,8 +9,6 @@ import com.nkudrin713.kradnik.download.limit.AudioUploadPlan
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
-import com.nkudrin713.kradnik.download.platform.ResolvedDownload
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.springframework.stereotype.Component
@@ -27,8 +26,8 @@ class DownloadChoicePlanner(
     suspend fun plan(url: String): DownloadChoicePlan {
         val video = platformResolver.resolve(url, OutputType.VIDEO)
         val audio = platformResolver.resolve(url, OutputType.AUDIO)
-        val metadata = metadataCache.getOrLoad(video.identity.cacheKey) {
-            extractCatalog(video.request)
+        val metadata = metadataCache.getOrLoad(video.cacheKey) {
+            extractCatalog(video)
         }
 
         val options = buildList {
@@ -41,8 +40,6 @@ class DownloadChoicePlanner(
         }
 
         return DownloadChoicePlan(
-            originalUrl = video.identity.originalUrl,
-            normalizedUrl = video.identity.normalizedUrl,
             mediaInfo = DownloadChoiceMediaInfo(
                 channelName = metadata.channel ?: metadata.uploader,
                 title = metadata.title,
@@ -55,9 +52,9 @@ class DownloadChoicePlanner(
         )
     }
 
-    private suspend fun extractCatalog(request: DownloadRequest): YtDlpMetadataDto {
-        val executor = downloadExecutorResolver.resolve(request)
-        return when (val preparation = executor.prepareCatalog(request)) {
+    private suspend fun extractCatalog(spec: DownloadSpec): YtDlpMetadataDto {
+        val executor = downloadExecutorResolver.resolve(spec)
+        return when (val preparation = executor.prepareCatalog(spec)) {
             is DownloadPreparation.Ready -> preparation.session.metadata
             is DownloadPreparation.NotReady -> throw DownloadChoicePlanningException(
                 "Instagram временно ограничил запросы. Попробуйте позже",
@@ -75,21 +72,21 @@ class DownloadChoicePlanner(
     }
 
     private fun videoOptions(
-        resolved: ResolvedDownload,
+        spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
     ): List<DownloadChoiceOptionSnapshot> {
         val formats = metadata.formats.orEmpty()
         if (formats.isEmpty()) {
-            return fallbackOriginalOption(resolved, metadata)?.let(::listOf).orEmpty()
+            return fallbackOriginalOption(spec, metadata)?.let(::listOf).orEmpty()
         }
 
         return buildList {
             selectVideo(formats, metadata, targetHeight = null)?.let { selected ->
-                add(videoOption(resolved, VIDEO_ORIGINAL_KEY, "Оригинал", selected))
+                add(videoOption(spec, VIDEO_ORIGINAL_KEY, "Оригинал", selected))
             }
             TARGET_HEIGHTS.forEach { height ->
                 selectVideo(formats, metadata, targetHeight = height)?.let { selected ->
-                    add(videoOption(resolved, "video_$height", "${height}p", selected))
+                    add(videoOption(spec, "video_$height", "${height}p", selected))
                 }
             }
         }
@@ -133,19 +130,17 @@ class DownloadChoicePlanner(
     }
 
     private fun videoOption(
-        resolved: ResolvedDownload,
+        spec: DownloadSpec,
         key: String,
         label: String,
         selected: SelectedMedia,
     ): DownloadChoiceOptionSnapshot {
-        val presetName = "${presetPrefix(resolved.request)}_video_${key.removePrefix("video_")}"
-        val request = resolved.request.copy(
+        val selectedSpec = spec.copy(
             formatSelector = selected.formatSelector,
-            presetName = presetName,
+            presetName = "${presetPrefix(spec)}_video_${key.removePrefix("video_")}",
         )
         return option(
-            resolved = resolved,
-            request = request,
+            spec = selectedSpec,
             key = key,
             label = label,
             sizeBytes = selected.sizeBytes,
@@ -154,14 +149,13 @@ class DownloadChoicePlanner(
     }
 
     private fun fallbackOriginalOption(
-        resolved: ResolvedDownload,
+        spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
     ): DownloadChoiceOptionSnapshot? {
         val size = metadata.filesize ?: metadata.filesizeApprox ?: return null
         return option(
-            resolved = resolved,
-            request = resolved.request.copy(
-                presetName = "${presetPrefix(resolved.request)}_video_original",
+            spec = spec.copy(
+                presetName = "${presetPrefix(spec)}_video_original",
             ),
             key = VIDEO_ORIGINAL_KEY,
             label = "Оригинал",
@@ -171,17 +165,16 @@ class DownloadChoicePlanner(
     }
 
     private fun audioOption(
-        resolved: ResolvedDownload,
+        spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
     ): DownloadChoiceOptionSnapshot? {
         val plan = audioUploadPlanner.plan(metadata)
         if (plan !is AudioUploadPlan.Allowed) {
             return null
         }
-        val request = resolved.request.withAudioQuality(plan.audioQuality)
+        val selectedSpec = spec.withAudioQuality(plan.audioQuality)
         return option(
-            resolved = resolved,
-            request = request,
+            spec = selectedSpec,
             key = AUDIO_KEY,
             label = "Только звук",
             sizeBytes = plan.estimatedSizeBytes,
@@ -191,20 +184,19 @@ class DownloadChoicePlanner(
     }
 
     private fun coverOption(
-        resolved: ResolvedDownload,
+        spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
     ): DownloadChoiceOptionSnapshot? {
         metadata.thumbnail?.takeIf { it.isNotBlank() } ?: return null
-        val request = resolved.request.copy(
+        val coverSpec = spec.copy(
             outputType = OutputType.COVER,
-            strategy = resolved.request.strategy.coverStrategy(),
+            strategy = spec.strategy.coverStrategy(),
             formatSelector = "best",
             extraArgs = emptyList(),
-            presetName = "${presetPrefix(resolved.request)}_cover",
+            presetName = "${presetPrefix(spec)}_cover",
         )
         return option(
-            resolved = resolved,
-            request = request,
+            spec = coverSpec,
             key = COVER_KEY,
             label = "Обложка",
             sizeBytes = null,
@@ -214,13 +206,12 @@ class DownloadChoicePlanner(
     }
 
     private fun option(
-        resolved: ResolvedDownload,
-        request: DownloadRequest,
+        spec: DownloadSpec,
         key: String,
         label: String,
         sizeBytes: Long?,
         approximateSize: Boolean,
-        cacheKeySuffix: String = "choice:$key:${request.presetName}",
+        cacheKeySuffix: String = "choice:$key:${spec.presetName}",
     ): DownloadChoiceOptionSnapshot {
         val tooLarge = sizeBytes != null && sizeBytes > uploadLimits.maxUploadBytes
         return DownloadChoiceOptionSnapshot(
@@ -234,14 +225,7 @@ class DownloadChoicePlanner(
             } else {
                 null
             },
-            originalUrl = resolved.identity.originalUrl,
-            normalizedUrl = resolved.identity.normalizedUrl,
-            cacheKey = "${resolved.identity.cacheKey}:$cacheKeySuffix",
-            outputType = request.outputType,
-            strategy = request.strategy,
-            presetName = request.presetName,
-            formatSelector = request.formatSelector,
-            extraArgs = request.extraArgs,
+            spec = spec.copy(cacheKey = "${spec.cacheKey}:$cacheKeySuffix"),
         )
     }
 
@@ -258,8 +242,8 @@ class DownloadChoicePlanner(
         return FormatSize(bytes, approximate = true)
     }
 
-    private fun presetPrefix(request: DownloadRequest): String {
-        return when (request.strategy) {
+    private fun presetPrefix(spec: DownloadSpec): String {
+        return when (spec.strategy) {
             DownloadStrategy.YOUTUBE_YT_DLP -> "youtube"
             DownloadStrategy.VK_YT_DLP -> "vk"
             DownloadStrategy.INSTAGRAM_EMBED -> "instagram"

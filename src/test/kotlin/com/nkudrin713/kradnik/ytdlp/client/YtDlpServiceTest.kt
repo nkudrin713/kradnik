@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.ytdlp.client
 
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
@@ -578,10 +578,11 @@ class YtDlpServiceTest {
         }
     }
 
-    private fun testRequest(): DownloadRequest {
-        return DownloadRequest(
+    private fun testRequest(): DownloadSpec {
+        return DownloadSpec(
             originalUrl = "https://example.com",
             normalizedUrl = "https://example.com",
+            cacheKey = "video",
             outputType = OutputType.VIDEO,
             strategy = DownloadStrategy.YT_DLP,
             formatSelector = "bv*+ba/b",
@@ -590,7 +591,7 @@ class YtDlpServiceTest {
         )
     }
 
-    private fun youtubeRequest(): DownloadRequest {
+    private fun youtubeRequest(): DownloadSpec {
         return testRequest().copy(
             originalUrl = "https://youtube.com/watch?v=video-id",
             normalizedUrl = "https://youtube.com/watch?v=video-id",

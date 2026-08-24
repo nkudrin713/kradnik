@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadExecutor
@@ -17,7 +18,6 @@ import com.nkudrin713.kradnik.download.instagram.InstagramMediaTooLargeException
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSendResult
@@ -618,6 +618,7 @@ class DownloadJobProcessorTest {
             telegramChatId = 100,
             originalUrl = url,
             normalizedUrl = url,
+            cacheKey = "cache-key",
             outputType = outputType,
             downloadStrategy = strategy,
             downloadPreset = "preset",
@@ -630,10 +631,11 @@ class DownloadJobProcessorTest {
         outputType: OutputType = OutputType.VIDEO,
         url: String = "https://example.com/video",
         strategy: DownloadStrategy = strategyFor(url),
-    ): DownloadRequest {
-        return DownloadRequest(
+    ): DownloadSpec {
+        return DownloadSpec(
             originalUrl = url,
             normalizedUrl = url,
+            cacheKey = "cache-key",
             outputType = outputType,
             strategy = strategy,
             formatSelector = "format",

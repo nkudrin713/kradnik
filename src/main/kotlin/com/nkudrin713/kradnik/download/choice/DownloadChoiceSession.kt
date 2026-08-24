@@ -29,12 +29,6 @@ class DownloadChoiceSession(
     @Column(name = "telegram_menu_message_id", nullable = false)
     var telegramMenuMessageId: Int = 0,
 
-    @Column(name = "original_url", nullable = false)
-    var originalUrl: String = "",
-
-    @Column(name = "normalized_url", nullable = false)
-    var normalizedUrl: String = "",
-
     @Convert(converter = DownloadChoiceOptionsJsonConverter::class)
     @Column(name = "options_json", nullable = false)
     var options: List<DownloadChoiceOptionSnapshot> = emptyList(),

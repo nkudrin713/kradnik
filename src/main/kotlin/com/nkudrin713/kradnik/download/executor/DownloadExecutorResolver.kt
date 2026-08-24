@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.download.executor
 
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import org.springframework.stereotype.Component
 
 @Component
@@ -18,8 +18,8 @@ class DownloadExecutorResolver(
         }
     }
 
-    fun resolve(request: DownloadRequest): DownloadExecutor {
-        return executorsByStrategy[request.strategy]
-            ?: throw IllegalStateException("No download executor registered for strategy ${request.strategy}")
+    fun resolve(spec: DownloadSpec): DownloadExecutor {
+        return executorsByStrategy[spec.strategy]
+            ?: throw IllegalStateException("No download executor registered for strategy ${spec.strategy}")
     }
 }

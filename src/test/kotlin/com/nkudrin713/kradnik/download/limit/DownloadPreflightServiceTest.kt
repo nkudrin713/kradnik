@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.download.limit
 
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
@@ -49,7 +49,7 @@ class DownloadPreflightServiceTest {
 
         assertEquals(
             listOf("-x", "--audio-format", "mp3", "--audio-quality", "40K"),
-            assertIs<DownloadPreflightDecision.Allowed>(actual).request.extraArgs,
+            assertIs<DownloadPreflightDecision.Allowed>(actual).spec.extraArgs,
         )
     }
 
@@ -359,25 +359,26 @@ class DownloadPreflightServiceTest {
         )
     }
 
-    private fun videoRequest(): DownloadRequest {
+    private fun videoRequest(): DownloadSpec {
         return request(OutputType.VIDEO)
     }
 
-    private fun audioRequest(): DownloadRequest {
+    private fun audioRequest(): DownloadSpec {
         return request(OutputType.AUDIO)
     }
 
-    private fun audioRequest(extraArgs: List<String>): DownloadRequest {
+    private fun audioRequest(extraArgs: List<String>): DownloadSpec {
         return request(OutputType.AUDIO, extraArgs)
     }
 
     private fun request(
         outputType: OutputType,
         extraArgs: List<String> = emptyList(),
-    ): DownloadRequest {
-        return DownloadRequest(
+    ): DownloadSpec {
+        return DownloadSpec(
             originalUrl = "https://example.com",
             normalizedUrl = "https://example.com",
+            cacheKey = "video",
             outputType = outputType,
             strategy = DownloadStrategy.YT_DLP,
             formatSelector = "format",

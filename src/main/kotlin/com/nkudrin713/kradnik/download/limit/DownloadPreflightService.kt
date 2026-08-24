@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.download.limit
 
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -13,35 +13,35 @@ class DownloadPreflightService(
     private val uploadLimits: TelegramUploadLimits,
 ) {
     fun check(
-        request: DownloadRequest,
+        spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
     ): DownloadPreflightDecision {
-        if (request.outputType == OutputType.COVER) {
-            return DownloadPreflightDecision.Allowed(request)
+        if (spec.outputType == OutputType.COVER) {
+            return DownloadPreflightDecision.Allowed(spec)
         }
 
-        if (request.outputType == OutputType.AUDIO) {
+        if (spec.outputType == OutputType.AUDIO) {
             when (val plan = audioUploadPlanner.plan(metadata)) {
                 is AudioUploadPlan.Allowed -> return DownloadPreflightDecision.Allowed(
-                    request = request.withAudioQuality(plan.audioQuality),
+                    spec = spec.withAudioQuality(plan.audioQuality),
                 )
                 is AudioUploadPlan.Rejected -> return DownloadPreflightDecision.Rejected(plan.reason)
                 AudioUploadPlan.Unavailable -> Unit
             }
         }
 
-        val selectedSize = selectedSize(metadata) ?: return DownloadPreflightDecision.Allowed(request)
+        val selectedSize = selectedSize(metadata) ?: return DownloadPreflightDecision.Allowed(spec)
 
         if (selectedSize <= uploadLimits.maxUploadBytes) {
-            return DownloadPreflightDecision.Allowed(request)
+            return DownloadPreflightDecision.Allowed(spec)
         }
 
-        if (!uploadLimits.localMode && request.outputType == OutputType.VIDEO && metadata.isVertical()) {
-            return DownloadPreflightDecision.Allowed(request)
+        if (!uploadLimits.localMode && spec.outputType == OutputType.VIDEO && metadata.isVertical()) {
+            return DownloadPreflightDecision.Allowed(spec)
         }
 
         return DownloadPreflightDecision.Rejected(
-            reason = "Selected ${request.outputType.dbValue} is too large for Telegram: " +
+            reason = "Selected ${spec.outputType.dbValue} is too large for Telegram: " +
                     "sizeMb=${formatMegabytes(selectedSize)}, limitMb=${formatMegabytes(uploadLimits.maxUploadBytes)}"
         )
     }
@@ -83,7 +83,7 @@ class DownloadPreflightService(
 
 sealed interface DownloadPreflightDecision {
     data class Allowed(
-        val request: DownloadRequest,
+        val spec: DownloadSpec,
     ) : DownloadPreflightDecision
 
     data class Rejected(

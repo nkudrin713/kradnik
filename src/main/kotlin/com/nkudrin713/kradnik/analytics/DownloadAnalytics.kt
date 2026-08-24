@@ -1,9 +1,9 @@
 package com.nkudrin713.kradnik.analytics
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.requiredId
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadFailureResolution
 import com.nkudrin713.kradnik.download.service.DownloadedFileResult
@@ -25,11 +25,11 @@ class DownloadAnalytics(
                 jobId = job.id,
                 telegramUserId = command.telegramUserId,
                 telegramChatId = command.telegramChatId,
-                outputType = command.outputType,
-                cacheKey = command.cacheKey,
+                outputType = command.spec.outputType,
+                cacheKey = command.spec.cacheKey,
                 properties = mapOf(
-                    "downloadPreset" to command.downloadPreset,
-                    "selectedFormat" to command.selectedFormat,
+                    "downloadPreset" to command.spec.presetName,
+                    "selectedFormat" to command.spec.formatSelector,
                 ),
             )
         )
@@ -77,7 +77,7 @@ class DownloadAnalytics(
     }
 
     fun recordPreflightDecision(
-        request: DownloadRequest,
+        spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
         decision: DownloadPreflightDecision,
     ) {
@@ -88,7 +88,7 @@ class DownloadAnalytics(
                     is DownloadPreflightDecision.Rejected -> AnalyticsEventType.PREFLIGHT_REJECTED
                 },
                 platform = metadata.extractor,
-                outputType = request.outputType,
+                outputType = spec.outputType,
                 sourceDurationSeconds = metadata.duration?.toInt(),
                 success = decision is DownloadPreflightDecision.Allowed,
                 errorCode = if (decision is DownloadPreflightDecision.Rejected) {
@@ -97,8 +97,8 @@ class DownloadAnalytics(
                     null
                 },
                 properties = mapOf(
-                    "presetName" to request.presetName,
-                    "normalizedUrl" to request.normalizedUrl,
+                    "presetName" to spec.presetName,
+                    "normalizedUrl" to spec.normalizedUrl,
                     "filesize" to metadata.filesize,
                     "filesizeApprox" to metadata.filesizeApprox,
                     "reason" to (decision as? DownloadPreflightDecision.Rejected)?.reason,

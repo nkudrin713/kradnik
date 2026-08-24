@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.service
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
@@ -239,14 +240,16 @@ class DownloadJobServiceTest {
             telegramChatId = 2,
             telegramUpdateId = 3,
             telegramRequestMessageId = 4,
-            originalUrl = "https://example.com/raw",
-            normalizedUrl = "https://example.com/normalized",
-            cacheKey = "cache-key",
-            outputType = OutputType.AUDIO,
-            downloadStrategy = DownloadStrategy.YOUTUBE_YT_DLP,
-            downloadPreset = "preset",
-            selectedFormat = "format",
-            downloadExtraArgs = listOf("-x", "--audio-format", "mp3"),
+            spec = DownloadSpec(
+                originalUrl = "https://example.com/raw",
+                normalizedUrl = "https://example.com/normalized",
+                cacheKey = "cache-key",
+                outputType = OutputType.AUDIO,
+                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+                presetName = "preset",
+                formatSelector = "format",
+                extraArgs = listOf("-x", "--audio-format", "mp3"),
+            ),
             telegramStatusMessageId = 10,
         )
     }

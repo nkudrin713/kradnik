@@ -1,12 +1,12 @@
 package com.nkudrin713.kradnik.download.cover
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.executor.DownloadExecutor
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.instagram.InstagramDownloadExecutor
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.springframework.stereotype.Component
@@ -23,9 +23,9 @@ class CoverDownloadExecutor(
         DownloadStrategy.COVER_INSTAGRAM_EMBED,
     )
 
-    override suspend fun prepare(request: DownloadRequest): DownloadPreparation {
-        if (request.strategy == DownloadStrategy.COVER_INSTAGRAM_EMBED) {
-            return when (val preparation = instagramDownloadExecutor.prepare(request)) {
+    override suspend fun prepare(spec: DownloadSpec): DownloadPreparation {
+        if (spec.strategy == DownloadStrategy.COVER_INSTAGRAM_EMBED) {
+            return when (val preparation = instagramDownloadExecutor.prepare(spec)) {
                 is DownloadPreparation.Ready -> ready(preparation.session.metadata)
                 is DownloadPreparation.NotReady -> preparation
                 is DownloadPreparation.RetryableFailure -> preparation
@@ -34,7 +34,7 @@ class CoverDownloadExecutor(
             }
         }
 
-        return ready(ytDlpService.extractCatalogMetadata(request))
+        return ready(ytDlpService.extractCatalogMetadata(spec))
     }
 
     private fun ready(metadata: YtDlpMetadataDto): DownloadPreparation {
@@ -47,7 +47,7 @@ class CoverDownloadExecutor(
     private inner class CoverPreparedDownloadSession(
         override val metadata: YtDlpMetadataDto,
     ) : PreparedDownloadSession {
-        override suspend fun download(request: DownloadRequest, outputDir: Path): DownloadedFile {
+        override suspend fun download(spec: DownloadSpec, outputDir: Path): DownloadedFile {
             return coverDownloader.download(requireNotNull(metadata.thumbnail), outputDir)
         }
     }

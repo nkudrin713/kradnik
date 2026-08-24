@@ -28,7 +28,7 @@ class PlatformIdentityTest {
         val actual = resolver.resolve(
             url = "https://www.youtube.com/watch?v=abc&utm_source=x",
             outputType = OutputType.VIDEO,
-        ).identity
+        )
 
         assertEquals("https://www.youtube.com/watch?v=abc&utm_source=x", actual.originalUrl)
         assertEquals("https://www.youtube.com/watch?v=abc", actual.normalizedUrl)
@@ -40,7 +40,7 @@ class PlatformIdentityTest {
         val actual = resolver.resolve(
             url = "https://youtu.be/abc?t=42",
             outputType = OutputType.AUDIO,
-        ).identity
+        )
 
         assertEquals("https://www.youtube.com/watch?v=abc", actual.normalizedUrl)
         assertEquals("youtube:video:abc:audio:youtube_audio", actual.cacheKey)
@@ -51,7 +51,7 @@ class PlatformIdentityTest {
         val actual = resolver.resolve(
             url = "https://youtube.com/shorts/abc?si=tracking",
             outputType = OutputType.VIDEO,
-        ).identity
+        )
 
         assertEquals("https://www.youtube.com/watch?v=abc", actual.normalizedUrl)
         assertEquals("youtube:video:abc:video:youtube_h264_mobile_2gb", actual.cacheKey)
@@ -62,7 +62,7 @@ class PlatformIdentityTest {
         val actual = resolver.resolve(
             url = "https://youtube.com/live/abc",
             outputType = OutputType.VIDEO,
-        ).identity
+        )
 
         assertEquals("https://www.youtube.com/watch?v=abc", actual.normalizedUrl)
         assertEquals("youtube:video:abc:video:youtube_h264_mobile_2gb", actual.cacheKey)
@@ -73,7 +73,7 @@ class PlatformIdentityTest {
         val actual = resolver.resolve(
             url = "https://music.youtube.com/watch?v=abc",
             outputType = OutputType.AUDIO,
-        ).identity
+        )
 
         assertEquals("https://www.youtube.com/watch?v=abc", actual.normalizedUrl)
         assertEquals("youtube:video:abc:audio:youtube_audio", actual.cacheKey)
@@ -84,7 +84,7 @@ class PlatformIdentityTest {
         val actual = resolver.resolve(
             url = "https://www.youtube.com/embed/abc",
             outputType = OutputType.VIDEO,
-        ).identity
+        )
 
         assertEquals("https://www.youtube.com/watch?v=abc", actual.normalizedUrl)
         assertEquals("youtube:video:abc:video:youtube_h264_mobile_2gb", actual.cacheKey)
@@ -105,7 +105,7 @@ class PlatformIdentityTest {
         val actual = resolver.resolve(
             url = "https://www.instagram.com/reel/abc/?igshid=tracking",
             outputType = OutputType.VIDEO,
-        ).identity
+        )
 
         assertEquals("https://www.instagram.com/reel/abc/?igshid=tracking", actual.originalUrl)
         assertEquals("https://www.instagram.com/reel/abc/", actual.normalizedUrl)
@@ -117,7 +117,7 @@ class PlatformIdentityTest {
         val actual = resolver.resolve(
             url = "https://m.instagram.com/p/abc/?utm_source=x",
             outputType = OutputType.AUDIO,
-        ).identity
+        )
 
         assertEquals("https://www.instagram.com/p/abc/", actual.normalizedUrl)
         assertEquals("instagram:p:abc:audio:instagram_audio", actual.cacheKey)
@@ -128,7 +128,7 @@ class PlatformIdentityTest {
         val actual = resolver.resolve(
             url = "https://www.instagram.com/stories/user/123456789/",
             outputType = OutputType.VIDEO,
-        ).identity
+        )
 
         assertEquals("https://www.instagram.com/stories/user/123456789/", actual.normalizedUrl)
         assertEquals("instagram:story:user:123456789:video:instagram_mobile_video", actual.cacheKey)
@@ -139,7 +139,7 @@ class PlatformIdentityTest {
         val actual = resolver.resolve(
             url = "https://www.instagram.com/user/?igshid=x",
             outputType = OutputType.VIDEO,
-        ).identity
+        )
 
         assertEquals("https://www.instagram.com/user/", actual.normalizedUrl)
         assertEquals(
@@ -153,7 +153,7 @@ class PlatformIdentityTest {
         val actual = resolver.resolve(
             url = "https://vkvideo.ru/video-127553155_456242961?utm_source=x",
             outputType = OutputType.VIDEO,
-        ).identity
+        )
 
         assertEquals(
             "https://vkvideo.ru/video-127553155_456242961?utm_source=x",
@@ -171,11 +171,11 @@ class PlatformIdentityTest {
         val direct = resolver.resolve(
             url = "https://vk.com/clip-74006511_456247211",
             outputType = OutputType.AUDIO,
-        ).identity
+        )
         val query = resolver.resolve(
             url = "https://vk.com/clips-74006511?z=clip-74006511_456247211%2Fpl_-74006511_-2",
             outputType = OutputType.AUDIO,
-        ).identity
+        )
 
         assertEquals("https://vk.com/clip-74006511_456247211", query.normalizedUrl)
         assertEquals("vk:clip:-74006511_456247211:audio:$VK_AUDIO_PRESET", direct.cacheKey)
@@ -187,11 +187,11 @@ class PlatformIdentityTest {
         val video = resolver.resolve(
             url = "https://vk.com/video-1_2",
             outputType = OutputType.VIDEO,
-        ).identity
+        )
         val audio = resolver.resolve(
             url = "https://vk.com/video-1_2",
             outputType = OutputType.AUDIO,
-        ).identity
+        )
 
         assertEquals("vk:video:-1_2:video:$VK_VIDEO_PRESET", video.cacheKey)
         assertEquals("vk:video:-1_2:audio:$VK_AUDIO_PRESET", audio.cacheKey)

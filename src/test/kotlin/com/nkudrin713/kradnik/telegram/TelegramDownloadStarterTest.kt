@@ -2,11 +2,9 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.identity.DownloadIdentity
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
-import com.nkudrin713.kradnik.download.platform.ResolvedDownload
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -45,7 +43,7 @@ class TelegramDownloadStarterTest {
 
         assertEquals(true, started)
         assertEquals(200, command.captured.telegramRequestMessageId)
-        assertEquals("video:telegram-video-h264-v1", command.captured.cacheKey)
+        assertEquals("video:telegram-video-h264-v1", command.captured.spec.cacheKey)
         verify { downloadAnalytics.recordDownloadRequested(command.captured, job) }
     }
 
@@ -84,30 +82,24 @@ class TelegramDownloadStarterTest {
     }
 
     private fun start(outputType: OutputType): Boolean {
-        return starter.startResolved(
+        return starter.start(
             telegramUserId = 300,
             telegramChatId = 100,
             telegramUpdateId = 400,
             telegramRequestMessageId = 200,
-            resolvedDownload = resolvedDownload(outputType),
+            spec = spec(outputType),
         )
     }
 
-    private fun resolvedDownload(outputType: OutputType): ResolvedDownload {
-        return ResolvedDownload(
-            identity = DownloadIdentity(
-                originalUrl = URL,
-                normalizedUrl = URL,
-                cacheKey = "video",
-            ),
-            request = DownloadRequest(
-                originalUrl = URL,
-                normalizedUrl = URL,
-                outputType = outputType,
-                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
-                formatSelector = "format",
-                presetName = "preset",
-            ),
+    private fun spec(outputType: OutputType): DownloadSpec {
+        return DownloadSpec(
+            originalUrl = URL,
+            normalizedUrl = URL,
+            cacheKey = "video",
+            outputType = outputType,
+            strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+            formatSelector = "format",
+            presetName = "preset",
         )
     }
 

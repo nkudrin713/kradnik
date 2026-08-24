@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.pengrad.telegrambot.TelegramBot
@@ -149,14 +150,15 @@ class TelegramSenderTest {
             approximateSize = false,
             available = true,
             unavailableReason = null,
-            originalUrl = "https://example.com/video",
-            normalizedUrl = "https://example.com/video",
-            cacheKey = "cache",
-            outputType = OutputType.VIDEO,
-            strategy = DownloadStrategy.YOUTUBE_YT_DLP,
-            presetName = "video_720",
-            formatSelector = "22",
-            extraArgs = emptyList(),
+            spec = DownloadSpec(
+                originalUrl = "https://example.com/video",
+                normalizedUrl = "https://example.com/video",
+                cacheKey = "cache",
+                outputType = OutputType.VIDEO,
+                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+                presetName = "video_720",
+                formatSelector = "22",
+            ),
         )
     }
 }

@@ -1,13 +1,12 @@
 package com.nkudrin713.kradnik.download.platform
 
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.identity.DownloadIdentity
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.identity.normalizeGeneric
 import com.nkudrin713.kradnik.download.identity.parseHttpUrl
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 import java.net.URI
@@ -26,16 +25,17 @@ class InstagramDownloadHandler : PlatformDownloadHandler {
     override fun resolve(
         url: String,
         outputType: OutputType,
-    ): ResolvedDownload {
+    ): DownloadSpec {
         val originalUrl = url.trim()
         val uri = parseHttpUrl(originalUrl)
         val mediaKey = extractMediaKey(uri)
         val normalizedUrl = normalizeInstagram(uri, mediaKey)
 
-        val request = when (outputType) {
-            OutputType.VIDEO -> DownloadRequest(
+        val spec = when (outputType) {
+            OutputType.VIDEO -> DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
+                cacheKey = "",
                 outputType = outputType,
                 strategy = DownloadStrategy.INSTAGRAM_EMBED,
                 presetName = "instagram_mobile_video",
@@ -46,9 +46,10 @@ class InstagramDownloadHandler : PlatformDownloadHandler {
                 extraArgs = listOf("--merge-output-format", "mp4"),
             )
 
-            OutputType.AUDIO -> DownloadRequest(
+            OutputType.AUDIO -> DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
+                cacheKey = "",
                 outputType = outputType,
                 strategy = DownloadStrategy.INSTAGRAM_EMBED,
                 presetName = "instagram_audio",
@@ -56,9 +57,10 @@ class InstagramDownloadHandler : PlatformDownloadHandler {
                 extraArgs = listOf("-x", "--audio-format", "mp3"),
             )
 
-            OutputType.COVER -> DownloadRequest(
+            OutputType.COVER -> DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
+                cacheKey = "",
                 outputType = outputType,
                 strategy = DownloadStrategy.COVER_INSTAGRAM_EMBED,
                 presetName = "instagram_cover",
@@ -66,13 +68,8 @@ class InstagramDownloadHandler : PlatformDownloadHandler {
             )
         }
 
-        return ResolvedDownload(
-            identity = DownloadIdentity(
-                originalUrl = originalUrl,
-                normalizedUrl = normalizedUrl,
-                cacheKey = "instagram:${mediaKey ?: normalizedUrl}:${outputType.dbValue}:${request.presetName}",
-            ),
-            request = request,
+        return spec.copy(
+            cacheKey = "instagram:${mediaKey ?: normalizedUrl}:${outputType.dbValue}:${spec.presetName}",
         )
     }
 

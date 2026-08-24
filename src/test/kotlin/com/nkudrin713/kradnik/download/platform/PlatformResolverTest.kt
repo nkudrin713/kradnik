@@ -1,9 +1,8 @@
 package com.nkudrin713.kradnik.download.platform
 
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
-import com.nkudrin713.kradnik.download.identity.DownloadIdentity
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -17,7 +16,7 @@ class PlatformResolverTest {
 
         val actual = resolver.resolve("https://example.com/video", OutputType.VIDEO)
 
-        assertEquals("preset-instagram", actual.request.presetName)
+        assertEquals("preset-instagram", actual.presetName)
     }
 
     @Test
@@ -82,7 +81,7 @@ class PlatformResolverTest {
         val actual = YouTubeDownloadHandler().resolve(
             url = "https://youtube.com/watch?v=id",
             outputType = OutputType.AUDIO,
-        ).request
+        )
 
         assertEquals("https://youtube.com/watch?v=id", actual.originalUrl)
         assertEquals("https://www.youtube.com/watch?v=id", actual.normalizedUrl)
@@ -107,7 +106,7 @@ class PlatformResolverTest {
         val actual = YouTubeDownloadHandler().resolve(
             url = "https://youtube.com/watch?v=id",
             outputType = OutputType.VIDEO,
-        ).request
+        )
 
         assertEquals("https://youtube.com/watch?v=id", actual.originalUrl)
         assertEquals(OutputType.VIDEO, actual.outputType)
@@ -136,7 +135,7 @@ class PlatformResolverTest {
         val actual = InstagramDownloadHandler().resolve(
             url = "https://www.instagram.com/reel/abc/?igshid=tracking",
             outputType = OutputType.VIDEO,
-        ).request
+        )
 
         assertEquals("https://www.instagram.com/reel/abc/?igshid=tracking", actual.originalUrl)
         assertEquals("https://www.instagram.com/reel/abc/", actual.normalizedUrl)
@@ -153,7 +152,7 @@ class PlatformResolverTest {
         val actual = InstagramDownloadHandler().resolve(
             url = "https://www.instagram.com/p/abc/",
             outputType = OutputType.AUDIO,
-        ).request
+        )
 
         assertEquals("https://www.instagram.com/p/abc/", actual.normalizedUrl)
         assertEquals(OutputType.AUDIO, actual.outputType)
@@ -175,22 +174,15 @@ class PlatformResolverTest {
             override fun resolve(
                 url: String,
                 outputType: OutputType,
-            ): ResolvedDownload {
-                val request = DownloadRequest(
+            ): DownloadSpec {
+                return DownloadSpec(
                     originalUrl = url,
                     normalizedUrl = url,
+                    cacheKey = "cache-key",
                     outputType = outputType,
                     strategy = DownloadStrategy.YT_DLP,
                     formatSelector = "format",
                     presetName = "preset-${platform.name.lowercase()}",
-                )
-                return ResolvedDownload(
-                    identity = DownloadIdentity(
-                        originalUrl = url,
-                        normalizedUrl = url,
-                        cacheKey = "cache-key",
-                    ),
-                    request = request,
                 )
             }
         }

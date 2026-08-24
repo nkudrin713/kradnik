@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -55,16 +55,16 @@ class YtDlpService(
         require(downloadTimeout.isPositive()) { "download.yt-dlp.download-timeout must be positive" }
     }
 
-    suspend fun extractMetadata(request: DownloadRequest): YtDlpMetadataDto {
-        return extractMetadata(request, request.formatSelector)
+    suspend fun extractMetadata(spec: DownloadSpec): YtDlpMetadataDto {
+        return extractMetadata(spec, spec.formatSelector)
     }
 
-    suspend fun extractCatalogMetadata(request: DownloadRequest): YtDlpMetadataDto {
-        return extractMetadata(request, formatSelector = null)
+    suspend fun extractCatalogMetadata(spec: DownloadSpec): YtDlpMetadataDto {
+        return extractMetadata(spec, formatSelector = null)
     }
 
     private suspend fun extractMetadata(
-        request: DownloadRequest,
+        spec: DownloadSpec,
         formatSelector: String?,
     ): YtDlpMetadataDto {
         val result = processRunner.run(
@@ -77,8 +77,8 @@ class YtDlpService(
                         add(FORMAT)
                         add(formatSelector)
                     }
-                    addAll(youtubePoTokenArgs(request))
-                    add(request.originalUrl)
+                    addAll(youtubePoTokenArgs(spec))
+                    add(spec.originalUrl)
                 },
                 workingDir = null,
                 timeout = metadataTimeout.toKotlinDuration(),
@@ -97,7 +97,7 @@ class YtDlpService(
     }
 
     suspend fun download(
-        request: DownloadRequest,
+        spec: DownloadSpec,
         outputDir: Path,
     ): DownloadedFile {
         val args = buildList {
@@ -105,7 +105,7 @@ class YtDlpService(
             add(NO_WARNINGS)
             add(NO_RESTRICT_FILENAMES)
             add(FORMAT)
-            add(request.formatSelector)
+            add(spec.formatSelector)
             add(OUTPUT)
             add(TITLE_EXT)
             if (uploadLimits.localMode) {
@@ -114,9 +114,9 @@ class YtDlpService(
             }
             add(PRINT)
             add(FINAL_FILEPATH)
-            addAll(youtubePoTokenArgs(request))
-            addAll(request.extraArgs)
-            add(request.originalUrl)
+            addAll(youtubePoTokenArgs(spec))
+            addAll(spec.extraArgs)
+            add(spec.originalUrl)
         }
 
         val result = processRunner.run(
@@ -166,9 +166,9 @@ class YtDlpService(
         return file
     }
 
-    private fun youtubePoTokenArgs(request: DownloadRequest): List<String> {
+    private fun youtubePoTokenArgs(spec: DownloadSpec): List<String> {
         val providerUrl = youtubePoTokenProviderUrl.trim().trimEnd('/')
-        if (request.strategy != DownloadStrategy.YOUTUBE_YT_DLP || providerUrl.isEmpty()) {
+        if (spec.strategy != DownloadStrategy.YOUTUBE_YT_DLP || providerUrl.isEmpty()) {
             return emptyList()
         }
 

@@ -1,12 +1,12 @@
 package com.nkudrin713.kradnik.download.instagram
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import io.mockk.coEvery
@@ -148,10 +148,11 @@ class InstagramDownloadExecutorTest {
     private fun request(
         outputType: OutputType = OutputType.VIDEO,
         url: String = "https://www.instagram.com/reel/ABC_123/",
-    ): DownloadRequest {
-        return DownloadRequest(
+    ): DownloadSpec {
+        return DownloadSpec(
             originalUrl = url,
             normalizedUrl = url,
+            cacheKey = "instagram",
             outputType = outputType,
             strategy = DownloadStrategy.INSTAGRAM_EMBED,
             formatSelector = "format",

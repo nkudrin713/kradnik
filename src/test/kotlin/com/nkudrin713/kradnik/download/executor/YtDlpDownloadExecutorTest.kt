@@ -1,9 +1,9 @@
 package com.nkudrin713.kradnik.download.executor
 
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.VK_VIDEO_PRESET
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
@@ -75,10 +75,11 @@ class YtDlpDownloadExecutorTest {
         coVerify(exactly = 1) { ytDlpService.extractMetadata(request) }
     }
 
-    private fun request(): DownloadRequest {
-        return DownloadRequest(
+    private fun request(): DownloadSpec {
+        return DownloadSpec(
             originalUrl = "https://m.vk.com/video-1_2?list=access-token",
             normalizedUrl = "https://vk.com/video-1_2",
+            cacheKey = "vk:video:-1_2",
             outputType = OutputType.VIDEO,
             strategy = DownloadStrategy.VK_YT_DLP,
             formatSelector = "format",

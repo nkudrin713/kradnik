@@ -1,19 +1,18 @@
-package com.nkudrin713.kradnik.download.request
+package com.nkudrin713.kradnik.download.domain
 
-import com.nkudrin713.kradnik.download.domain.DownloadJob
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 
-data class DownloadRequest(
+data class DownloadSpec(
     val originalUrl: String,
     val normalizedUrl: String,
+    val cacheKey: String,
     val outputType: OutputType,
     val strategy: DownloadStrategy,
     val formatSelector: String,
     val extraArgs: List<String> = emptyList(),
     val presetName: String,
 ) {
-    fun withAudioQuality(audioQuality: String): DownloadRequest {
+    fun withAudioQuality(audioQuality: String): DownloadSpec {
         val args = extraArgs
             .withoutAudioQuality()
             .plus(listOf(AUDIO_QUALITY_ARG, audioQuality))
@@ -22,14 +21,15 @@ data class DownloadRequest(
     }
 
     companion object {
-        fun fromJob(job: DownloadJob): DownloadRequest {
+        fun fromJob(job: DownloadJob): DownloadSpec {
             val selectedFormat = requireNotNull(job.selectedFormat?.takeIf { it.isNotBlank() }) {
                 "Download job selected format is missing"
             }
 
-            return DownloadRequest(
+            return DownloadSpec(
                 originalUrl = job.originalUrl,
                 normalizedUrl = job.normalizedUrl,
+                cacheKey = job.cacheKey,
                 outputType = job.outputType,
                 strategy = job.downloadStrategy,
                 formatSelector = selectedFormat,

@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.download.executor
 
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.request.DownloadRequest
 import io.mockk.every
 import io.mockk.mockk
 import kotlin.test.Test
@@ -43,10 +43,11 @@ class DownloadExecutorResolverTest {
         }
     }
 
-    private fun request(): DownloadRequest {
-        return DownloadRequest(
+    private fun request(): DownloadSpec {
+        return DownloadSpec(
             originalUrl = "https://example.com/video",
             normalizedUrl = "https://example.com/video",
+            cacheKey = "video",
             outputType = OutputType.VIDEO,
             strategy = DownloadStrategy.VK_YT_DLP,
             formatSelector = "format",

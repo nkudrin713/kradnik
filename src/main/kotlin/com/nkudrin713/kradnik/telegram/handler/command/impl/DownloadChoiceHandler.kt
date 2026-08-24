@@ -63,12 +63,12 @@ class DownloadChoiceHandler(
         selection: DownloadChoiceSelection.Ready,
     ) {
         try {
-            telegramDownloadStarter.startResolved(
+            telegramDownloadStarter.start(
                 telegramUserId = selection.session.telegramUserId,
                 telegramChatId = selection.session.telegramChatId,
                 telegramUpdateId = selection.session.telegramUpdateId,
                 telegramRequestMessageId = selection.session.telegramRequestMessageId,
-                resolvedDownload = selection.option.toResolvedDownload(),
+                spec = selection.option.spec,
             )
         } catch (error: Exception) {
             sessionService.release(callback.sessionToken)

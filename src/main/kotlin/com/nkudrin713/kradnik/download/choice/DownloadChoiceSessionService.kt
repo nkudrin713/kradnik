@@ -28,8 +28,6 @@ class DownloadChoiceSessionService(
                 telegramUpdateId = command.telegramUpdateId,
                 telegramRequestMessageId = command.telegramRequestMessageId,
                 telegramMenuMessageId = command.telegramMenuMessageId,
-                originalUrl = command.plan.originalUrl,
-                normalizedUrl = command.plan.normalizedUrl,
                 options = command.plan.options,
                 expiresAt = now.plus(sessionTtl),
             ),

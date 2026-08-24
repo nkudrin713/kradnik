@@ -2,7 +2,7 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.analytics.DownloadAnalytics
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.platform.ResolvedDownload
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -18,35 +18,29 @@ class TelegramDownloadStarter(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun startResolved(
+    fun start(
         telegramUserId: Long,
         telegramChatId: Long,
         telegramUpdateId: Int,
         telegramRequestMessageId: Int,
-        resolvedDownload: ResolvedDownload,
+        spec: DownloadSpec,
     ): Boolean {
-        val request = resolvedDownload.request
-        val identity = resolvedDownload.identity
         val statusMessageId = telegramSender.sendStatus(
             telegramChatId,
             TelegramDownloadStatus.QUEUED,
+        )
+        val jobSpec = spec.copy(
+            cacheKey = when (spec.outputType) {
+                OutputType.VIDEO -> TelegramVideoPolicy.versionCacheKey(spec.cacheKey)
+                OutputType.AUDIO, OutputType.COVER -> spec.cacheKey
+            },
         )
         val command = CreateDownloadJobCommand(
             telegramUserId = telegramUserId,
             telegramChatId = telegramChatId,
             telegramUpdateId = telegramUpdateId,
             telegramRequestMessageId = telegramRequestMessageId,
-            originalUrl = identity.originalUrl,
-            normalizedUrl = identity.normalizedUrl,
-            cacheKey = when (request.outputType) {
-                OutputType.VIDEO -> TelegramVideoPolicy.versionCacheKey(identity.cacheKey)
-                OutputType.AUDIO, OutputType.COVER -> identity.cacheKey
-            },
-            outputType = request.outputType,
-            downloadStrategy = request.strategy,
-            downloadPreset = request.presetName,
-            selectedFormat = request.formatSelector,
-            downloadExtraArgs = request.extraArgs,
+            spec = jobSpec,
             telegramStatusMessageId = statusMessageId,
         )
         val result = try {

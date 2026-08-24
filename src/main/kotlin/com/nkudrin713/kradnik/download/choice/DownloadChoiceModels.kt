@@ -1,14 +1,8 @@
 package com.nkudrin713.kradnik.download.choice
 
-import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.identity.DownloadIdentity
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
-import com.nkudrin713.kradnik.download.platform.ResolvedDownload
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 
 data class DownloadChoicePlan(
-    val originalUrl: String,
-    val normalizedUrl: String,
     val mediaInfo: DownloadChoiceMediaInfo,
     val options: List<DownloadChoiceOptionSnapshot>,
 )
@@ -26,34 +20,8 @@ data class DownloadChoiceOptionSnapshot(
     val approximateSize: Boolean,
     val available: Boolean,
     val unavailableReason: String?,
-    val originalUrl: String,
-    val normalizedUrl: String,
-    val cacheKey: String,
-    val outputType: OutputType,
-    val strategy: DownloadStrategy,
-    val presetName: String,
-    val formatSelector: String,
-    val extraArgs: List<String>,
-) {
-    fun toResolvedDownload(): ResolvedDownload {
-        return ResolvedDownload(
-            identity = DownloadIdentity(
-                originalUrl = originalUrl,
-                normalizedUrl = normalizedUrl,
-                cacheKey = cacheKey,
-            ),
-            request = DownloadRequest(
-                originalUrl = originalUrl,
-                normalizedUrl = normalizedUrl,
-                outputType = outputType,
-                strategy = strategy,
-                formatSelector = formatSelector,
-                extraArgs = extraArgs,
-                presetName = presetName,
-            ),
-        )
-    }
-}
+    val spec: DownloadSpec,
+)
 
 object DownloadSizeFormatter {
     fun format(bytes: Long): String {

@@ -41,7 +41,7 @@ class DownloadChoiceHandlerTest {
     fun startsSelectedDownloadAndDeletesMenu() {
         val selection = readySelection()
         every { sessionService.select(any()) } returns selection
-        every { starter.start(any(), any(), any(), any(), any()) } returns true
+        every { starter.start(any(), any(), any(), any(), any()) } just runs
         every { telegramSender.answerCallback("callback-id", "Выбрано: 720p", false) } just runs
         every { telegramSender.deleteMessage(100, 500) } just runs
 

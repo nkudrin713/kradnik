@@ -9,7 +9,6 @@ import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
-import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -196,8 +195,8 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             executor.shutdownNow()
         }
 
-        assertEquals(1, results.count { it is CreateDownloadJobResult.Created })
-        assertEquals(1, results.count { it is CreateDownloadJobResult.Existing })
+        assertEquals(1, results.count { it })
+        assertEquals(1, results.count { !it })
         assertEquals(1, repository.count())
     }
 

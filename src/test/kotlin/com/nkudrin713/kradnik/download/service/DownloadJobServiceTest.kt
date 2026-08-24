@@ -8,11 +8,13 @@ import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import java.time.Instant
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -23,26 +25,28 @@ class DownloadJobServiceTest {
 
     @Test
     fun createsJobAtomicallyForTelegramUpdate() {
+        val savedJob = slot<DownloadJob>()
         every { repository.lockTelegramUpdate(3) } returns 1
         every { repository.findByTelegramUpdateId(3) } returns null
-        every { repository.save(any()) } answers { firstArg() }
+        every { repository.save(capture(savedJob)) } answers { firstArg() }
 
-        val actual = service.createJob(command())
+        val created = service.createJob(command())
+        val actual = savedJob.captured
 
-        assertTrue(actual is CreateDownloadJobResult.Created)
-        assertEquals(1, actual.job.telegramUserId)
-        assertEquals(2, actual.job.telegramChatId)
-        assertEquals(3, actual.job.telegramUpdateId)
-        assertEquals(4, actual.job.telegramRequestMessageId)
-        assertEquals("https://example.com/raw", actual.job.originalUrl)
-        assertEquals("https://example.com/normalized", actual.job.normalizedUrl)
-        assertEquals("cache-key", actual.job.cacheKey)
-        assertEquals(OutputType.AUDIO, actual.job.outputType)
-        assertEquals(DownloadPlatform.YOUTUBE, actual.job.platform)
-        assertEquals("preset", actual.job.downloadPreset)
-        assertEquals("format", actual.job.selectedFormat)
-        assertEquals(listOf("-x", "--audio-format", "mp3"), actual.job.downloadExtraArgs)
-        assertEquals(10, actual.job.telegramStatusMessageId)
+        assertTrue(created)
+        assertEquals(1, actual.telegramUserId)
+        assertEquals(2, actual.telegramChatId)
+        assertEquals(3, actual.telegramUpdateId)
+        assertEquals(4, actual.telegramRequestMessageId)
+        assertEquals("https://example.com/raw", actual.originalUrl)
+        assertEquals("https://example.com/normalized", actual.normalizedUrl)
+        assertEquals("cache-key", actual.cacheKey)
+        assertEquals(OutputType.AUDIO, actual.outputType)
+        assertEquals(DownloadPlatform.YOUTUBE, actual.platform)
+        assertEquals("preset", actual.downloadPreset)
+        assertEquals("format", actual.selectedFormat)
+        assertEquals(listOf("-x", "--audio-format", "mp3"), actual.downloadExtraArgs)
+        assertEquals(10, actual.telegramStatusMessageId)
         verify { repository.lockTelegramUpdate(3) }
     }
 
@@ -52,10 +56,9 @@ class DownloadJobServiceTest {
         every { repository.lockTelegramUpdate(3) } returns 1
         every { repository.findByTelegramUpdateId(3) } returns existing
 
-        val actual = service.createJob(command())
+        val created = service.createJob(command())
 
-        assertTrue(actual is CreateDownloadJobResult.Existing)
-        assertEquals(existing, actual.job)
+        assertFalse(created)
         verify(exactly = 0) { repository.save(any()) }
     }
 

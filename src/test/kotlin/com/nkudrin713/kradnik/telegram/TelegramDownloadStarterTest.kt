@@ -1,11 +1,9 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
-import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import io.mockk.every
 import io.mockk.just
@@ -28,17 +26,15 @@ class TelegramDownloadStarterTest {
     @Test
     fun createsJobWithRequestMessage() {
         val command = slot<CreateDownloadJobCommand>()
-        val job = DownloadJob(id = 1)
         every {
             telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED)
         } returns 500
         every {
             downloadJobService.createJob(capture(command))
-        } returns CreateDownloadJobResult.Created(job)
+        } returns true
 
-        val started = start(OutputType.VIDEO)
+        start(OutputType.VIDEO)
 
-        assertEquals(true, started)
         assertEquals(200, command.captured.telegramRequestMessageId)
         assertEquals("video:telegram-video-h264-v1", command.captured.spec.cacheKey)
     }
@@ -50,12 +46,11 @@ class TelegramDownloadStarterTest {
         } returns 500
         every {
             downloadJobService.createJob(any())
-        } returns CreateDownloadJobResult.Existing(DownloadJob(id = 1))
+        } returns false
         every { telegramSender.deleteMessage(100, 500) } just runs
 
-        val started = start(OutputType.AUDIO)
+        start(OutputType.AUDIO)
 
-        assertEquals(true, started)
         verify { telegramSender.deleteMessage(100, 500) }
     }
 
@@ -76,8 +71,8 @@ class TelegramDownloadStarterTest {
         verify { telegramSender.deleteMessage(100, 500) }
     }
 
-    private fun start(outputType: OutputType): Boolean {
-        return starter.start(
+    private fun start(outputType: OutputType) {
+        starter.start(
             telegramUserId = 300,
             telegramChatId = 100,
             telegramUpdateId = 400,

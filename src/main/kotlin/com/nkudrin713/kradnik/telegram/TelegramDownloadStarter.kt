@@ -3,7 +3,6 @@ package com.nkudrin713.kradnik.telegram
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
-import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.video.TelegramVideoPolicy
 import org.slf4j.LoggerFactory
@@ -22,7 +21,7 @@ class TelegramDownloadStarter(
         telegramUpdateId: Int,
         telegramRequestMessageId: Int,
         spec: DownloadSpec,
-    ): Boolean {
+    ) {
         val statusMessageId = telegramSender.sendStatus(
             telegramChatId,
             TelegramDownloadStatus.QUEUED,
@@ -41,17 +40,16 @@ class TelegramDownloadStarter(
             spec = jobSpec,
             telegramStatusMessageId = statusMessageId,
         )
-        val result = try {
+        val created = try {
             downloadJobService.createJob(command)
         } catch (error: Exception) {
             deleteStatusBestEffort(telegramChatId, statusMessageId)
             throw error
         }
 
-        if (result is CreateDownloadJobResult.Existing) {
+        if (!created) {
             deleteStatusBestEffort(telegramChatId, statusMessageId)
         }
-        return true
     }
 
     private fun deleteStatusBestEffort(chatId: Long, messageId: Int) {

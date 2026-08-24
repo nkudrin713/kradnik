@@ -1,17 +1,18 @@
-package com.nkudrin713.kradnik.telegram.handler.command.impl
+package com.nkudrin713.kradnik.telegram.handler
 
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramSender
-import com.nkudrin713.kradnik.telegram.handler.TelegramCallbackContext
 import com.pengrad.telegrambot.model.CallbackQuery
+import com.pengrad.telegrambot.model.Chat
+import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.User
 import io.mockk.every
 import io.mockk.just
@@ -21,7 +22,6 @@ import io.mockk.verify
 import java.time.Instant
 import java.util.UUID
 import kotlin.test.Test
-import kotlin.test.assertEquals
 
 class DownloadChoiceHandlerTest {
     private val sessionService: DownloadChoiceSessionService = mockk()
@@ -31,9 +31,10 @@ class DownloadChoiceHandlerTest {
     private val token = UUID.randomUUID()
 
     @Test
-    fun supportsDownloadChoiceCallbacks() {
-        assertEquals(true, handler.supports(context(callbackData())))
-        assertEquals(false, handler.supports(context("mode:video")))
+    fun ignoresUnrelatedCallbacks() {
+        handler.handle(callbackQuery(userId = 300, callbackData = "mode:video"))
+
+        verify(exactly = 0) { sessionService.select(any()) }
     }
 
     @Test
@@ -44,7 +45,7 @@ class DownloadChoiceHandlerTest {
         every { telegramSender.answerCallback("callback-id", "Выбрано: 720p", false) } just runs
         every { telegramSender.deleteMessage(100, 500) } just runs
 
-        handler.handle(context(callbackData(), callbackQuery(300)))
+        handler.handle(callbackQuery(userId = 300))
 
         verify {
             starter.start(
@@ -63,7 +64,7 @@ class DownloadChoiceHandlerTest {
         every { sessionService.select(any()) } returns DownloadChoiceSelection.NotOwner
         every { telegramSender.answerCallback("callback-id", "Это меню другого пользователя", true) } just runs
 
-        handler.handle(context(callbackData(), callbackQuery(301)))
+        handler.handle(callbackQuery(userId = 301))
 
         verify(exactly = 0) { starter.start(any(), any(), any(), any(), any()) }
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
@@ -80,7 +81,7 @@ class DownloadChoiceHandlerTest {
             )
         } just runs
 
-        handler.handle(context(callbackData(), callbackQuery(300)))
+        handler.handle(callbackQuery(userId = 300))
     }
 
     private fun readySelection(): DownloadChoiceSelection.Ready {
@@ -116,27 +117,21 @@ class DownloadChoiceHandlerTest {
         )
     }
 
-    private fun context(
-        text: String,
-        callbackQuery: CallbackQuery = mockk(relaxed = true),
-    ): TelegramCallbackContext {
-        return TelegramCallbackContext(
-            update = mockk(),
-            callbackQuery = callbackQuery,
-            text = text,
-            chatId = 100,
-            messageId = 500,
-        )
-    }
-
-    private fun callbackQuery(userId: Long): CallbackQuery {
+    private fun callbackQuery(
+        userId: Long,
+        callbackData: String = DownloadChoiceCallback.encode(token, "video_720"),
+    ): CallbackQuery {
+        val message = mockk<Message> {
+            every { chat() } returns mockk<Chat> { every { id() } returns 100 }
+            every { messageId() } returns 500
+        }
         return mockk {
             every { id() } returns "callback-id"
+            every { data() } returns callbackData
             every { from() } returns mockk<User> { every { id() } returns userId }
+            every { message() } returns message
         }
     }
-
-    private fun callbackData(): String = DownloadChoiceCallback.encode(token, "video_720")
 
     private companion object {
         private const val URL = "https://example.com/video"

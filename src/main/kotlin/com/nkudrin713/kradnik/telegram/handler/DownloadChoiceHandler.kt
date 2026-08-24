@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.telegram.handler.command.impl
+package com.nkudrin713.kradnik.telegram.handler
 
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
@@ -6,40 +6,41 @@ import com.nkudrin713.kradnik.download.choice.SelectDownloadChoiceCommand
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramSender
-import com.nkudrin713.kradnik.telegram.handler.TelegramCallbackContext
-import com.nkudrin713.kradnik.telegram.handler.command.TelegramCallbackHandler
+import com.pengrad.telegrambot.model.CallbackQuery
 import org.slf4j.LoggerFactory
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 
 @Component
-@Order(16)
 class DownloadChoiceHandler(
     private val sessionService: DownloadChoiceSessionService,
     private val telegramDownloadStarter: TelegramDownloadStarter,
     private val telegramSender: TelegramSender,
-) : TelegramCallbackHandler {
+) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    override fun supports(context: TelegramCallbackContext): Boolean {
-        return DownloadChoiceCallback.parse(context.text) != null
-    }
-
-    override fun handle(context: TelegramCallbackContext) {
-        val callback = requireNotNull(DownloadChoiceCallback.parse(context.text))
-        val callbackQuery = context.callbackQuery
+    fun handle(callbackQuery: CallbackQuery) {
+        val callback = DownloadChoiceCallback.parse(callbackQuery.data().trim()) ?: return
+        val message = callbackQuery.message()
+        val chatId = message.chat().id()
+        val messageId = message.messageId()
         val selection = sessionService.select(
             SelectDownloadChoiceCommand(
                 token = callback.sessionToken,
                 optionKey = callback.optionKey,
                 telegramUserId = callbackQuery.from().id(),
-                telegramChatId = context.chatId,
-                telegramMenuMessageId = context.messageId,
+                telegramChatId = chatId,
+                telegramMenuMessageId = messageId,
             )
         )
 
         when (selection) {
-            is DownloadChoiceSelection.Ready -> startDownload(context, callbackQuery.id(), callback, selection)
+            is DownloadChoiceSelection.Ready -> startDownload(
+                chatId = chatId,
+                messageId = messageId,
+                callbackQueryId = callbackQuery.id(),
+                callback = callback,
+                selection = selection,
+            )
             is DownloadChoiceSelection.Unavailable -> answer(callbackQuery.id(), selection.reason, showAlert = true)
             DownloadChoiceSelection.Expired -> answer(
                 callbackQuery.id(),
@@ -57,7 +58,8 @@ class DownloadChoiceHandler(
     }
 
     private fun startDownload(
-        context: TelegramCallbackContext,
+        chatId: Long,
+        messageId: Int,
         callbackQueryId: String,
         callback: DownloadChoiceCallback,
         selection: DownloadChoiceSelection.Ready,
@@ -76,7 +78,7 @@ class DownloadChoiceHandler(
         }
 
         answer(callbackQueryId, "Выбрано: ${selection.option.label}")
-        deleteMenuBestEffort(context.chatId, context.messageId)
+        deleteMenuBestEffort(chatId, messageId)
     }
 
     private fun answer(callbackQueryId: String, text: String, showAlert: Boolean = false) {

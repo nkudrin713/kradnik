@@ -198,9 +198,7 @@ class DownloadChoicePlannerTest {
     ): YtDlpFormatDto {
         return YtDlpFormatDto(
             formatId = id,
-            formatNote = null,
             ext = if (height == null) "m4a" else "mp4",
-            width = height?.times(16)?.div(9),
             height = height,
             fps = if (height == null) null else BigDecimal.valueOf(30),
             filesize = size,
@@ -215,25 +213,16 @@ class DownloadChoicePlannerTest {
 
     private fun metadata(formats: List<YtDlpFormatDto>): YtDlpMetadataDto {
         return YtDlpMetadataDto(
-            id = "id",
             title = "Title",
             extractor = "youtube",
-            webpageUrl = URL,
             thumbnail = "https://i.ytimg.com/vi/id/maxresdefault.jpg",
             duration = BigDecimal.valueOf(120),
-            ext = null,
             width = null,
             height = null,
-            fps = null,
             filesize = null,
-            vcodec = null,
-            acodec = null,
             filesizeApprox = null,
-            formatId = null,
-            format = null,
             track = null,
             artist = null,
-            creator = null,
             uploader = "Uploader",
             channel = "Channel",
             requestedFormats = null,

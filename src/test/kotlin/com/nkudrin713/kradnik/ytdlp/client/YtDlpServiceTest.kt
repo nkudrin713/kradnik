@@ -69,15 +69,11 @@ class YtDlpServiceTest {
 
         val actual = service.extractMetadata(testRequest())
 
-        assertEquals("video-id", actual.id)
         assertEquals("Test video", actual.title)
         assertEquals(BigDecimal.valueOf(120), actual.duration)
-        assertEquals("webm", actual.ext)
         assertEquals(1080, actual.width)
         assertEquals(1920, actual.height)
-        assertEquals(BigDecimal.valueOf(30), actual.fps)
         assertEquals(42000000, actual.filesizeApprox)
-        assertEquals("399+251", actual.formatId)
     }
 
     @Test
@@ -91,7 +87,6 @@ class YtDlpServiceTest {
 
         val actual = service.extractMetadata(testRequest())
 
-        assertEquals("video-id", actual.id)
         assertEquals("Test video", actual.title)
     }
 
@@ -124,7 +119,7 @@ class YtDlpServiceTest {
 
         val actual = service.extractMetadata(testRequest())
 
-        assertEquals("video-id", actual.id)
+        assertEquals("Test video", actual.title)
     }
 
     @Test
@@ -312,7 +307,6 @@ class YtDlpServiceTest {
 
         val actual = service.extractMetadata(testRequest())
 
-        assertEquals("video-id", actual.id)
         assertEquals("Test video", actual.title)
         assertEquals(1000, actual.filesize)
     }

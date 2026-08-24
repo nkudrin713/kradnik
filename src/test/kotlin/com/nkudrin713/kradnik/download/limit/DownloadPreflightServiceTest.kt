@@ -168,7 +168,6 @@ class DownloadPreflightServiceTest {
                     format(
                         formatId = "video",
                         ext = "mp4",
-                        width = 1920,
                         height = 1080,
                         filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
                         filesizeApprox = null,
@@ -176,7 +175,6 @@ class DownloadPreflightServiceTest {
                     format(
                         formatId = "audio",
                         ext = "m4a",
-                        width = null,
                         height = null,
                         filesize = 1,
                         filesizeApprox = null,
@@ -213,7 +211,6 @@ class DownloadPreflightServiceTest {
                     format(
                         formatId = "video",
                         ext = "mp4",
-                        width = 1920,
                         height = 1080,
                         filesize = null,
                         filesizeApprox = null,
@@ -236,7 +233,6 @@ class DownloadPreflightServiceTest {
                     format(
                         formatId = "video",
                         ext = "mp4",
-                        width = 1920,
                         height = 1080,
                         filesize = null,
                         filesizeApprox = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
@@ -244,7 +240,6 @@ class DownloadPreflightServiceTest {
                     format(
                         formatId = "audio",
                         ext = "m4a",
-                        width = null,
                         height = null,
                         filesize = null,
                         filesizeApprox = 1,
@@ -309,25 +304,16 @@ class DownloadPreflightServiceTest {
         requestedFormats: List<YtDlpFormatDto>? = null,
     ): YtDlpMetadataDto {
         return YtDlpMetadataDto(
-            id = "id",
             title = "title",
             extractor = "youtube",
-            webpageUrl = "https://example.com",
             thumbnail = null,
             duration = durationSeconds?.let { BigDecimal.valueOf(it) },
-            ext = "mp4",
             width = width,
             height = height,
-            fps = null,
             filesize = filesize,
-            vcodec = null,
-            acodec = null,
             filesizeApprox = filesizeApprox,
-            formatId = "format",
-            format = null,
             track = null,
             artist = null,
-            creator = null,
             uploader = null,
             channel = null,
             requestedFormats = requestedFormats,
@@ -337,16 +323,13 @@ class DownloadPreflightServiceTest {
     private fun format(
         formatId: String,
         ext: String,
-        width: Int?,
         height: Int?,
         filesize: Long?,
         filesizeApprox: Long?,
     ): YtDlpFormatDto {
         return YtDlpFormatDto(
             formatId = formatId,
-            formatNote = null,
             ext = ext,
-            width = width,
             height = height,
             fps = null,
             filesize = filesize,

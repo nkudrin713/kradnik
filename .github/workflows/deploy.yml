@@ -257,7 +257,8 @@ jobs:
           app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$image_tag"
           deploy_environment="${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}"
           scripts/render-deploy-env.sh "$deploy_environment" "$app_image" \
-            | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "umask 077 && cat > '$DEPLOY_PATH/.env.next'"
+            | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+                "umask 077 && cat > '$DEPLOY_PATH/.env.next' && chmod 600 '$DEPLOY_PATH/.env.next'"
 
       - name: Check latest commit before restart
         if: ${{ github.event_name == 'push' }}

@@ -189,7 +189,8 @@ jobs:
           test "$DEPLOY_PATH" != "/"
           app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
           scripts/render-deploy-env.sh "${{ inputs.environment }}" "$app_image" \
-            | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "umask 077 && cat > '$DEPLOY_PATH/.env'"
+            | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+                "umask 077 && cat > '$DEPLOY_PATH/.env' && chmod 600 '$DEPLOY_PATH/.env'"
 
       - name: Login to GHCR on server
         env:

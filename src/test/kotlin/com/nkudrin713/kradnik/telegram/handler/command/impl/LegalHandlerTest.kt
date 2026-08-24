@@ -1,7 +1,8 @@
 package com.nkudrin713.kradnik.telegram.handler.command.impl
 
 import com.nkudrin713.kradnik.telegram.TelegramSender
-import com.nkudrin713.kradnik.telegram.handler.TelegramUpdateContext
+import com.nkudrin713.kradnik.telegram.handler.TelegramMessageContext
+import com.pengrad.telegrambot.model.Message
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -29,14 +30,13 @@ class LegalHandlerTest {
         verify { telegramSender.sendMessage(100, any()) }
     }
 
-    private fun context(text: String): TelegramUpdateContext {
-        return TelegramUpdateContext(
+    private fun context(text: String): TelegramMessageContext {
+        return TelegramMessageContext(
             update = mockk(),
-            message = null,
-            callbackQuery = null,
+            message = mockk<Message>(),
             text = text,
             chatId = 100,
-            messageId = null,
+            messageId = 200,
         )
     }
 }

@@ -8,7 +8,7 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramSender
-import com.nkudrin713.kradnik.telegram.handler.TelegramUpdateContext
+import com.nkudrin713.kradnik.telegram.handler.TelegramCallbackContext
 import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.User
 import io.mockk.every
@@ -114,10 +114,12 @@ class DownloadChoiceHandlerTest {
         )
     }
 
-    private fun context(text: String, callbackQuery: CallbackQuery? = null): TelegramUpdateContext {
-        return TelegramUpdateContext(
+    private fun context(
+        text: String,
+        callbackQuery: CallbackQuery = mockk(relaxed = true),
+    ): TelegramCallbackContext {
+        return TelegramCallbackContext(
             update = mockk(),
-            message = null,
             callbackQuery = callbackQuery,
             text = text,
             chatId = 100,

@@ -2,7 +2,7 @@ package com.nkudrin713.kradnik.telegram.handler.command.impl
 
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCoordinator
 import com.nkudrin713.kradnik.telegram.PrepareDownloadChoiceCommand
-import com.nkudrin713.kradnik.telegram.handler.TelegramUpdateContext
+import com.nkudrin713.kradnik.telegram.handler.TelegramMessageContext
 import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.Update
 import com.pengrad.telegrambot.model.User
@@ -45,12 +45,14 @@ class VideoUrlHandlerTest {
         }
     }
 
-    private fun context(text: String, message: Message? = null): TelegramUpdateContext {
+    private fun context(
+        text: String,
+        message: Message = mockk(relaxed = true),
+    ): TelegramMessageContext {
         val update = mockk<Update> { every { updateId() } returns 400 }
-        return TelegramUpdateContext(
+        return TelegramMessageContext(
             update = update,
             message = message,
-            callbackQuery = null,
             text = text,
             chatId = 100,
             messageId = 200,

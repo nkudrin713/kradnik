@@ -1,10 +1,10 @@
 package com.nkudrin713.kradnik.telegram.handler.command
 
-import com.nkudrin713.kradnik.telegram.handler.TelegramUpdateContext
+import com.nkudrin713.kradnik.telegram.handler.TelegramMessageContext
 
 interface TelegramCommandHandler {
 
-    fun supports(context: TelegramUpdateContext): Boolean
+    fun supports(context: TelegramMessageContext): Boolean
 
-    fun handle(context: TelegramUpdateContext)
+    fun handle(context: TelegramMessageContext)
 }

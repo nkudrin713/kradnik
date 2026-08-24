@@ -7,43 +7,47 @@ import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class TelegramBotConfigTest {
     @Test
     fun buildsClientWithConfiguredLocalEndpointsAndTimeout() {
         val properties = TelegramBotProperties(
             token = "test-token",
-            localMode = true,
             apiUrl = "http://telegram-bot-api:8081/bot/",
             fileApiUrl = "http://telegram-bot-api:8081/file/bot/",
             maxUploadBytes = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES,
             requestTimeout = Duration.ofMinutes(30),
         )
 
-        val bot = TelegramBotConfig(properties).telegramBot()
+        val config = TelegramBotConfig(properties)
+        val bot = config.telegramBot()
+        val uploadLimits = config.telegramUploadLimits()
 
         assertEquals("http://telegram-bot-api:8081/bottest-token/", bot.apiBaseUrl())
         assertEquals("http://telegram-bot-api:8081/file/bottest-token/", bot.fileApiBaseUrl())
         assertEquals(Duration.ofMinutes(30).toMillis().toInt(), bot.httpClient().callTimeoutMillis)
+        assertTrue(uploadLimits.localMode)
+        assertEquals(TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES, uploadLimits.maxUploadBytes)
     }
 
     @Test
-    fun rejectsLocalModeWithCloudEndpoint() {
+    fun rejectsMixedCloudAndLocalEndpoints() {
         assertFailsWith<IllegalArgumentException> {
             TelegramBotProperties(
                 token = "test-token",
-                localMode = true,
+                apiUrl = "http://telegram-bot-api:8081/bot",
             )
         }
     }
 
     @Test
-    fun rejectsCloudFileEndpointInLocalMode() {
+    fun rejectsDifferentLocalServers() {
         assertFailsWith<IllegalArgumentException> {
             TelegramBotProperties(
                 token = "test-token",
-                localMode = true,
                 apiUrl = "http://telegram-bot-api:8081/bot",
+                fileApiUrl = "http://other-bot-api:8081/file/bot",
             )
         }
     }

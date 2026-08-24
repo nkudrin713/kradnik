@@ -12,7 +12,7 @@ class TelegramMediaRequestFactory(
     private val properties: TelegramBotProperties,
 ) {
     fun video(chatId: Long, file: Path): SendVideo {
-        return if (properties.localMode) {
+        return if (properties.localApi) {
             SendVideo(chatId, localFileUri(file))
         } else {
             SendVideo(chatId, file.toFile())
@@ -20,7 +20,7 @@ class TelegramMediaRequestFactory(
     }
 
     fun audio(chatId: Long, file: Path): SendAudio {
-        return if (properties.localMode) {
+        return if (properties.localApi) {
             SendAudio(chatId, localFileUri(file))
         } else {
             SendAudio(chatId, file.toFile())
@@ -28,7 +28,7 @@ class TelegramMediaRequestFactory(
     }
 
     fun document(chatId: Long, file: Path): SendDocument {
-        return if (properties.localMode) {
+        return if (properties.localApi) {
             SendDocument(chatId, localFileUri(file))
         } else {
             SendDocument(chatId, file.toFile())

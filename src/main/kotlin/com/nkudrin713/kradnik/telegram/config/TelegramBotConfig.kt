@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram.config
 
+import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.pengrad.telegrambot.TelegramBot
 import okhttp3.OkHttpClient
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -25,5 +26,13 @@ class TelegramBotConfig(
             .fileApiUrl(properties.normalizedFileApiUrl)
             .okHttpClient(httpClient)
             .build()
+    }
+
+    @Bean
+    fun telegramUploadLimits(): TelegramUploadLimits {
+        return TelegramUploadLimits(
+            maxUploadBytes = properties.maxUploadBytes,
+            localMode = properties.localApi,
+        )
     }
 }

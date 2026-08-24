@@ -26,7 +26,6 @@ class TelegramMediaRequestFactoryTest {
         val file = tempDir.resolve("media file.mp4")
         val properties = TelegramBotProperties(
             token = "test-token",
-            localMode = true,
             apiUrl = "http://telegram-bot-api:8081/bot",
             fileApiUrl = "http://telegram-bot-api:8081/file/bot",
         )

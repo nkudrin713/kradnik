@@ -8,7 +8,6 @@ import java.time.Duration
 @ConfigurationProperties("telegram.bot")
 data class TelegramBotProperties(
     val token: String,
-    val localMode: Boolean = false,
     val apiUrl: String = CLOUD_API_URL,
     val fileApiUrl: String = CLOUD_FILE_API_URL,
     val maxUploadBytes: Long = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
@@ -17,15 +16,16 @@ data class TelegramBotProperties(
 ) {
     val normalizedApiUrl: String = apiUrl.trimEnd('/')
     val normalizedFileApiUrl: String = fileApiUrl.trimEnd('/')
+    val localApi: Boolean = normalizedApiUrl != CLOUD_API_URL
 
     init {
         require(token.isNotBlank()) { "telegram.bot.token must not be blank" }
         require(maxUploadBytes in 1..TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES) {
             "telegram.bot.max-upload-bytes must be between 1 and ${TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES}"
         }
-        require(localMode || maxUploadBytes <= TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES) {
+        require(localApi || maxUploadBytes <= TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES) {
             "telegram.bot.max-upload-bytes must not exceed ${TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES} " +
-                    "when local mode is disabled"
+                    "when the cloud API is used"
         }
         require(!connectTimeout.isNegative && !connectTimeout.isZero) {
             "telegram.bot.connect-timeout must be positive"
@@ -35,13 +35,10 @@ data class TelegramBotProperties(
         }
         validateUrl(apiUrl, "/bot", "telegram.bot.api-url")
         validateUrl(fileApiUrl, "/file/bot", "telegram.bot.file-api-url")
-        require(!localMode || normalizedApiUrl != CLOUD_API_URL) {
-            "telegram.bot.api-url must point to the local Bot API when local mode is enabled"
+        require(localApi == (normalizedFileApiUrl != CLOUD_FILE_API_URL)) {
+            "telegram.bot.api-url and telegram.bot.file-api-url must both use cloud or local Bot API"
         }
-        require(!localMode || normalizedFileApiUrl != CLOUD_FILE_API_URL) {
-            "telegram.bot.file-api-url must point to the local Bot API when local mode is enabled"
-        }
-        require(!localMode || URI(normalizedApiUrl).authority == URI(normalizedFileApiUrl).authority) {
+        require(!localApi || URI(normalizedApiUrl).authority == URI(normalizedFileApiUrl).authority) {
             "telegram.bot.api-url and telegram.bot.file-api-url must use the same local server"
         }
     }

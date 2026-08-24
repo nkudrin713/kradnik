@@ -5,12 +5,11 @@ import com.nkudrin713.kradnik.download.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.springframework.stereotype.Component
 import java.nio.file.Path
+import java.time.Instant
 
 @Component
 class InstagramDownloader(
@@ -23,9 +22,9 @@ class InstagramDownloader(
             return DownloadPreparation.TerminalFailure(UNSUPPORTED_MESSAGE)
         }
 
-        val permit = when (val decision = rateLimiter.acquire()) {
-            is RateLimitDecision.Granted -> decision.permit
-            is RateLimitDecision.Deferred -> return DownloadPreparation.NotReady(
+        val acquiredAt = when (val decision = rateLimiter.acquire()) {
+            is InstagramRateLimitDecision.Granted -> decision.acquiredAt
+            is InstagramRateLimitDecision.Deferred -> return DownloadPreparation.NotReady(
                 retryAt = decision.retryAt,
                 reason = RATE_LIMIT_MESSAGE,
             )
@@ -33,10 +32,10 @@ class InstagramDownloader(
 
         return try {
             val prepared = embedDownloader.prepare(spec)
-            rateLimiter.recordSuccess(permit)
+            rateLimiter.recordSuccess(acquiredAt)
             DownloadPreparation.Ready(InstagramSession(prepared))
         } catch (error: InstagramHttpException) {
-            classifyHttpError(error, permit)
+            classifyHttpError(error, acquiredAt)
         } catch (error: InstagramContentUnavailableException) {
             DownloadPreparation.SourceUnavailable(error.message ?: error.javaClass.simpleName)
         } catch (error: InstagramEmbedException) {
@@ -46,12 +45,12 @@ class InstagramDownloader(
 
     private fun classifyHttpError(
         error: InstagramHttpException,
-        permit: RateLimitPermit,
+        acquiredAt: Instant,
     ): DownloadPreparation {
         val reason = error.message ?: error.javaClass.simpleName
         return when (error.statusCode) {
             403, 429 -> DownloadPreparation.RetryableFailure(
-                retryAt = rateLimiter.recordThrottle(permit, error.retryAfter),
+                retryAt = rateLimiter.recordThrottle(acquiredAt, error.retryAfter),
                 reason = reason,
             )
 

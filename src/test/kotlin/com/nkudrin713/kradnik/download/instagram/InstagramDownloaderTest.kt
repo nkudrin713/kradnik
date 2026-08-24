@@ -5,8 +5,6 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import io.mockk.coEvery
@@ -35,7 +33,7 @@ class InstagramDownloaderTest {
         val request = request()
         val retryAt = Instant.parse("2026-07-15T10:00:30Z")
         every { embedDownloader.supports(request) } returns true
-        every { rateLimiter.acquire() } returns RateLimitDecision.Deferred(retryAt)
+        every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Deferred(retryAt)
 
         val result = assertIs<DownloadPreparation.NotReady>(downloader.prepare(request))
 
@@ -50,7 +48,7 @@ class InstagramDownloaderTest {
         val outputDir = Path.of("/tmp/output")
         val downloaded = DownloadedFile(outputDir.resolve("video.mp4"), 100)
         every { embedDownloader.supports(request) } returns true
-        every { rateLimiter.acquire() } returns RateLimitDecision.Granted(PERMIT)
+        every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } returns prepared
         every { rateLimiter.recordSuccess(PERMIT) } returns Unit
         coEvery { embedDownloader.download(prepared, outputDir) } returns downloaded
@@ -70,7 +68,7 @@ class InstagramDownloaderTest {
         val outputDir = Path.of("/tmp/output")
         val downloaded = DownloadedFile(outputDir.resolve("video.mp4"), 100)
         every { embedDownloader.supports(request) } returns true
-        every { rateLimiter.acquire() } returns RateLimitDecision.Granted(PERMIT)
+        every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } returns prepared
         every { rateLimiter.recordSuccess(PERMIT) } returns Unit
         coEvery { ytDlpService.download(request, outputDir) } returns downloaded
@@ -90,7 +88,7 @@ class InstagramDownloaderTest {
         val outputDir = Path.of("/tmp/output")
         val downloaded = DownloadedFile(outputDir.resolve("audio.mp3"), 100)
         every { embedDownloader.supports(request) } returns true
-        every { rateLimiter.acquire() } returns RateLimitDecision.Granted(PERMIT)
+        every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } returns prepared
         every { rateLimiter.recordSuccess(PERMIT) } returns Unit
         coEvery { ytDlpService.download(request, outputDir) } returns downloaded
@@ -112,7 +110,7 @@ class InstagramDownloaderTest {
             retryAfter = Duration.ofMinutes(10),
         )
         every { embedDownloader.supports(request) } returns true
-        every { rateLimiter.acquire() } returns RateLimitDecision.Granted(PERMIT)
+        every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } throws error
         every { rateLimiter.recordThrottle(PERMIT, Duration.ofMinutes(10)) } returns retryAt
 
@@ -126,7 +124,7 @@ class InstagramDownloaderTest {
     fun reportsUnavailableInstagramContentWithoutRetry() = runTest {
         val request = request()
         every { embedDownloader.supports(request) } returns true
-        every { rateLimiter.acquire() } returns RateLimitDecision.Granted(PERMIT)
+        every { rateLimiter.acquire() } returns InstagramRateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } throws InstagramContentUnavailableException()
 
         val result = assertIs<DownloadPreparation.SourceUnavailable>(downloader.prepare(request))
@@ -171,6 +169,6 @@ class InstagramDownloaderTest {
     }
 
     private companion object {
-        val PERMIT = RateLimitPermit(Instant.parse("2026-07-15T10:00:00Z"))
+        val PERMIT: Instant = Instant.parse("2026-07-15T10:00:00Z")
     }
 }

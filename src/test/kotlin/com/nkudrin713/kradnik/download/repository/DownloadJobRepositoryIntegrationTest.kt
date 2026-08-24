@@ -8,12 +8,6 @@ import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.download.ratelimit.PostgresRateLimitBucketStore
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitBucketKey
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitBucketStore
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitCoordinator
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitPolicy
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -35,10 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
-import java.time.Clock
-import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.UUID
@@ -54,7 +45,6 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     private val repository: DownloadJobRepository,
     private val choiceSessionRepository: DownloadChoiceSessionRepository,
     private val jdbcTemplate: JdbcTemplate,
-    private val rateLimitBucketStore: RateLimitBucketStore,
     private val downloadJobService: DownloadJobService,
     transactionManager: PlatformTransactionManager,
 ) {
@@ -62,7 +52,6 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @BeforeEach
     fun cleanDatabase() {
-        jdbcTemplate.update("DELETE FROM request_rate_limit_buckets")
         choiceSessionRepository.deleteAll()
         repository.deleteAll()
     }
@@ -84,7 +73,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             """.trimIndent(),
             Int::class.java,
         )
-        val rateLimitTableCount = jdbcTemplate.queryForObject(
+        val removedRateLimitTableCount = jdbcTemplate.queryForObject(
             """
                 SELECT COUNT(*)
                 FROM information_schema.tables
@@ -94,7 +83,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         )
 
         assertEquals(5, columnCount)
-        assertEquals(1, rateLimitTableCount)
+        assertEquals(0, removedRateLimitTableCount)
     }
 
     @Test
@@ -159,38 +148,6 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
         assertEquals(due.id, claimed.id)
         assertEquals(DownloadJobStatus.QUEUED, repository.findById(future.id!!).orElseThrow().status)
-    }
-
-    @Test
-    fun grantsOnlyOneConcurrentRateLimitPermit() {
-        val now = Instant.parse("2026-07-15T10:00:00Z")
-        val coordinator = RateLimitCoordinator(
-            store = rateLimitBucketStore,
-            clock = Clock.fixed(now, ZoneOffset.UTC),
-        )
-        val key = RateLimitBucketKey("instagram", "embed", "vps-direct")
-        val policy = RateLimitPolicy(
-            minInterval = Duration.ofSeconds(30),
-            maxJitter = Duration.ZERO,
-            initialCooldown = Duration.ofMinutes(30),
-            maxCooldown = Duration.ofHours(6),
-            cooldownMultiplier = 2,
-        )
-        val executor = Executors.newFixedThreadPool(2)
-
-        val decisions = try {
-            executor.invokeAll(
-                listOf(
-                    Callable { coordinator.acquire(key, policy) },
-                    Callable { coordinator.acquire(key, policy) },
-                )
-            ).map { it.get() }
-        } finally {
-            executor.shutdownNow()
-        }
-
-        assertEquals(1, decisions.count { it is RateLimitDecision.Granted })
-        assertEquals(1, decisions.count { it is RateLimitDecision.Deferred })
     }
 
     @Test
@@ -375,5 +332,5 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 @EnableAutoConfiguration
 @EntityScan(basePackageClasses = [DownloadJob::class, DownloadChoiceSession::class])
 @EnableJpaRepositories(basePackageClasses = [DownloadJobRepository::class, DownloadChoiceSessionRepository::class])
-@Import(PostgresRateLimitBucketStore::class, DownloadJobService::class)
+@Import(DownloadJobService::class)
 class DownloadJobRepositoryTestApplication

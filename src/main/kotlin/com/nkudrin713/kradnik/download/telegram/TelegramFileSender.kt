@@ -3,7 +3,6 @@ package com.nkudrin713.kradnik.download.telegram
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.service.DownloadedFileResult
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
 import org.springframework.stereotype.Component
 
@@ -12,7 +11,7 @@ class TelegramFileSender(
     private val telegramMediaSender: TelegramMediaSender,
 ) {
     suspend fun send(job: DownloadJob, file: DownloadedFile): TelegramFileSendResult {
-        val result = when (job.outputType) {
+        val fileId = when (job.outputType) {
             OutputType.VIDEO -> telegramMediaSender.sendVideo(
                 chatId = job.telegramChatId,
                 file = file.file,
@@ -34,8 +33,7 @@ class TelegramFileSender(
         }
 
         return TelegramFileSendResult(
-            telegramFileId = result.fileId,
-            telegramFileSize = result.fileSize,
+            telegramFileId = fileId,
             downloadedFileSize = file.sizeBytes,
         )
     }
@@ -45,7 +43,7 @@ class TelegramFileSender(
         fileId: String,
         downloadedFileSize: Long?,
     ): TelegramFileSendResult {
-        val result = when (job.outputType) {
+        val sentFileId = when (job.outputType) {
             OutputType.VIDEO -> telegramMediaSender.sendCachedVideo(
                 chatId = job.telegramChatId,
                 fileId = fileId,
@@ -64,8 +62,7 @@ class TelegramFileSender(
         }
 
         return TelegramFileSendResult(
-            telegramFileId = result.fileId,
-            telegramFileSize = result.fileSize,
+            telegramFileId = sentFileId,
             downloadedFileSize = downloadedFileSize,
         )
     }
@@ -73,14 +70,5 @@ class TelegramFileSender(
 
 data class TelegramFileSendResult(
     val telegramFileId: String,
-    val telegramFileSize: Long?,
     val downloadedFileSize: Long?,
-) {
-    fun toDownloadedFileResult(): DownloadedFileResult {
-        return DownloadedFileResult(
-            telegramFileId = telegramFileId,
-            telegramFileSize = telegramFileSize,
-            downloadedFileSize = downloadedFileSize,
-        )
-    }
-}
+)

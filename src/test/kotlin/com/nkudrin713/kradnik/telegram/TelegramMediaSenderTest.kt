@@ -53,7 +53,7 @@ class TelegramMediaSenderTest {
         actual.getParameters()["width"] shouldBe 1920
         actual.getParameters()["height"] shouldBe 1080
         actual.getParameters()["reply_parameters"].shouldBeInstanceOf<ReplyParameters>()
-        result shouldBe TelegramSendResult("video-id", 456)
+        result shouldBe "video-id"
     }
 
     @Test
@@ -70,7 +70,7 @@ class TelegramMediaSenderTest {
         val actual = request.captured as SendVideo
         actual.getParameters()["video"] shouldBe "cached-id"
         actual.getParameters()["reply_parameters"].shouldBeInstanceOf<ReplyParameters>()
-        result shouldBe TelegramSendResult("video-id", 456)
+        result shouldBe "video-id"
     }
 
     @Test
@@ -94,7 +94,7 @@ class TelegramMediaSenderTest {
         actual.getParameters()["performer"] shouldBe "artist"
         actual.getParameters()["duration"] shouldBe 120
         actual.getParameters()["reply_parameters"].shouldBeInstanceOf<ReplyParameters>()
-        result shouldBe TelegramSendResult("audio-id", 456)
+        result shouldBe "audio-id"
     }
 
     @Test
@@ -111,7 +111,7 @@ class TelegramMediaSenderTest {
         val actual = request.captured as SendAudio
         actual.getParameters()["audio"] shouldBe "cached-id"
         actual.getParameters()["reply_parameters"].shouldBeInstanceOf<ReplyParameters>()
-        result shouldBe TelegramSendResult("audio-id", 456)
+        result shouldBe "audio-id"
     }
 
     @Test
@@ -125,7 +125,7 @@ class TelegramMediaSenderTest {
 
         (request.captured as SendDocument).getParameters()["reply_parameters"]
             .shouldBeInstanceOf<ReplyParameters>()
-        result shouldBe TelegramSendResult("cover-id", 456)
+        result shouldBe "cover-id"
     }
 
     @Test
@@ -137,7 +137,7 @@ class TelegramMediaSenderTest {
 
         val actual = request.captured as SendDocument
         actual.getParameters()["document"] shouldBe "cached-id"
-        result shouldBe TelegramSendResult("cover-id", 456)
+        result shouldBe "cover-id"
     }
 
     private fun sendResponse(

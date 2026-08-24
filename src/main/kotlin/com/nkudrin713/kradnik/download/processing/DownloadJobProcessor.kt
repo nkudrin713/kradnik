@@ -38,7 +38,6 @@ class DownloadJobProcessor(
     private val telegramVideoPreparer: TelegramVideoPreparer,
     private val telegramFileSender: TelegramFileSender,
     private val downloadEngine: DownloadEngine,
-    private val mediaMetadataMapper: MediaMetadataMapper,
     private val downloadJobLifecycle: DownloadJobLifecycle,
     private val workDirCleaner: WorkDirCleaner,
     private val workDirCapacityGuard: WorkDirCapacityGuard,
@@ -187,7 +186,11 @@ class DownloadJobProcessor(
 
         val telegramResult = telegramFileSender.send(job, uploadFile)
 
-        downloadJobLifecycle.complete(attempt, telegramResult.toDownloadedFileResult())
+        downloadJobLifecycle.complete(
+            attempt = attempt,
+            telegramFileId = telegramResult.telegramFileId,
+            downloadedFileSize = telegramResult.downloadedFileSize,
+        )
     }
 
     private suspend fun sendCached(attempt: ClaimedDownloadJob): Boolean {
@@ -215,7 +218,11 @@ class DownloadJobProcessor(
         }
 
         downloadJobLifecycle.markUploading(attempt)
-        downloadJobLifecycle.complete(attempt, telegramResult.toDownloadedFileResult())
+        downloadJobLifecycle.complete(
+            attempt = attempt,
+            telegramFileId = telegramResult.telegramFileId,
+            downloadedFileSize = telegramResult.downloadedFileSize,
+        )
 
         return true
     }
@@ -224,10 +231,15 @@ class DownloadJobProcessor(
         attempt: ClaimedDownloadJob,
         metadata: YtDlpMetadataDto,
     ): DownloadJob {
-        val mappedMetadata = mediaMetadataMapper.toMediaMetadata(metadata)
-        return downloadJobService.markMetadata(
+        return downloadJobService.markAudioMetadata(
             attempt = attempt,
-            metadata = mappedMetadata,
+            durationSeconds = metadata.duration?.toInt(),
+            title = metadata.track ?: metadata.title ?: DEFAULT_AUDIO_TITLE,
+            performer = metadata.artist
+                ?: metadata.uploader
+                ?: metadata.channel
+                ?: metadata.extractor
+                ?: DEFAULT_AUDIO_PERFORMER,
         )
     }
 
@@ -242,5 +254,7 @@ class DownloadJobProcessor(
 
     private companion object {
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
+        private const val DEFAULT_AUDIO_TITLE = "Audio"
+        private const val DEFAULT_AUDIO_PERFORMER = "Unknown"
     }
 }

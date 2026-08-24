@@ -60,12 +60,6 @@ class DownloadJob(
 	@Column(nullable = false)
 	var attempts: Int = 0,
 
-	@Column(name = "source_title")
-	var sourceTitle: String? = null,
-
-	@Column(name = "source_extractor")
-	var sourceExtractor: String? = null,
-
 	@Column(name = "source_duration_seconds")
 	var sourceDurationSeconds: Int? = null,
 
@@ -91,9 +85,6 @@ class DownloadJob(
 	@Column(name = "telegram_file_id")
 	var telegramFileId: String? = null,
 
-	@Column(name = "telegram_file_size")
-	var telegramFileSize: Long? = null,
-
 	@Column(name = "telegram_status_message_id")
 	var telegramStatusMessageId: Int? = null,
 
@@ -107,15 +98,6 @@ class DownloadJob(
 	@UpdateTimestamp
 	@Column(name = "updated_at", nullable = false)
 	var updatedAt: Instant? = null,
-
-	@Column(name = "processing_started_at")
-	var processingStartedAt: Instant? = null,
-
-	@Column(name = "uploading_started_at")
-	var uploadingStartedAt: Instant? = null,
-
-	@Column(name = "downloaded_at")
-	var downloadedAt: Instant? = null,
 
 	@Column(name = "completed_at")
 	var completedAt: Instant? = null,

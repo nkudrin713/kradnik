@@ -9,7 +9,6 @@ import com.nkudrin713.kradnik.download.cover.CoverDownloader
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
-import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.instagram.InstagramDownloader
@@ -54,7 +53,6 @@ class DownloadJobProcessorTest {
     private val ytDlpService: YtDlpService = mockk()
     private val instagramDownloader: InstagramDownloader = mockk()
     private val downloadEngine = DownloadEngine(ytDlpService, instagramDownloader, mockk<CoverDownloader>())
-    private val mediaMetadataMapper: MediaMetadataMapper = mockk()
     private val downloadJobLifecycle: DownloadJobLifecycle = mockk(relaxed = true)
     private val workDirCleaner: WorkDirCleaner = mockk()
     private val workDirCapacityGuard: WorkDirCapacityGuard = mockk(relaxed = true)
@@ -75,7 +73,7 @@ class DownloadJobProcessorTest {
 
         coVerify { telegramFileSender.sendCached(job, "cached-file-id", 100) }
         verify { downloadJobLifecycle.markUploading(attempt(job)) }
-        verify { downloadJobLifecycle.complete(attempt(job), any()) }
+        verify { downloadJobLifecycle.complete(attempt(job), "file-id", 100) }
         verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
     }
 
@@ -95,8 +93,7 @@ class DownloadJobProcessorTest {
         } throws TelegramSendException(400, "Bad Request: wrong file identifier")
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
-        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
-        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns downloadedFile
         coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
@@ -106,7 +103,7 @@ class DownloadJobProcessorTest {
 
         coVerify { ytDlpService.download(request, jobDir(tempDir)) }
         coVerify { telegramFileSender.send(job, downloadedFile) }
-        verify { downloadJobLifecycle.complete(attempt(job), any()) }
+        verify { downloadJobLifecycle.complete(attempt(job), "file-id", 100) }
     }
 
     @Test
@@ -171,8 +168,7 @@ class DownloadJobProcessorTest {
         every { downloadJobService.findCachedJob(job) } returns null
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed(request)
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
-        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
-        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns preparedFile
         coEvery { telegramFileSender.send(job, preparedFile) } returns telegramResult()
@@ -182,11 +178,11 @@ class DownloadJobProcessorTest {
 
         verify { downloadJobLifecycle.markDownloading(attempt(job)) }
         coVerify(exactly = 1) { ytDlpService.extractMetadata(request) }
-        verify { downloadJobService.markMetadata(attempt(job), any()) }
+        verify { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) }
         verify { downloadJobLifecycle.markUploading(attempt(job)) }
         coVerify { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) }
         coVerify { telegramFileSender.send(job, preparedFile) }
-        verify { downloadJobLifecycle.complete(attempt(job), any()) }
+        verify { downloadJobLifecycle.complete(attempt(job), "file-id", 100) }
         verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
     }
 
@@ -202,8 +198,7 @@ class DownloadJobProcessorTest {
         every { downloadJobService.findCachedJob(job) } returns null
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
-        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
-        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
@@ -223,8 +218,7 @@ class DownloadJobProcessorTest {
         every { downloadJobService.findCachedJob(job) } returns null
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
-        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
-        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
         coEvery {
             telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1)
@@ -245,8 +239,7 @@ class DownloadJobProcessorTest {
         val metadata = metadata()
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
-        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
-        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery {
             ytDlpService.download(request, jobDir(tempDir))
         } throws YtDlpFileSizeLimitException(uploadLimits.maxUploadBytes)
@@ -268,8 +261,7 @@ class DownloadJobProcessorTest {
         every { session.metadata } returns metadata
         coEvery { instagramDownloader.prepare(request) } returns DownloadPreparation.Ready(session)
         every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
-        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
-        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery {
             session.download(request, jobDir(tempDir))
         } throws InstagramMediaTooLargeException(uploadLimits.maxUploadBytes + 1)
@@ -292,8 +284,7 @@ class DownloadJobProcessorTest {
         every { session.metadata } returns metadata
         coEvery { instagramDownloader.prepare(request) } returns DownloadPreparation.Ready(session)
         every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
-        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
-        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery { session.download(request, jobDir(tempDir)) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns downloadedFile
         coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
@@ -478,8 +469,7 @@ class DownloadJobProcessorTest {
         val metadata = metadata()
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed(downloadRequest)
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
-        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
-        every { downloadJobService.markMetadata(attempt(job), any()) } returns markedJob
+        every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns markedJob
         coEvery { ytDlpService.download(downloadRequest, jobDir(tempDir)) } returns downloadedFile
         coEvery { telegramFileSender.send(markedJob, downloadedFile) } returns telegramResult()
         every { workDirCleaner.deleteRecursively(any()) } just runs
@@ -501,7 +491,7 @@ class DownloadJobProcessorTest {
         processor(tempDir).process(attempt(job))
 
         verify(exactly = 0) { downloadPreflightService.check(any(), any()) }
-        verify(exactly = 0) { downloadJobService.markMetadata(any(), any()) }
+        verify(exactly = 0) { downloadJobService.markAudioMetadata(any(), any(), any(), any()) }
         coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
         coVerify(exactly = 0) { telegramFileSender.send(any(), any()) }
         verify { downloadJobLifecycle.failOrRetry(attempt(job), "metadata error", null) }
@@ -543,8 +533,7 @@ class DownloadJobProcessorTest {
         val metadata = metadata(duration = null)
         every { downloadPreflightService.check(request, any()) } returns DownloadPreflightDecision.Allowed(request)
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
-        every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata(durationSeconds = null)
-        every { downloadJobService.markMetadata(attempt(job), any()) } returns job
+        every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns downloadedFile
         coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
@@ -552,7 +541,7 @@ class DownloadJobProcessorTest {
 
         processor(tempDir).process(attempt(job))
 
-        verify { downloadJobService.markMetadata(attempt(job), any()) }
+        verify { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) }
     }
 
     @Test
@@ -583,7 +572,6 @@ class DownloadJobProcessorTest {
             telegramVideoPreparer = telegramVideoPreparer,
             telegramFileSender = telegramFileSender,
             downloadEngine = downloadEngine,
-            mediaMetadataMapper = mediaMetadataMapper,
             downloadJobLifecycle = downloadJobLifecycle,
             workDirCleaner = workDirCleaner,
             workDirCapacityGuard = workDirCapacityGuard,
@@ -664,23 +652,9 @@ class DownloadJobProcessorTest {
         )
     }
 
-    private fun mediaMetadata(durationSeconds: Long? = 120): MediaMetadata {
-        return MediaMetadata(
-            title = "title",
-            extractor = "youtube",
-            durationSeconds = durationSeconds,
-            audioTitle = "track",
-            audioPerformer = "artist",
-            width = 1080,
-            height = 1920,
-            webpageUrl = "https://example.com/video",
-        )
-    }
-
     private fun telegramResult(): TelegramFileSendResult {
         return TelegramFileSendResult(
             telegramFileId = "file-id",
-            telegramFileSize = 90,
             downloadedFileSize = 100,
         )
     }

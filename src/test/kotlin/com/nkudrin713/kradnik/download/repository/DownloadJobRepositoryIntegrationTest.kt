@@ -81,9 +81,26 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             """.trimIndent(),
             Int::class.java,
         )
+        val removedJobColumnCount = jdbcTemplate.queryForObject(
+            """
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_name = 'download_jobs'
+                  AND column_name IN (
+                      'source_title',
+                      'source_extractor',
+                      'telegram_file_size',
+                      'processing_started_at',
+                      'uploading_started_at',
+                      'downloaded_at'
+                  )
+            """.trimIndent(),
+            Int::class.java,
+        )
 
         assertEquals(5, columnCount)
         assertEquals(0, removedRateLimitTableCount)
+        assertEquals(0, removedJobColumnCount)
     }
 
     @Test

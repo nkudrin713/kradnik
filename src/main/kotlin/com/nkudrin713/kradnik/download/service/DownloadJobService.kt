@@ -1,9 +1,7 @@
 package com.nkudrin713.kradnik.download.service
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
-import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
-import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
@@ -71,7 +69,7 @@ class DownloadJobService(
 	}
 
 	@Transactional
-	fun recoverExpiredLeases(): DownloadJobRecoveryResult {
+	fun recoverExpiredLeases() {
 		val requeued = downloadJobRepository.requeueStaleInProgressJobs(
 			maxAttempts = MAX_ATTEMPTS,
 		)
@@ -87,10 +85,6 @@ class DownloadJobService(
 			)
 		}
 
-		return DownloadJobRecoveryResult(
-			requeued = requeued,
-			failed = failed,
-		)
 	}
 
 	@Transactional(readOnly = true)
@@ -107,30 +101,23 @@ class DownloadJobService(
 	}
 
 	@Transactional
-	fun markMetadata(attempt: ClaimedDownloadJob, metadata: MediaMetadata): DownloadJob {
+	fun markAudioMetadata(
+		attempt: ClaimedDownloadJob,
+		durationSeconds: Int?,
+		title: String,
+		performer: String,
+	): DownloadJob {
 		val jobId = attempt.requiredId()
-		val sourceDurationSeconds = metadata.durationSeconds?.toInt()
-		val updatedJob = requireOwned(
+		return requireOwned(
 			downloadJobRepository.updateOwnedMetadata(
 				jobId = jobId,
 				leaseToken = attempt.leaseToken,
-				sourceTitle = metadata.title,
-				sourceExtractor = metadata.extractor,
-				sourceDurationSeconds = sourceDurationSeconds,
-				sourceAudioTitle = metadata.audioTitle,
-				sourceAudioPerformer = metadata.audioPerformer,
+				sourceDurationSeconds = durationSeconds,
+				sourceAudioTitle = title,
+				sourceAudioPerformer = performer,
 			),
 			attempt,
 		)
-
-		logger.info(
-			"CHAT[{}] JOB[{}] metadata ok: source={}",
-			updatedJob.telegramChatId,
-			jobId,
-			metadata.extractor,
-		)
-
-		return updatedJob
 	}
 
 	@Transactional
@@ -147,26 +134,25 @@ class DownloadJobService(
 	@Transactional
 	fun markCompleted(
 		attempt: ClaimedDownloadJob,
-		result: DownloadedFileResult,
+		telegramFileId: String,
+		downloadedFileSize: Long?,
 	): DownloadJob {
 		val jobId = attempt.requiredId()
 		val updatedJob = requireOwned(
 			downloadJobRepository.markOwnedCompleted(
 				jobId = jobId,
 				leaseToken = attempt.leaseToken,
-				telegramFileId = result.telegramFileId,
-				telegramFileSize = result.telegramFileSize,
-				downloadedFileSize = result.downloadedFileSize,
-				downloadedAt = result.downloadedAt,
+				telegramFileId = telegramFileId,
+				downloadedFileSize = downloadedFileSize,
 			),
 			attempt,
 		)
 
 		logger.info(
-			"CHAT[{}] JOB[{}] done: telegramFileSize={}",
+			"CHAT[{}] JOB[{}] done: downloadedFileSize={}",
 			updatedJob.telegramChatId,
 			jobId,
-			result.telegramFileSize,
+			downloadedFileSize,
 		)
 
 		return updatedJob
@@ -177,7 +163,7 @@ class DownloadJobService(
 		attempt: ClaimedDownloadJob,
 		errorMessage: String,
 		retryAt: Instant,
-	): DownloadFailureResolution {
+	): DownloadJob {
 		return resolveFailure(attempt, errorMessage, retryAt)
 	}
 
@@ -213,7 +199,7 @@ class DownloadJobService(
 		attempt: ClaimedDownloadJob,
 		errorMessage: String,
 		retryAt: Instant,
-	): DownloadFailureResolution {
+	): DownloadJob {
 		val job = attempt.job
 		val storedError = errorMessage.take(MAX_ERROR_LENGTH)
 		val updatedJob = if (job.attempts >= MAX_ATTEMPTS) {
@@ -241,11 +227,7 @@ class DownloadJobService(
 			resolvedJob.errorMessage,
 		)
 
-		return if (resolvedJob.status == DownloadJobStatus.QUEUED) {
-			DownloadFailureResolution.RetryScheduled(resolvedJob)
-		} else {
-			DownloadFailureResolution.TerminalFailure(resolvedJob)
-		}
+		return resolvedJob
 	}
 
 	@Transactional
@@ -315,28 +297,4 @@ sealed interface CreateDownloadJobResult {
 	data class Existing(
 		override val job: DownloadJob,
 	) : CreateDownloadJobResult
-}
-
-data class DownloadedFileResult(
-	val telegramFileId: String,
-	val telegramFileSize: Long? = null,
-	val downloadedFileSize: Long? = null,
-	val downloadedAt: Instant? = null,
-)
-
-data class DownloadJobRecoveryResult(
-	val requeued: Int,
-	val failed: Int,
-)
-
-sealed interface DownloadFailureResolution {
-	val job: DownloadJob
-
-	data class RetryScheduled(
-		override val job: DownloadJob,
-	) : DownloadFailureResolution
-
-	data class TerminalFailure(
-		override val job: DownloadJob,
-	) : DownloadFailureResolution
 }

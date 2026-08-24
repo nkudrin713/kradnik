@@ -3,7 +3,6 @@ package com.nkudrin713.kradnik.download.service
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
-import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
@@ -64,34 +63,25 @@ class DownloadJobServiceTest {
     fun marksCompleted() {
         val job = job()
         val attempt = attempt(job)
-        val downloadedAt = Instant.parse("2026-01-01T00:00:00Z")
         val storedJob = job().apply {
             status = DownloadJobStatus.COMPLETED
             telegramFileId = "file-id"
-            telegramFileSize = 100
             downloadedFileSize = 200
-            this.downloadedAt = downloadedAt
-            completedAt = downloadedAt
+            completedAt = Instant.parse("2026-01-01T00:00:00Z")
         }
         every {
-            repository.markOwnedCompleted(1, LEASE_TOKEN, "file-id", 100, 200, downloadedAt)
+            repository.markOwnedCompleted(1, LEASE_TOKEN, "file-id", 200)
         } returns storedJob
 
         val actual = service.markCompleted(
             attempt = attempt,
-            result = DownloadedFileResult(
-                telegramFileId = "file-id",
-                telegramFileSize = 100,
-                downloadedFileSize = 200,
-                downloadedAt = downloadedAt,
-            ),
+            telegramFileId = "file-id",
+            downloadedFileSize = 200,
         )
 
         assertEquals(DownloadJobStatus.COMPLETED, actual.status)
         assertEquals("file-id", actual.telegramFileId)
-        assertEquals(100, actual.telegramFileSize)
         assertEquals(200, actual.downloadedFileSize)
-        assertEquals(downloadedAt, actual.downloadedAt)
         assertNotNull(actual.completedAt)
     }
 
@@ -108,10 +98,9 @@ class DownloadJobServiceTest {
 
         val actual = service.retryAt(attempt(job), "failure", retryAt)
 
-        assertTrue(actual is DownloadFailureResolution.RetryScheduled)
-        assertEquals(DownloadJobStatus.QUEUED, actual.job.status)
-        assertEquals(retryAt, actual.job.nextAttemptAt)
-        assertEquals("failure", actual.job.errorMessage)
+        assertEquals(DownloadJobStatus.QUEUED, actual.status)
+        assertEquals(retryAt, actual.nextAttemptAt)
+        assertEquals("failure", actual.errorMessage)
     }
 
     @Test
@@ -127,10 +116,9 @@ class DownloadJobServiceTest {
 
         val actual = service.retryAt(attempt(job), "failure", retryAt)
 
-        assertTrue(actual is DownloadFailureResolution.TerminalFailure)
-        assertEquals(DownloadJobStatus.FAILED, actual.job.status)
-        assertEquals("failure", actual.job.errorMessage)
-        assertNotNull(actual.job.completedAt)
+        assertEquals(DownloadJobStatus.FAILED, actual.status)
+        assertEquals("failure", actual.errorMessage)
+        assertNotNull(actual.completedAt)
     }
 
     @Test
@@ -153,40 +141,29 @@ class DownloadJobServiceTest {
     }
 
     @Test
-    fun marksMetadata() {
+    fun marksAudioMetadata() {
         val job = job()
-        val metadata = MediaMetadata(
-            title = "title",
-            extractor = "youtube",
-            durationSeconds = 120,
-            audioTitle = "audio title",
-            audioPerformer = "artist",
-            width = 1080,
-            height = 1920,
-            webpageUrl = "https://example.com",
-        )
         every {
             repository.updateOwnedMetadata(
                 1,
                 LEASE_TOKEN,
-                "title",
-                "youtube",
                 120,
                 "audio title",
                 "artist",
             )
         } returns job().apply {
-            sourceTitle = "title"
-            sourceExtractor = "youtube"
             sourceDurationSeconds = 120
             sourceAudioTitle = "audio title"
             sourceAudioPerformer = "artist"
         }
 
-        val actual = service.markMetadata(attempt(job), metadata)
+        val actual = service.markAudioMetadata(
+            attempt = attempt(job),
+            durationSeconds = 120,
+            title = "audio title",
+            performer = "artist",
+        )
 
-        assertEquals("title", actual.sourceTitle)
-        assertEquals("youtube", actual.sourceExtractor)
         assertEquals(120, actual.sourceDurationSeconds)
         assertEquals("audio title", actual.sourceAudioTitle)
         assertEquals("artist", actual.sourceAudioPerformer)
@@ -195,16 +172,13 @@ class DownloadJobServiceTest {
     @Test
     fun marksUploading() {
         val job = job()
-        val uploadingAt = Instant.parse("2026-01-01T00:00:00Z")
         every { repository.markOwnedUploading(1, LEASE_TOKEN) } returns job().apply {
             status = DownloadJobStatus.UPLOADING
-            uploadingStartedAt = uploadingAt
         }
 
         val actual = service.markUploading(attempt(job))
 
         assertEquals(DownloadJobStatus.UPLOADING, actual.status)
-        assertNotNull(actual.uploadingStartedAt)
     }
 
     @Test
@@ -267,10 +241,10 @@ class DownloadJobServiceTest {
         every { repository.requeueStaleInProgressJobs(3) } returns 2
         every { repository.failStaleInProgressJobs(3) } returns 1
 
-        val actual = service.recoverExpiredLeases()
+        service.recoverExpiredLeases()
 
-        assertEquals(2, actual.requeued)
-        assertEquals(1, actual.failed)
+        verify { repository.requeueStaleInProgressJobs(3) }
+        verify { repository.failStaleInProgressJobs(3) }
     }
 
     private fun command(): CreateDownloadJobCommand {

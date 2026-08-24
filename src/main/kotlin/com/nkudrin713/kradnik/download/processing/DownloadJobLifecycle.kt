@@ -1,28 +1,32 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
-import com.nkudrin713.kradnik.download.service.DownloadFailureResolution
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import com.nkudrin713.kradnik.download.service.DownloadedFileResult
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
+import com.nkudrin713.kradnik.telegram.TelegramSender
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
 @Component
 class DownloadJobLifecycle(
     private val downloadJobService: DownloadJobService,
-    private val statusReporter: DownloadStatusReporter,
-    private val retryPolicy: DownloadRetryPolicy,
+    private val telegramSender: TelegramSender,
+    private val clock: Clock,
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     fun markDownloading(attempt: ClaimedDownloadJob) {
-        val job = attempt.job
-        statusReporter.setStatus(job, TelegramDownloadStatus.DOWNLOADING)
+        setStatus(attempt.job, TelegramDownloadStatus.DOWNLOADING)
     }
 
     fun markUploading(attempt: ClaimedDownloadJob) {
         val job = downloadJobService.markUploading(attempt)
-        statusReporter.setStatus(job, TelegramDownloadStatus.UPLOADING)
+        setStatus(job, TelegramDownloadStatus.UPLOADING)
     }
 
     fun rejectTooLarge(
@@ -40,9 +44,8 @@ class DownloadJobLifecycle(
         attempt: ClaimedDownloadJob,
         errorMessage: String,
         retryAfter: Duration? = null,
-    ): DownloadFailureResolution {
-        val retryAt = retryPolicy.retryAt(attempt.job.attempts, retryAfter)
-        return retry(attempt, retryAt, errorMessage)
+    ) {
+        retry(attempt, nextRetryAt(attempt.job.attempts, retryAfter), errorMessage)
     }
 
     fun deferBeforeAttempt(
@@ -51,15 +54,15 @@ class DownloadJobLifecycle(
         reason: String,
     ) {
         val job = downloadJobService.deferBeforeAttempt(attempt, retryAt, reason)
-        statusReporter.setStatus(job, TelegramDownloadStatus.QUEUED)
+        setStatus(job, TelegramDownloadStatus.QUEUED)
     }
 
     fun retryAt(
         attempt: ClaimedDownloadJob,
         retryAt: Instant,
         errorMessage: String,
-    ): DownloadFailureResolution {
-        return retry(attempt, retryAt, errorMessage)
+    ) {
+        retry(attempt, retryAt, errorMessage)
     }
 
     fun failTerminal(
@@ -97,24 +100,28 @@ class DownloadJobLifecycle(
 
     fun complete(
         attempt: ClaimedDownloadJob,
-        result: DownloadedFileResult,
+        telegramFileId: String,
+        downloadedFileSize: Long?,
     ) {
-        val job = downloadJobService.markCompleted(attempt, result)
-        statusReporter.deleteStatus(job)
+        val job = downloadJobService.markCompleted(
+            attempt = attempt,
+            telegramFileId = telegramFileId,
+            downloadedFileSize = downloadedFileSize,
+        )
+        deleteStatus(job)
     }
 
     private fun retry(
         attempt: ClaimedDownloadJob,
         retryAt: Instant,
         errorMessage: String,
-    ): DownloadFailureResolution {
-        val resolution = downloadJobService.retryAt(attempt, errorMessage, retryAt)
-        val status = when (resolution) {
-            is DownloadFailureResolution.RetryScheduled -> TelegramDownloadStatus.QUEUED
-            is DownloadFailureResolution.TerminalFailure -> TelegramDownloadStatus.ERROR
+    ) {
+        val job = downloadJobService.retryAt(attempt, errorMessage, retryAt)
+        val status = when (job.status) {
+            DownloadJobStatus.QUEUED -> TelegramDownloadStatus.QUEUED
+            else -> TelegramDownloadStatus.ERROR
         }
-        statusReporter.setStatus(resolution.job, status)
-        return resolution
+        setStatus(job, status)
     }
 
     private fun fail(
@@ -123,6 +130,46 @@ class DownloadJobLifecycle(
         status: TelegramDownloadStatus,
     ) {
         val job = downloadJobService.markFailed(attempt, errorMessage)
-        statusReporter.setStatus(job, status)
+        setStatus(job, status)
+    }
+
+    private fun nextRetryAt(attempt: Int, retryAfter: Duration?): Instant {
+        val exponent = (attempt - 1).coerceIn(0, MAX_EXPONENT)
+        val backoff = minOf(
+            BASE_RETRY_DELAY.multipliedBy(1L shl exponent),
+            MAX_RETRY_DELAY,
+        )
+        val requestedDelay = retryAfter
+            ?.takeUnless(Duration::isNegative)
+            ?: Duration.ZERO
+
+        return clock.instant().plus(maxOf(backoff, requestedDelay))
+    }
+
+    private fun setStatus(job: DownloadJob, status: TelegramDownloadStatus) {
+        runCatching {
+            telegramSender.editStatus(
+                job.telegramChatId,
+                job.telegramStatusMessageId,
+                status,
+            )
+        }.onFailure {
+            logger.warn("JOB[{}] status message update failed: {}", job.id, it.message)
+        }
+    }
+
+    private fun deleteStatus(job: DownloadJob) {
+        val messageId = job.telegramStatusMessageId ?: return
+        runCatching {
+            telegramSender.deleteMessage(job.telegramChatId, messageId)
+        }.onFailure {
+            logger.warn("JOB[{}] status message deletion failed: {}", job.id, it.message)
+        }
+    }
+
+    private companion object {
+        private val BASE_RETRY_DELAY = Duration.ofSeconds(15)
+        private val MAX_RETRY_DELAY = Duration.ofMinutes(10)
+        private const val MAX_EXPONENT = 10
     }
 }

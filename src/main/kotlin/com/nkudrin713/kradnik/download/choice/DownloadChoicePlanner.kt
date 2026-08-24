@@ -20,15 +20,12 @@ class DownloadChoicePlanner(
     private val downloadEngine: DownloadEngine,
     private val audioUploadPlanner: AudioUploadPlanner,
     private val uploadLimits: TelegramUploadLimits,
-    private val metadataCache: DownloadChoiceMetadataCache,
 ) {
     suspend fun plan(url: String): DownloadChoicePlan {
         val specs = platformResolver.resolve(url)
         val video = specs.video
         val audio = specs.audio
-        val metadata = metadataCache.getOrLoad(video.cacheKey) {
-            extractCatalog(video)
-        }
+        val metadata = extractCatalog(video)
 
         val options = buildList {
             addAll(videoOptions(video, metadata))

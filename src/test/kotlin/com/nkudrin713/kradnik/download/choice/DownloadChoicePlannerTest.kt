@@ -18,8 +18,6 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
-import java.time.Clock
-import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -34,11 +32,6 @@ class DownloadChoicePlannerTest {
         downloadEngine = downloadEngine,
         audioUploadPlanner = AudioUploadPlanner(uploadLimits),
         uploadLimits = uploadLimits,
-        metadataCache = DownloadChoiceMetadataCache(
-            clock = Clock.systemUTC(),
-            ttl = Duration.ofMinutes(30),
-            maxEntries = 20,
-        ),
     )
 
     @Test
@@ -73,23 +66,6 @@ class DownloadChoicePlannerTest {
         assertEquals(DownloadPlatform.YOUTUBE, actual.options.last().spec.platform)
         assertEquals(actual.options.size, actual.options.map { it.spec.cacheKey }.distinct().size)
         assertEquals(DownloadChoiceMediaInfo("Channel", "Title", 120), actual.mediaInfo)
-        coVerify(exactly = 1) { downloadEngine.prepareCatalog(video) }
-    }
-
-    @Test
-    fun reusesCatalogMetadataForRepeatedVideo() = runTest {
-        val video = resolved(OutputType.VIDEO)
-        every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
-        coEvery { downloadEngine.prepareCatalog(video) } returns prepared(metadata(
-            formats = listOf(
-                videoFormat("v720", 720, 200_000_000),
-                audioFormat("a1", 20_000_000),
-            ),
-        ))
-
-        planner.plan(URL)
-        planner.plan(URL)
-
         coVerify(exactly = 1) { downloadEngine.prepareCatalog(video) }
     }
 

@@ -183,12 +183,11 @@ class DownloadJobProcessor(
             formatMegabytes(uploadFile.sizeBytes),
         )
 
-        val telegramResult = telegramFileSender.send(job, uploadFile)
+        val telegramFileId = telegramFileSender.send(job, uploadFile)
 
         downloadJobLifecycle.complete(
             attempt = attempt,
-            telegramFileId = telegramResult.telegramFileId,
-            downloadedFileSize = telegramResult.downloadedFileSize,
+            telegramFileId = telegramFileId,
         )
     }
 
@@ -202,11 +201,10 @@ class DownloadJobProcessor(
         cachedJob ?: return false
         val fileId = cachedJob.telegramFileId ?: return false
 
-        val telegramResult = try {
+        val telegramFileId = try {
             telegramFileSender.sendCached(
                 job = job,
                 fileId = fileId,
-                downloadedFileSize = cachedJob.downloadedFileSize,
             )
         } catch (error: TelegramSendException) {
             if (!error.isInvalidCachedFile()) {
@@ -219,8 +217,7 @@ class DownloadJobProcessor(
         downloadJobLifecycle.markUploading(attempt)
         downloadJobLifecycle.complete(
             attempt = attempt,
-            telegramFileId = telegramResult.telegramFileId,
-            downloadedFileSize = telegramResult.downloadedFileSize,
+            telegramFileId = telegramFileId,
         )
 
         return true

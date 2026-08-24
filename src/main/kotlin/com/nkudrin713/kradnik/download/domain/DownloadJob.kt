@@ -79,9 +79,6 @@ class DownloadJob(
 	@Column(name = "download_extra_args", nullable = false)
 	var downloadExtraArgs: List<String> = emptyList(),
 
-	@Column(name = "downloaded_file_size")
-	var downloadedFileSize: Long? = null,
-
 	@Column(name = "telegram_file_id")
 	var telegramFileId: String? = null,
 

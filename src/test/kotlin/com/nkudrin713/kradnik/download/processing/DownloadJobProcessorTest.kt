@@ -18,7 +18,6 @@ import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import com.nkudrin713.kradnik.download.telegram.TelegramFileSendResult
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import com.nkudrin713.kradnik.download.video.VideoTooLargeException
@@ -63,17 +62,16 @@ class DownloadJobProcessorTest {
         val job = job()
         val cachedJob = job().apply {
             telegramFileId = "cached-file-id"
-            downloadedFileSize = 100
         }
         every { downloadJobService.findCachedJob(job) } returns cachedJob
-        coEvery { telegramFileSender.sendCached(job, "cached-file-id", 100) } returns telegramResult()
+        coEvery { telegramFileSender.sendCached(job, "cached-file-id") } returns "file-id"
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir, telegramFileCacheEnabled = true).process(attempt(job))
 
-        coVerify { telegramFileSender.sendCached(job, "cached-file-id", 100) }
+        coVerify { telegramFileSender.sendCached(job, "cached-file-id") }
         verify { downloadJobLifecycle.markUploading(attempt(job)) }
-        verify { downloadJobLifecycle.complete(attempt(job), "file-id", 100) }
+        verify { downloadJobLifecycle.complete(attempt(job), "file-id") }
         verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
     }
 
@@ -82,28 +80,27 @@ class DownloadJobProcessorTest {
         val job = job()
         val cachedJob = job().apply {
             telegramFileId = "invalid-file-id"
-            downloadedFileSize = 100
         }
         val request = request()
         val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
         val metadata = metadata()
         every { downloadJobService.findCachedJob(job) } returns cachedJob
         coEvery {
-            telegramFileSender.sendCached(job, "invalid-file-id", 100)
+            telegramFileSender.sendCached(job, "invalid-file-id")
         } throws TelegramSendException(400, "Bad Request: wrong file identifier")
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
         every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns downloadedFile
-        coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
+        coEvery { telegramFileSender.send(job, downloadedFile) } returns "file-id"
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir, telegramFileCacheEnabled = true).process(attempt(job))
 
         coVerify { ytDlpService.download(request, jobDir(tempDir)) }
         coVerify { telegramFileSender.send(job, downloadedFile) }
-        verify { downloadJobLifecycle.complete(attempt(job), "file-id", 100) }
+        verify { downloadJobLifecycle.complete(attempt(job), "file-id") }
     }
 
     @Test
@@ -114,7 +111,7 @@ class DownloadJobProcessorTest {
         }
         every { downloadJobService.findCachedJob(job) } returns cachedJob
         coEvery {
-            telegramFileSender.sendCached(job, "cached-file-id", null)
+            telegramFileSender.sendCached(job, "cached-file-id")
         } throws TelegramSendException(403, "Forbidden: bot was blocked by the user")
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
@@ -133,7 +130,7 @@ class DownloadJobProcessorTest {
         }
         every { downloadJobService.findCachedJob(job) } returns cachedJob
         coEvery {
-            telegramFileSender.sendCached(job, "cached-file-id", null)
+            telegramFileSender.sendCached(job, "cached-file-id")
         } throws TelegramSendException(429, "Too Many Requests", retryAfter)
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
@@ -171,7 +168,7 @@ class DownloadJobProcessorTest {
         every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns preparedFile
-        coEvery { telegramFileSender.send(job, preparedFile) } returns telegramResult()
+        coEvery { telegramFileSender.send(job, preparedFile) } returns "file-id"
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(attempt(job))
@@ -182,7 +179,7 @@ class DownloadJobProcessorTest {
         verify { downloadJobLifecycle.markUploading(attempt(job)) }
         coVerify { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) }
         coVerify { telegramFileSender.send(job, preparedFile) }
-        verify { downloadJobLifecycle.complete(attempt(job), "file-id", 100) }
+        verify { downloadJobLifecycle.complete(attempt(job), "file-id") }
         verify { workDirCleaner.deleteRecursively(jobRoot(tempDir)) }
     }
 
@@ -287,7 +284,7 @@ class DownloadJobProcessorTest {
         every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery { session.download(request, jobDir(tempDir)) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns downloadedFile
-        coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
+        coEvery { telegramFileSender.send(job, downloadedFile) } returns "file-id"
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(attempt(job))
@@ -471,7 +468,7 @@ class DownloadJobProcessorTest {
         coEvery { ytDlpService.extractMetadata(request) } returns metadata
         every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns markedJob
         coEvery { ytDlpService.download(downloadRequest, jobDir(tempDir)) } returns downloadedFile
-        coEvery { telegramFileSender.send(markedJob, downloadedFile) } returns telegramResult()
+        coEvery { telegramFileSender.send(markedJob, downloadedFile) } returns "file-id"
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(attempt(job))
@@ -536,7 +533,7 @@ class DownloadJobProcessorTest {
         every { downloadJobService.markAudioMetadata(attempt(job), any(), any(), any()) } returns job
         coEvery { ytDlpService.download(request, jobDir(tempDir)) } returns downloadedFile
         coEvery { telegramVideoPreparer.prepare(downloadedFile, jobDir(tempDir), 1) } returns downloadedFile
-        coEvery { telegramFileSender.send(job, downloadedFile) } returns telegramResult()
+        coEvery { telegramFileSender.send(job, downloadedFile) } returns "file-id"
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(attempt(job))
@@ -649,13 +646,6 @@ class DownloadJobProcessorTest {
             uploader = "uploader",
             channel = "channel",
             requestedFormats = null,
-        )
-    }
-
-    private fun telegramResult(): TelegramFileSendResult {
-        return TelegramFileSendResult(
-            telegramFileId = "file-id",
-            downloadedFileSize = 100,
         )
     }
 

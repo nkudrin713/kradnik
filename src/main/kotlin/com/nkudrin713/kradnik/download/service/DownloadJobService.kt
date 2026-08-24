@@ -135,7 +135,6 @@ class DownloadJobService(
 	fun markCompleted(
 		attempt: ClaimedDownloadJob,
 		telegramFileId: String,
-		downloadedFileSize: Long?,
 	): DownloadJob {
 		val jobId = attempt.requiredId()
 		val updatedJob = requireOwned(
@@ -143,17 +142,11 @@ class DownloadJobService(
 				jobId = jobId,
 				leaseToken = attempt.leaseToken,
 				telegramFileId = telegramFileId,
-				downloadedFileSize = downloadedFileSize,
 			),
 			attempt,
 		)
 
-		logger.info(
-			"CHAT[{}] JOB[{}] done: downloadedFileSize={}",
-			updatedJob.telegramChatId,
-			jobId,
-			downloadedFileSize,
-		)
+		logger.info("CHAT[{}] JOB[{}] done", updatedJob.telegramChatId, jobId)
 
 		return updatedJob
 	}

@@ -114,7 +114,6 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 		value = """
 			UPDATE download_jobs
 			SET status = 'completed',
-			    downloaded_file_size = :downloadedFileSize,
 			    telegram_file_id = :telegramFileId,
 			    error_message = NULL,
 			    lease_token = NULL,
@@ -132,7 +131,6 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 		jobId: Long,
 		leaseToken: UUID,
 		telegramFileId: String,
-		downloadedFileSize: Long?,
 	): DownloadJob?
 
 	@Query(

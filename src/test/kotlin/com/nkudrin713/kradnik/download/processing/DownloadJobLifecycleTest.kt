@@ -99,14 +99,13 @@ class DownloadJobLifecycleTest {
         val attempt = attempt(job())
         val completedJob = job(status = DownloadJobStatus.COMPLETED)
         every {
-            downloadJobService.markCompleted(attempt, "file-id", 100)
+            downloadJobService.markCompleted(attempt, "file-id")
         } returns completedJob
         every { telegramSender.deleteMessage(100, 10) } just runs
 
         lifecycle.complete(
             attempt = attempt,
             telegramFileId = "file-id",
-            downloadedFileSize = 100,
         )
 
         verify { telegramSender.deleteMessage(100, 10) }
@@ -116,13 +115,12 @@ class DownloadJobLifecycleTest {
     fun ignoresStatusDeliveryErrors() {
         val job = job().apply { telegramStatusMessageId = null }
         every { telegramSender.editStatus(any(), any(), any()) } throws RuntimeException("Telegram error")
-        every { downloadJobService.markCompleted(any(), "file-id", 100) } returns job
+        every { downloadJobService.markCompleted(any(), "file-id") } returns job
 
         lifecycle.markDownloading(attempt(job))
         lifecycle.complete(
             attempt = attempt(job),
             telegramFileId = "file-id",
-            downloadedFileSize = 100,
         )
 
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }

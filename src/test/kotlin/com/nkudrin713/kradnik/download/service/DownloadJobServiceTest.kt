@@ -66,22 +66,19 @@ class DownloadJobServiceTest {
         val storedJob = job().apply {
             status = DownloadJobStatus.COMPLETED
             telegramFileId = "file-id"
-            downloadedFileSize = 200
             completedAt = Instant.parse("2026-01-01T00:00:00Z")
         }
         every {
-            repository.markOwnedCompleted(1, LEASE_TOKEN, "file-id", 200)
+            repository.markOwnedCompleted(1, LEASE_TOKEN, "file-id")
         } returns storedJob
 
         val actual = service.markCompleted(
             attempt = attempt,
             telegramFileId = "file-id",
-            downloadedFileSize = 200,
         )
 
         assertEquals(DownloadJobStatus.COMPLETED, actual.status)
         assertEquals("file-id", actual.telegramFileId)
-        assertEquals(200, actual.downloadedFileSize)
         assertNotNull(actual.completedAt)
     }
 

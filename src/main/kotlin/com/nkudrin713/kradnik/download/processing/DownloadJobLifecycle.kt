@@ -101,12 +101,10 @@ class DownloadJobLifecycle(
     fun complete(
         attempt: ClaimedDownloadJob,
         telegramFileId: String,
-        downloadedFileSize: Long?,
     ) {
         val job = downloadJobService.markCompleted(
             attempt = attempt,
             telegramFileId = telegramFileId,
-            downloadedFileSize = downloadedFileSize,
         )
         deleteStatus(job)
     }

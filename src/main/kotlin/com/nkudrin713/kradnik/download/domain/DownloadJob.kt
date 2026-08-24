@@ -110,4 +110,6 @@ class DownloadJob(
 
 	@Column(name = "lease_expires_at")
 	var leaseExpiresAt: Instant? = null,
-)
+) {
+	fun requiredId(): Long = requireNotNull(id)
+}

@@ -6,21 +6,27 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanningException
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
+import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Component
-import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 @Component
 class DownloadChoiceCoordinator(
     private val planner: DownloadChoicePlanner,
     private val sessionService: DownloadChoiceSessionService,
     private val telegramSender: TelegramSender,
-    @Qualifier("downloadChoiceExecutor")
-    private val executor: ExecutorService,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
+    private val executor = Executors.newFixedThreadPool(2) { task ->
+        Thread(task, "download-choice-worker").apply { isDaemon = true }
+    }
+
+    @PreDestroy
+    fun shutdown() {
+        executor.shutdown()
+    }
 
     fun prepare(command: PrepareDownloadChoiceCommand) {
         val statusMessageId = telegramSender.sendStatus(

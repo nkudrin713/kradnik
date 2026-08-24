@@ -3,6 +3,8 @@ package com.nkudrin713.kradnik.download.platform
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import org.springframework.stereotype.Service
 
+class UnsupportedPlatformException(message: String) : RuntimeException(message)
+
 @Service
 class PlatformResolver(
     private val handlers: List<PlatformDownloadHandler>,

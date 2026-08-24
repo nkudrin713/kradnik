@@ -1,12 +1,10 @@
 package com.nkudrin713.kradnik.download.instagram
 
+import com.nkudrin713.kradnik.download.DownloadPreparation
+import com.nkudrin713.kradnik.download.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.executor.DownloadExecutor
-import com.nkudrin713.kradnik.download.executor.DownloadPreparation
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
-import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
@@ -15,14 +13,12 @@ import org.springframework.stereotype.Component
 import java.nio.file.Path
 
 @Component
-class InstagramDownloadExecutor(
+class InstagramDownloader(
     private val embedDownloader: InstagramEmbedDownloader,
     private val rateLimiter: InstagramRateLimiter,
     private val ytDlpService: YtDlpService,
-) : DownloadExecutor {
-    override val strategies = setOf(DownloadStrategy.INSTAGRAM_EMBED)
-
-    override suspend fun prepare(spec: DownloadSpec): DownloadPreparation {
+) {
+    suspend fun prepare(spec: DownloadSpec): DownloadPreparation {
         if (!embedDownloader.supports(spec)) {
             return DownloadPreparation.TerminalFailure(UNSUPPORTED_MESSAGE)
         }
@@ -38,9 +34,7 @@ class InstagramDownloadExecutor(
         return try {
             val prepared = embedDownloader.prepare(spec)
             rateLimiter.recordSuccess(permit)
-            DownloadPreparation.Ready(
-                InstagramPreparedDownloadSession(prepared)
-            )
+            DownloadPreparation.Ready(InstagramSession(prepared))
         } catch (error: InstagramHttpException) {
             classifyHttpError(error, permit)
         } catch (error: InstagramContentUnavailableException) {
@@ -66,7 +60,7 @@ class InstagramDownloadExecutor(
         }
     }
 
-    private inner class InstagramPreparedDownloadSession(
+    private inner class InstagramSession(
         private val prepared: InstagramPreparedDownload,
     ) : PreparedDownloadSession {
         override val metadata: YtDlpMetadataDto = prepared.metadata

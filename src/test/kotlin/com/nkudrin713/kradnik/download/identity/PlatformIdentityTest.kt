@@ -1,8 +1,8 @@
 package com.nkudrin713.kradnik.download.identity
 
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.InstagramDownloadHandler
-import com.nkudrin713.kradnik.download.platform.PlatformFeatureToggles
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
 import com.nkudrin713.kradnik.download.platform.VK_AUDIO_PRESET
@@ -16,16 +16,11 @@ import kotlin.test.assertFailsWith
 class PlatformIdentityTest {
     private val resolver = PlatformResolver(
         handlers = listOf(YouTubeDownloadHandler(), InstagramDownloadHandler(), VkDownloadHandler()),
-        platformFeatureToggles = PlatformFeatureToggles(
-            youtubeEnabled = true,
-            instagramEnabled = true,
-            vkEnabled = true,
-        ),
     )
 
     @Test
     fun resolvesYouTubeWatchUrl() {
-        val actual = resolver.resolve(
+        val actual = resolve(
             url = "https://www.youtube.com/watch?v=abc&utm_source=x",
             outputType = OutputType.VIDEO,
         )
@@ -37,7 +32,7 @@ class PlatformIdentityTest {
 
     @Test
     fun resolvesYouTubeShortUrlWithTimecode() {
-        val actual = resolver.resolve(
+        val actual = resolve(
             url = "https://youtu.be/abc?t=42",
             outputType = OutputType.AUDIO,
         )
@@ -48,7 +43,7 @@ class PlatformIdentityTest {
 
     @Test
     fun resolvesYouTubeShortsUrl() {
-        val actual = resolver.resolve(
+        val actual = resolve(
             url = "https://youtube.com/shorts/abc?si=tracking",
             outputType = OutputType.VIDEO,
         )
@@ -59,7 +54,7 @@ class PlatformIdentityTest {
 
     @Test
     fun resolvesYouTubeLiveUrl() {
-        val actual = resolver.resolve(
+        val actual = resolve(
             url = "https://youtube.com/live/abc",
             outputType = OutputType.VIDEO,
         )
@@ -70,7 +65,7 @@ class PlatformIdentityTest {
 
     @Test
     fun resolvesYouTubeMusicUrl() {
-        val actual = resolver.resolve(
+        val actual = resolve(
             url = "https://music.youtube.com/watch?v=abc",
             outputType = OutputType.AUDIO,
         )
@@ -81,7 +76,7 @@ class PlatformIdentityTest {
 
     @Test
     fun resolvesYouTubeEmbedUrl() {
-        val actual = resolver.resolve(
+        val actual = resolve(
             url = "https://www.youtube.com/embed/abc",
             outputType = OutputType.VIDEO,
         )
@@ -93,7 +88,7 @@ class PlatformIdentityTest {
     @Test
     fun rejectsPlaylistOnlyUrl() {
         assertFailsWith<UnsupportedUrlException> {
-            resolver.resolve(
+            resolve(
                 url = "https://www.youtube.com/playlist?list=PL123",
                 outputType = OutputType.VIDEO,
             )
@@ -102,7 +97,7 @@ class PlatformIdentityTest {
 
     @Test
     fun resolvesInstagramReelUrl() {
-        val actual = resolver.resolve(
+        val actual = resolve(
             url = "https://www.instagram.com/reel/abc/?igshid=tracking",
             outputType = OutputType.VIDEO,
         )
@@ -114,7 +109,7 @@ class PlatformIdentityTest {
 
     @Test
     fun resolvesInstagramPostUrl() {
-        val actual = resolver.resolve(
+        val actual = resolve(
             url = "https://m.instagram.com/p/abc/?utm_source=x",
             outputType = OutputType.AUDIO,
         )
@@ -124,33 +119,28 @@ class PlatformIdentityTest {
     }
 
     @Test
-    fun resolvesInstagramStoryUrl() {
-        val actual = resolver.resolve(
-            url = "https://www.instagram.com/stories/user/123456789/",
-            outputType = OutputType.VIDEO,
-        )
-
-        assertEquals("https://www.instagram.com/stories/user/123456789/", actual.normalizedUrl)
-        assertEquals("instagram:story:user:123456789:video:instagram_mobile_video", actual.cacheKey)
+    fun rejectsInstagramStoryUrl() {
+        assertFailsWith<UnsupportedUrlException> {
+            resolve(
+                url = "https://www.instagram.com/stories/user/123456789/",
+                outputType = OutputType.VIDEO,
+            )
+        }
     }
 
     @Test
-    fun resolvesUnknownInstagramUrlWithGenericNormalizedKey() {
-        val actual = resolver.resolve(
-            url = "https://www.instagram.com/user/?igshid=x",
-            outputType = OutputType.VIDEO,
-        )
-
-        assertEquals("https://www.instagram.com/user/", actual.normalizedUrl)
-        assertEquals(
-            "instagram:https://www.instagram.com/user/:video:instagram_mobile_video",
-            actual.cacheKey,
-        )
+    fun rejectsInstagramProfileUrl() {
+        assertFailsWith<UnsupportedUrlException> {
+            resolve(
+                url = "https://www.instagram.com/user/?igshid=x",
+                outputType = OutputType.VIDEO,
+            )
+        }
     }
 
     @Test
     fun resolvesVkVideoUrl() {
-        val actual = resolver.resolve(
+        val actual = resolve(
             url = "https://vkvideo.ru/video-127553155_456242961?utm_source=x",
             outputType = OutputType.VIDEO,
         )
@@ -168,11 +158,11 @@ class PlatformIdentityTest {
 
     @Test
     fun equivalentVkUrlsHaveSameCacheKey() {
-        val direct = resolver.resolve(
+        val direct = resolve(
             url = "https://vk.com/clip-74006511_456247211",
             outputType = OutputType.AUDIO,
         )
-        val query = resolver.resolve(
+        val query = resolve(
             url = "https://vk.com/clips-74006511?z=clip-74006511_456247211%2Fpl_-74006511_-2",
             outputType = OutputType.AUDIO,
         )
@@ -184,11 +174,11 @@ class PlatformIdentityTest {
 
     @Test
     fun vkVideoAndAudioHaveDifferentCacheKeys() {
-        val video = resolver.resolve(
+        val video = resolve(
             url = "https://vk.com/video-1_2",
             outputType = OutputType.VIDEO,
         )
-        val audio = resolver.resolve(
+        val audio = resolve(
             url = "https://vk.com/video-1_2",
             outputType = OutputType.AUDIO,
         )
@@ -200,10 +190,22 @@ class PlatformIdentityTest {
     @Test
     fun rejectsUnsupportedUrl() {
         assertFailsWith<UnsupportedPlatformException> {
-            resolver.resolve(
+            resolve(
                 url = "https://example.com/video",
                 outputType = OutputType.VIDEO,
             )
+        }
+    }
+
+    private fun resolve(
+        url: String,
+        outputType: OutputType,
+    ): DownloadSpec {
+        val specs = resolver.resolve(url)
+        return when (outputType) {
+            OutputType.VIDEO -> specs.video
+            OutputType.AUDIO -> specs.audio
+            OutputType.COVER -> error("Cover specs are built from video metadata")
         }
     }
 }

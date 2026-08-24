@@ -1,19 +1,16 @@
 package com.nkudrin713.kradnik.download.platform
 
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.identity.extractQueryParameter
 import com.nkudrin713.kradnik.download.identity.parseHttpUrl
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 import java.net.URI
 
 @Component
-@Order(10)
 class YouTubeDownloadHandler : PlatformDownloadHandler {
 
     override val platform: DownloadPlatform = DownloadPlatform.YOUTUBE
@@ -23,10 +20,7 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
         return isYouTubeHost(uri.host)
     }
 
-    override fun resolve(
-        url: String,
-        outputType: OutputType,
-    ): DownloadSpec {
+    override fun resolve(url: String): PlatformDownloadSpecs {
         val originalUrl = url.trim()
         val uri = parseHttpUrl(originalUrl)
         val youtubeVideoId = extractYouTubeVideoId(uri)
@@ -38,27 +32,26 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
         }
         val normalizedUrl = "https://www.youtube.com/watch?v=$youtubeVideoId"
 
-        val spec = when (outputType) {
-            OutputType.VIDEO -> DownloadSpec(
+        return PlatformDownloadSpecs(
+            video = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "",
-                outputType = outputType,
-                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+                cacheKey = "youtube:video:$youtubeVideoId:video:youtube_h264_mobile_2gb",
+                outputType = OutputType.VIDEO,
+                platform = platform,
                 presetName = "youtube_h264_mobile_2gb",
                 formatSelector =
                     "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
                             "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
                             "b[height<=1280]/best",
                 extraArgs = listOf("--merge-output-format", "mp4"),
-            )
-
-            OutputType.AUDIO -> DownloadSpec(
+            ),
+            audio = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "",
-                outputType = outputType,
-                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+                cacheKey = "youtube:video:$youtubeVideoId:audio:youtube_audio",
+                outputType = OutputType.AUDIO,
+                platform = platform,
                 presetName = "youtube_audio",
                 formatSelector = "ba/bestaudio",
                 extraArgs = listOf(
@@ -68,21 +61,7 @@ class YouTubeDownloadHandler : PlatformDownloadHandler {
                     "--embed-thumbnail",
                     "--convert-thumbnails", "jpg"
                 ),
-            )
-
-            OutputType.COVER -> DownloadSpec(
-                originalUrl = originalUrl,
-                normalizedUrl = normalizedUrl,
-                cacheKey = "",
-                outputType = outputType,
-                strategy = DownloadStrategy.COVER_YT_DLP,
-                presetName = "youtube_cover",
-                formatSelector = "best",
-            )
-        }
-
-        return spec.copy(
-            cacheKey = "youtube:video:$youtubeVideoId:${outputType.dbValue}:${spec.presetName}",
+            ),
         )
     }
 

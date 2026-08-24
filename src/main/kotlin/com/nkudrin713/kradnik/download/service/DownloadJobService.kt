@@ -38,7 +38,7 @@ class DownloadJobService(
 				normalizedUrl = spec.normalizedUrl,
 				cacheKey = spec.cacheKey,
 				outputType = spec.outputType,
-				downloadStrategy = spec.strategy,
+				platform = spec.platform,
 				downloadPreset = spec.presetName,
 				selectedFormat = spec.formatSelector,
 				downloadExtraArgs = spec.extraArgs,

@@ -2,7 +2,7 @@ package com.nkudrin713.kradnik.download.limit
 
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import java.math.BigDecimal
@@ -380,7 +380,7 @@ class DownloadPreflightServiceTest {
             normalizedUrl = "https://example.com",
             cacheKey = "video",
             outputType = outputType,
-            strategy = DownloadStrategy.YT_DLP,
+            platform = DownloadPlatform.YOUTUBE,
             formatSelector = "format",
             extraArgs = extraArgs,
             presetName = "preset",

@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.download.domain
 
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -14,7 +14,7 @@ class DownloadSpecTest {
                 normalizedUrl = "https://example.com/normalized",
                 cacheKey = "cache-key",
                 outputType = OutputType.AUDIO,
-                downloadStrategy = DownloadStrategy.YOUTUBE_YT_DLP,
+                platform = DownloadPlatform.YOUTUBE,
                 downloadPreset = "preset",
                 selectedFormat = "format",
                 downloadExtraArgs = listOf("-x", "--audio-format", "mp3"),
@@ -25,7 +25,7 @@ class DownloadSpecTest {
         assertEquals("https://example.com/normalized", actual.normalizedUrl)
         assertEquals("cache-key", actual.cacheKey)
         assertEquals(OutputType.AUDIO, actual.outputType)
-        assertEquals(DownloadStrategy.YOUTUBE_YT_DLP, actual.strategy)
+        assertEquals(DownloadPlatform.YOUTUBE, actual.platform)
         assertEquals("preset", actual.presetName)
         assertEquals("format", actual.formatSelector)
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.extraArgs)
@@ -69,7 +69,7 @@ class DownloadSpecTest {
             normalizedUrl = "https://example.com/normalized",
             cacheKey = "cache-key",
             outputType = OutputType.AUDIO,
-            strategy = DownloadStrategy.YT_DLP,
+            platform = DownloadPlatform.YOUTUBE,
             formatSelector = "format",
             extraArgs = extraArgs,
             presetName = "preset",

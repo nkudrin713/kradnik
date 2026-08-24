@@ -1,14 +1,12 @@
 package com.nkudrin713.kradnik.download.platform
 
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.identity.extractQueryParameter
 import com.nkudrin713.kradnik.download.identity.parseHttpUrl
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 import java.net.URI
 import java.net.URLDecoder
@@ -18,7 +16,6 @@ internal const val VK_VIDEO_PRESET = "vk_mobile_video"
 internal const val VK_AUDIO_PRESET = "vk_audio"
 
 @Component
-@Order(30)
 class VkDownloadHandler : PlatformDownloadHandler {
 
     override val platform: DownloadPlatform = DownloadPlatform.VK
@@ -28,55 +25,38 @@ class VkDownloadHandler : PlatformDownloadHandler {
         return VK_HOSTS.contains(uri.host?.lowercase())
     }
 
-    override fun resolve(
-        url: String,
-        outputType: OutputType,
-    ): DownloadSpec {
+    override fun resolve(url: String): PlatformDownloadSpecs {
         val originalUrl = url.trim()
         val uri = parseHttpUrl(originalUrl)
         val media = extractMedia(uri)
             ?: throw UnsupportedUrlException("VK URL is not supported")
         val normalizedUrl = "https://vk.com/${media.type}${media.id}"
 
-        val spec = when (outputType) {
-            OutputType.VIDEO -> DownloadSpec(
+        val cacheKeyPrefix = "vk:${media.type}:${media.id}"
+        return PlatformDownloadSpecs(
+            video = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "",
-                outputType = outputType,
-                strategy = DownloadStrategy.VK_YT_DLP,
+                cacheKey = "$cacheKeyPrefix:video:$VK_VIDEO_PRESET",
+                outputType = OutputType.VIDEO,
+                platform = platform,
                 presetName = VK_VIDEO_PRESET,
                 formatSelector =
                     "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/" +
                             "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
                             "b[height<=1280]/best",
                 extraArgs = listOf("--merge-output-format", "mp4"),
-            )
-
-            OutputType.AUDIO -> DownloadSpec(
+            ),
+            audio = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "",
-                outputType = outputType,
-                strategy = DownloadStrategy.VK_YT_DLP,
+                cacheKey = "$cacheKeyPrefix:audio:$VK_AUDIO_PRESET",
+                outputType = OutputType.AUDIO,
+                platform = platform,
                 presetName = VK_AUDIO_PRESET,
                 formatSelector = "ba/bestaudio/best",
                 extraArgs = listOf("-x", "--audio-format", "mp3"),
-            )
-
-            OutputType.COVER -> DownloadSpec(
-                originalUrl = originalUrl,
-                normalizedUrl = normalizedUrl,
-                cacheKey = "",
-                outputType = outputType,
-                strategy = DownloadStrategy.COVER_YT_DLP,
-                presetName = "vk_cover",
-                formatSelector = "best",
-            )
-        }
-
-        return spec.copy(
-            cacheKey = "vk:${media.type}:${media.id}:${outputType.dbValue}:${spec.presetName}",
+            ),
         )
     }
 

@@ -1,18 +1,18 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.download.DownloadEngine
+import com.nkudrin713.kradnik.download.DownloadPreparation
+import com.nkudrin713.kradnik.download.PreparedDownloadSession
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
+import com.nkudrin713.kradnik.download.cover.CoverDownloader
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.executor.DownloadExecutor
-import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
-import com.nkudrin713.kradnik.download.executor.DownloadPreparation
-import com.nkudrin713.kradnik.download.executor.PreparedDownloadSession
-import com.nkudrin713.kradnik.download.executor.YtDlpDownloadExecutor
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.instagram.InstagramDownloader
 import com.nkudrin713.kradnik.download.instagram.InstagramMediaTooLargeException
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
@@ -52,12 +52,8 @@ class DownloadJobProcessorTest {
     private val telegramVideoPreparer: TelegramVideoPreparer = mockk()
     private val telegramFileSender: TelegramFileSender = mockk()
     private val ytDlpService: YtDlpService = mockk()
-    private val instagramExecutor: DownloadExecutor = mockk {
-        every { strategies } returns setOf(DownloadStrategy.INSTAGRAM_EMBED)
-    }
-    private val downloadExecutorResolver = DownloadExecutorResolver(
-        listOf(instagramExecutor, YtDlpDownloadExecutor(ytDlpService))
-    )
+    private val instagramDownloader: InstagramDownloader = mockk()
+    private val downloadEngine = DownloadEngine(ytDlpService, instagramDownloader, mockk<CoverDownloader>())
     private val mediaMetadataMapper: MediaMetadataMapper = mockk()
     private val downloadJobLifecycle: DownloadJobLifecycle = mockk(relaxed = true)
     private val workDirCleaner: WorkDirCleaner = mockk()
@@ -270,7 +266,7 @@ class DownloadJobProcessorTest {
         val metadata = metadata()
         val session: PreparedDownloadSession = mockk()
         every { session.metadata } returns metadata
-        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.Ready(session)
+        coEvery { instagramDownloader.prepare(request) } returns DownloadPreparation.Ready(session)
         every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
         every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
         every { downloadJobService.markMetadata(attempt(job), any()) } returns job
@@ -294,7 +290,7 @@ class DownloadJobProcessorTest {
         val session: PreparedDownloadSession = mockk()
         val downloadedFile = DownloadedFile(tempDir.resolve("downloaded.mp4"), 100)
         every { session.metadata } returns metadata
-        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.Ready(session)
+        coEvery { instagramDownloader.prepare(request) } returns DownloadPreparation.Ready(session)
         every { downloadPreflightService.check(request, metadata) } returns DownloadPreflightDecision.Allowed(request)
         every { mediaMetadataMapper.toMediaMetadata(metadata) } returns mediaMetadata()
         every { downloadJobService.markMetadata(attempt(job), any()) } returns job
@@ -307,7 +303,7 @@ class DownloadJobProcessorTest {
 
         coVerify(exactly = 0) { ytDlpService.extractMetadata(any()) }
         coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
-        coVerify(exactly = 1) { instagramExecutor.prepare(request) }
+        coVerify(exactly = 1) { instagramDownloader.prepare(request) }
         coVerify(exactly = 1) { session.download(request, jobDir(tempDir)) }
     }
 
@@ -316,12 +312,12 @@ class DownloadJobProcessorTest {
         val url = "https://www.instagram.com/reel/ABC_123/"
         val job = job(url = url)
         val request = request(url = url)
-        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.TerminalFailure("embed failed")
+        coEvery { instagramDownloader.prepare(request) } returns DownloadPreparation.TerminalFailure("embed failed")
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(attempt(job))
 
-        coVerify(exactly = 1) { instagramExecutor.prepare(request) }
+        coVerify(exactly = 1) { instagramDownloader.prepare(request) }
         coVerify(exactly = 0) { ytDlpService.extractMetadata(any()) }
         coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
         verify { downloadJobLifecycle.failTerminal(attempt(job), "embed failed") }
@@ -332,7 +328,7 @@ class DownloadJobProcessorTest {
         val url = "https://www.instagram.com/reel/ABC_123/"
         val job = job(url = url)
         val request = request(url = url)
-        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.SourceUnavailable(
+        coEvery { instagramDownloader.prepare(request) } returns DownloadPreparation.SourceUnavailable(
             "Instagram content is unavailable without authentication"
         )
         every { workDirCleaner.deleteRecursively(any()) } just runs
@@ -355,7 +351,7 @@ class DownloadJobProcessorTest {
         val job = job(url = url)
         val request = request(url = url)
         val retryAt = Instant.parse("2026-07-15T10:00:30Z")
-        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.NotReady(
+        coEvery { instagramDownloader.prepare(request) } returns DownloadPreparation.NotReady(
             retryAt = retryAt,
             reason = "rate limited",
         )
@@ -374,7 +370,7 @@ class DownloadJobProcessorTest {
         val job = job(url = url)
         val request = request(url = url)
         val retryAt = Instant.parse("2026-07-15T10:30:00Z")
-        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.RetryableFailure(
+        coEvery { instagramDownloader.prepare(request) } returns DownloadPreparation.RetryableFailure(
             retryAt = retryAt,
             reason = "Instagram throttled request",
         )
@@ -398,14 +394,14 @@ class DownloadJobProcessorTest {
         val url = "https://www.instagram.com/stories/user/123/"
         val job = job(outputType = OutputType.AUDIO, url = url)
         val request = request(outputType = OutputType.AUDIO, url = url)
-        coEvery { instagramExecutor.prepare(request) } returns DownloadPreparation.TerminalFailure(
+        coEvery { instagramDownloader.prepare(request) } returns DownloadPreparation.TerminalFailure(
             "Instagram request is not supported by embed downloader"
         )
         every { workDirCleaner.deleteRecursively(any()) } just runs
 
         processor(tempDir).process(attempt(job))
 
-        coVerify(exactly = 1) { instagramExecutor.prepare(request) }
+        coVerify(exactly = 1) { instagramDownloader.prepare(request) }
         coVerify(exactly = 0) { ytDlpService.extractMetadata(any()) }
         coVerify(exactly = 0) { ytDlpService.download(any(), any()) }
         verify {
@@ -586,7 +582,7 @@ class DownloadJobProcessorTest {
             downloadPreflightService = downloadPreflightService,
             telegramVideoPreparer = telegramVideoPreparer,
             telegramFileSender = telegramFileSender,
-            downloadExecutorResolver = downloadExecutorResolver,
+            downloadEngine = downloadEngine,
             mediaMetadataMapper = mediaMetadataMapper,
             downloadJobLifecycle = downloadJobLifecycle,
             workDirCleaner = workDirCleaner,
@@ -608,7 +604,7 @@ class DownloadJobProcessorTest {
     private fun job(
         outputType: OutputType = OutputType.VIDEO,
         url: String = "https://example.com/video",
-        strategy: DownloadStrategy = strategyFor(url),
+        platform: DownloadPlatform = platformFor(url),
     ): DownloadJob {
         return DownloadJob(
             id = 1,
@@ -617,7 +613,7 @@ class DownloadJobProcessorTest {
             normalizedUrl = url,
             cacheKey = "cache-key",
             outputType = outputType,
-            downloadStrategy = strategy,
+            platform = platform,
             downloadPreset = "preset",
             selectedFormat = "format",
             downloadExtraArgs = listOf("--arg"),
@@ -627,14 +623,14 @@ class DownloadJobProcessorTest {
     private fun request(
         outputType: OutputType = OutputType.VIDEO,
         url: String = "https://example.com/video",
-        strategy: DownloadStrategy = strategyFor(url),
+        platform: DownloadPlatform = platformFor(url),
     ): DownloadSpec {
         return DownloadSpec(
             originalUrl = url,
             normalizedUrl = url,
             cacheKey = "cache-key",
             outputType = outputType,
-            strategy = strategy,
+            platform = platform,
             formatSelector = "format",
             extraArgs = listOf("--arg"),
             presetName = "preset",
@@ -692,11 +688,11 @@ class DownloadJobProcessorTest {
     private companion object {
         val LEASE_TOKEN: UUID = UUID.fromString("00000000-0000-0000-0000-000000000001")
 
-        fun strategyFor(url: String): DownloadStrategy {
+        fun platformFor(url: String): DownloadPlatform {
             return if (url.contains("instagram.com")) {
-                DownloadStrategy.INSTAGRAM_EMBED
+                DownloadPlatform.INSTAGRAM
             } else {
-                DownloadStrategy.YT_DLP
+                DownloadPlatform.YOUTUBE
             }
         }
     }

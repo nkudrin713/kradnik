@@ -5,7 +5,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -39,7 +39,7 @@ class DownloadJobServiceTest {
         assertEquals("https://example.com/normalized", actual.job.normalizedUrl)
         assertEquals("cache-key", actual.job.cacheKey)
         assertEquals(OutputType.AUDIO, actual.job.outputType)
-        assertEquals(DownloadStrategy.YOUTUBE_YT_DLP, actual.job.downloadStrategy)
+        assertEquals(DownloadPlatform.YOUTUBE, actual.job.platform)
         assertEquals("preset", actual.job.downloadPreset)
         assertEquals("format", actual.job.selectedFormat)
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.job.downloadExtraArgs)
@@ -284,7 +284,7 @@ class DownloadJobServiceTest {
                 normalizedUrl = "https://example.com/normalized",
                 cacheKey = "cache-key",
                 outputType = OutputType.AUDIO,
-                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+                platform = DownloadPlatform.YOUTUBE,
                 presetName = "preset",
                 formatSelector = "format",
                 extraArgs = listOf("-x", "--audio-format", "mp3"),

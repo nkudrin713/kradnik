@@ -1,5 +1,7 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.download.DownloadEngine
+import com.nkudrin713.kradnik.download.DownloadPreparation
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.cover.CoverTooLargeException
@@ -8,8 +10,6 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.requiredId
-import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
-import com.nkudrin713.kradnik.download.executor.DownloadPreparation
 import com.nkudrin713.kradnik.download.instagram.InstagramMediaTooLargeException
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
@@ -37,7 +37,7 @@ class DownloadJobProcessor(
     private val downloadPreflightService: DownloadPreflightService,
     private val telegramVideoPreparer: TelegramVideoPreparer,
     private val telegramFileSender: TelegramFileSender,
-    private val downloadExecutorResolver: DownloadExecutorResolver,
+    private val downloadEngine: DownloadEngine,
     private val mediaMetadataMapper: MediaMetadataMapper,
     private val downloadJobLifecycle: DownloadJobLifecycle,
     private val workDirCleaner: WorkDirCleaner,
@@ -65,7 +65,7 @@ class DownloadJobProcessor(
             }
 
             val spec = DownloadSpec.fromJob(job)
-            val preparation = downloadExecutorResolver.resolve(spec).prepare(spec)
+            val preparation = downloadEngine.prepare(spec)
             val session = when (preparation) {
                 is DownloadPreparation.Ready -> preparation.session
                 is DownloadPreparation.NotReady -> {

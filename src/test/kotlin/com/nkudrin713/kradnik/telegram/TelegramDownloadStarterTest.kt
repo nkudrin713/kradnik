@@ -3,7 +3,7 @@ package com.nkudrin713.kradnik.telegram
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobResult
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -92,7 +92,7 @@ class TelegramDownloadStarterTest {
             normalizedUrl = URL,
             cacheKey = "video",
             outputType = outputType,
-            strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+            platform = DownloadPlatform.YOUTUBE,
             formatSelector = "format",
             presetName = "preset",
         )

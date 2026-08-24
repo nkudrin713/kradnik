@@ -4,7 +4,7 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
@@ -155,7 +155,7 @@ class TelegramSenderTest {
                 normalizedUrl = "https://example.com/video",
                 cacheKey = "cache",
                 outputType = OutputType.VIDEO,
-                strategy = DownloadStrategy.YOUTUBE_YT_DLP,
+                platform = DownloadPlatform.YOUTUBE,
                 presetName = "video_720",
                 formatSelector = "22",
             ),

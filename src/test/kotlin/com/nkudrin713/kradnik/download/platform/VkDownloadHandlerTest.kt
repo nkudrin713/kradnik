@@ -1,7 +1,6 @@
 package com.nkudrin713.kradnik.download.platform
 
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -26,14 +25,13 @@ class VkDownloadHandlerTest {
     @Test
     fun buildsVideoRequest() {
         val actual = handler.resolve(
-            url = "https://new.vk.com/video-123_456?utm_source=test",
-            outputType = OutputType.VIDEO,
-        )
+            "https://new.vk.com/video-123_456?utm_source=test"
+        ).video
 
         assertEquals("https://new.vk.com/video-123_456?utm_source=test", actual.originalUrl)
         assertEquals("https://vk.com/video-123_456", actual.normalizedUrl)
         assertEquals(OutputType.VIDEO, actual.outputType)
-        assertEquals(DownloadStrategy.VK_YT_DLP, actual.strategy)
+        assertEquals(DownloadPlatform.VK, actual.platform)
         assertEquals(VK_VIDEO_PRESET, actual.presetName)
         assertEquals(listOf("--merge-output-format", "mp4"), actual.extraArgs)
         assertEquals(
@@ -46,14 +44,11 @@ class VkDownloadHandlerTest {
 
     @Test
     fun buildsAudioRequestForClip() {
-        val actual = handler.resolve(
-            url = "https://vk.ru/clip30014565_456240946",
-            outputType = OutputType.AUDIO,
-        )
+        val actual = handler.resolve("https://vk.ru/clip30014565_456240946").audio
 
         assertEquals("https://vk.com/clip30014565_456240946", actual.normalizedUrl)
         assertEquals(OutputType.AUDIO, actual.outputType)
-        assertEquals(DownloadStrategy.VK_YT_DLP, actual.strategy)
+        assertEquals(DownloadPlatform.VK, actual.platform)
         assertEquals(VK_AUDIO_PRESET, actual.presetName)
         assertEquals("ba/bestaudio/best", actual.formatSelector)
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.extraArgs)
@@ -62,9 +57,8 @@ class VkDownloadHandlerTest {
     @Test
     fun resolvesEncodedQueryTarget() {
         val actual = handler.resolve(
-            url = "https://vk.com/clips-74006511?z=clip-74006511_456247211%2Fpl_-74006511_-2",
-            outputType = OutputType.VIDEO,
-        )
+            "https://vk.com/clips-74006511?z=clip-74006511_456247211%2Fpl_-74006511_-2"
+        ).video
 
         assertEquals("https://vk.com/clip-74006511_456247211", actual.normalizedUrl)
         assertEquals(
@@ -76,9 +70,8 @@ class VkDownloadHandlerTest {
     @Test
     fun resolvesVideoQueryTarget() {
         val actual = handler.resolve(
-            url = "https://vk.com/feed?z=video-43215063_166094326%2Fbb50cacd3177146d7a",
-            outputType = OutputType.VIDEO,
-        )
+            "https://vk.com/feed?z=video-43215063_166094326%2Fbb50cacd3177146d7a"
+        ).video
 
         assertEquals("https://vk.com/video-43215063_166094326", actual.normalizedUrl)
         assertEquals(
@@ -99,7 +92,7 @@ class VkDownloadHandlerTest {
 
         urls.forEach { url ->
             assertFailsWith<UnsupportedUrlException>(url) {
-                handler.resolve(url, OutputType.VIDEO)
+                handler.resolve(url)
             }
         }
     }

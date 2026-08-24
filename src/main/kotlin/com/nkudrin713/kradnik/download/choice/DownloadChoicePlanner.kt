@@ -1,10 +1,9 @@
 package com.nkudrin713.kradnik.download.choice
 
+import com.nkudrin713.kradnik.download.DownloadEngine
+import com.nkudrin713.kradnik.download.DownloadPreparation
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
-import com.nkudrin713.kradnik.download.executor.DownloadPreparation
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlan
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
@@ -18,14 +17,15 @@ import java.math.RoundingMode
 @Component
 class DownloadChoicePlanner(
     private val platformResolver: PlatformResolver,
-    private val downloadExecutorResolver: DownloadExecutorResolver,
+    private val downloadEngine: DownloadEngine,
     private val audioUploadPlanner: AudioUploadPlanner,
     private val uploadLimits: TelegramUploadLimits,
     private val metadataCache: DownloadChoiceMetadataCache,
 ) {
     suspend fun plan(url: String): DownloadChoicePlan {
-        val video = platformResolver.resolve(url, OutputType.VIDEO)
-        val audio = platformResolver.resolve(url, OutputType.AUDIO)
+        val specs = platformResolver.resolve(url)
+        val video = specs.video
+        val audio = specs.audio
         val metadata = metadataCache.getOrLoad(video.cacheKey) {
             extractCatalog(video)
         }
@@ -53,8 +53,7 @@ class DownloadChoicePlanner(
     }
 
     private suspend fun extractCatalog(spec: DownloadSpec): YtDlpMetadataDto {
-        val executor = downloadExecutorResolver.resolve(spec)
-        return when (val preparation = executor.prepareCatalog(spec)) {
+        return when (val preparation = downloadEngine.prepareCatalog(spec)) {
             is DownloadPreparation.Ready -> preparation.session.metadata
             is DownloadPreparation.NotReady -> throw DownloadChoicePlanningException(
                 "Instagram временно ограничил запросы. Попробуйте позже",
@@ -190,7 +189,6 @@ class DownloadChoicePlanner(
         metadata.thumbnail?.takeIf { it.isNotBlank() } ?: return null
         val coverSpec = spec.copy(
             outputType = OutputType.COVER,
-            strategy = spec.strategy.coverStrategy(),
             formatSelector = "best",
             extraArgs = emptyList(),
             presetName = "${presetPrefix(spec)}_cover",
@@ -243,14 +241,7 @@ class DownloadChoicePlanner(
     }
 
     private fun presetPrefix(spec: DownloadSpec): String {
-        return when (spec.strategy) {
-            DownloadStrategy.YOUTUBE_YT_DLP -> "youtube"
-            DownloadStrategy.VK_YT_DLP -> "vk"
-            DownloadStrategy.INSTAGRAM_EMBED -> "instagram"
-            DownloadStrategy.YT_DLP -> "generic"
-            DownloadStrategy.COVER_YT_DLP,
-            DownloadStrategy.COVER_INSTAGRAM_EMBED -> error("Cover strategy cannot be used to build download choices")
-        }
+        return spec.platform.dbValue
     }
 
     private companion object {

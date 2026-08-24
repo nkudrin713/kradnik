@@ -5,7 +5,7 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -168,7 +168,7 @@ class YtDlpService(
 
     private fun youtubePoTokenArgs(spec: DownloadSpec): List<String> {
         val providerUrl = youtubePoTokenProviderUrl.trim().trimEnd('/')
-        if (spec.strategy != DownloadStrategy.YOUTUBE_YT_DLP || providerUrl.isEmpty()) {
+        if (spec.platform != DownloadPlatform.YOUTUBE || providerUrl.isEmpty()) {
             return emptyList()
         }
 

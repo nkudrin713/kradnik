@@ -1,10 +1,10 @@
 package com.nkudrin713.kradnik.download.instagram
 
+import com.nkudrin713.kradnik.download.DownloadPreparation
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.executor.DownloadPreparation
-import com.nkudrin713.kradnik.download.executor.DownloadStrategy
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
 import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
@@ -24,11 +24,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
-class InstagramDownloadExecutorTest {
+class InstagramDownloaderTest {
     private val embedDownloader: InstagramEmbedDownloader = mockk()
     private val rateLimiter: InstagramRateLimiter = mockk()
     private val ytDlpService: YtDlpService = mockk()
-    private val executor = InstagramDownloadExecutor(embedDownloader, rateLimiter, ytDlpService)
+    private val downloader = InstagramDownloader(embedDownloader, rateLimiter, ytDlpService)
 
     @Test
     fun returnsNotReadyWithoutCallingInstagramWhenPermitIsDeferred() = runTest {
@@ -37,7 +37,7 @@ class InstagramDownloadExecutorTest {
         every { embedDownloader.supports(request) } returns true
         every { rateLimiter.acquire() } returns RateLimitDecision.Deferred(retryAt)
 
-        val result = assertIs<DownloadPreparation.NotReady>(executor.prepare(request))
+        val result = assertIs<DownloadPreparation.NotReady>(downloader.prepare(request))
 
         assertEquals(retryAt, result.retryAt)
         coVerify(exactly = 0) { embedDownloader.prepare(any()) }
@@ -55,7 +55,7 @@ class InstagramDownloadExecutorTest {
         every { rateLimiter.recordSuccess(PERMIT) } returns Unit
         coEvery { embedDownloader.download(prepared, outputDir) } returns downloaded
 
-        val result = assertIs<DownloadPreparation.Ready>(executor.prepare(request))
+        val result = assertIs<DownloadPreparation.Ready>(downloader.prepare(request))
 
         assertEquals(prepared.metadata, result.session.metadata)
         assertEquals(downloaded, result.session.download(request, outputDir))
@@ -75,7 +75,7 @@ class InstagramDownloadExecutorTest {
         every { rateLimiter.recordSuccess(PERMIT) } returns Unit
         coEvery { ytDlpService.download(request, outputDir) } returns downloaded
 
-        val result = assertIs<DownloadPreparation.Ready>(executor.prepare(request))
+        val result = assertIs<DownloadPreparation.Ready>(downloader.prepare(request))
 
         assertEquals(prepared.metadata, result.session.metadata)
         assertEquals(downloaded, result.session.download(request, outputDir))
@@ -95,7 +95,7 @@ class InstagramDownloadExecutorTest {
         every { rateLimiter.recordSuccess(PERMIT) } returns Unit
         coEvery { ytDlpService.download(request, outputDir) } returns downloaded
 
-        val result = assertIs<DownloadPreparation.Ready>(executor.prepare(request))
+        val result = assertIs<DownloadPreparation.Ready>(downloader.prepare(request))
 
         assertEquals(downloaded, result.session.download(request, outputDir))
         coVerify(exactly = 0) { embedDownloader.download(any(), any()) }
@@ -116,7 +116,7 @@ class InstagramDownloadExecutorTest {
         coEvery { embedDownloader.prepare(request) } throws error
         every { rateLimiter.recordThrottle(PERMIT, Duration.ofMinutes(10)) } returns retryAt
 
-        val result = assertIs<DownloadPreparation.RetryableFailure>(executor.prepare(request))
+        val result = assertIs<DownloadPreparation.RetryableFailure>(downloader.prepare(request))
 
         assertEquals(retryAt, result.retryAt)
         verify { rateLimiter.recordThrottle(PERMIT, Duration.ofMinutes(10)) }
@@ -129,7 +129,7 @@ class InstagramDownloadExecutorTest {
         every { rateLimiter.acquire() } returns RateLimitDecision.Granted(PERMIT)
         coEvery { embedDownloader.prepare(request) } throws InstagramContentUnavailableException()
 
-        val result = assertIs<DownloadPreparation.SourceUnavailable>(executor.prepare(request))
+        val result = assertIs<DownloadPreparation.SourceUnavailable>(downloader.prepare(request))
 
         assertEquals("Instagram content is unavailable without authentication", result.reason)
         verify(exactly = 0) { rateLimiter.recordThrottle(any(), any()) }
@@ -140,7 +140,7 @@ class InstagramDownloadExecutorTest {
         val request = request(url = "https://www.instagram.com/stories/user/123/")
         every { embedDownloader.supports(request) } returns false
 
-        assertIs<DownloadPreparation.TerminalFailure>(executor.prepare(request))
+        assertIs<DownloadPreparation.TerminalFailure>(downloader.prepare(request))
 
         verify(exactly = 0) { rateLimiter.acquire() }
     }
@@ -154,7 +154,7 @@ class InstagramDownloadExecutorTest {
             normalizedUrl = url,
             cacheKey = "instagram",
             outputType = outputType,
-            strategy = DownloadStrategy.INSTAGRAM_EMBED,
+            platform = DownloadPlatform.INSTAGRAM,
             formatSelector = "format",
             presetName = "instagram",
         )

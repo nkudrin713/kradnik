@@ -1,7 +1,9 @@
 package com.nkudrin713.kradnik.download.domain
 
-import com.nkudrin713.kradnik.download.repository.DownloadOutputTypeConverter
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.repository.DownloadPlatformConverter
 import com.nkudrin713.kradnik.download.repository.DownloadJobStatusConverter
+import com.nkudrin713.kradnik.download.repository.DownloadOutputTypeConverter
 import com.nkudrin713.kradnik.download.repository.StringListJsonConverter
 import jakarta.persistence.Column
 import jakarta.persistence.Convert
@@ -15,6 +17,7 @@ import org.hibernate.annotations.UpdateTimestamp
 import java.time.Instant
 import java.util.UUID
 
+/** A persisted request snapshot whose mutable fields track queue and delivery progress. */
 @Entity
 @Table(name = "download_jobs")
 class DownloadJob(
@@ -47,18 +50,16 @@ class DownloadJob(
 	@Column(name = "output_type", nullable = false)
 	var outputType: OutputType = OutputType.VIDEO,
 
+	@Convert(converter = DownloadPlatformConverter::class)
+	@Column(name = "platform", nullable = false)
+	var platform: DownloadPlatform = DownloadPlatform.YOUTUBE,
+
 	@Convert(converter = DownloadJobStatusConverter::class)
 	@Column(nullable = false)
 	var status: DownloadJobStatus = DownloadJobStatus.QUEUED,
 
 	@Column(nullable = false)
 	var attempts: Int = 0,
-
-	@Column(name = "source_title")
-	var sourceTitle: String? = null,
-
-	@Column(name = "source_extractor")
-	var sourceExtractor: String? = null,
 
 	@Column(name = "source_duration_seconds")
 	var sourceDurationSeconds: Int? = null,
@@ -69,24 +70,18 @@ class DownloadJob(
 	@Column(name = "source_audio_performer")
 	var sourceAudioPerformer: String? = null,
 
-	@Column(name = "download_preset")
-	var downloadPreset: String? = null,
+	@Column(name = "download_preset", nullable = false)
+	var downloadPreset: String = "",
 
-	@Column(name = "selected_format")
-	var selectedFormat: String? = null,
+	@Column(name = "selected_format", nullable = false)
+	var selectedFormat: String = "",
 
 	@Convert(converter = StringListJsonConverter::class)
 	@Column(name = "download_extra_args", nullable = false)
 	var downloadExtraArgs: List<String> = emptyList(),
 
-	@Column(name = "downloaded_file_size")
-	var downloadedFileSize: Long? = null,
-
 	@Column(name = "telegram_file_id")
 	var telegramFileId: String? = null,
-
-	@Column(name = "telegram_file_size")
-	var telegramFileSize: Long? = null,
 
 	@Column(name = "telegram_status_message_id")
 	var telegramStatusMessageId: Int? = null,
@@ -102,15 +97,6 @@ class DownloadJob(
 	@Column(name = "updated_at", nullable = false)
 	var updatedAt: Instant? = null,
 
-	@Column(name = "processing_started_at")
-	var processingStartedAt: Instant? = null,
-
-	@Column(name = "uploading_started_at")
-	var uploadingStartedAt: Instant? = null,
-
-	@Column(name = "downloaded_at")
-	var downloadedAt: Instant? = null,
-
 	@Column(name = "completed_at")
 	var completedAt: Instant? = null,
 
@@ -122,4 +108,6 @@ class DownloadJob(
 
 	@Column(name = "lease_expires_at")
 	var leaseExpiresAt: Instant? = null,
-)
+) {
+	fun requiredId(): Long = requireNotNull(id)
+}

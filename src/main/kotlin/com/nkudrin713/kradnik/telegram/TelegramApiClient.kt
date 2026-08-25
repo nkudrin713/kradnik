@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import org.springframework.stereotype.Component
 import java.time.Duration
 
+/** Converts unsuccessful Telegram responses into classified [TelegramSendException] failures. */
 @Component
 class TelegramApiClient(
     private val bot: TelegramBot,
@@ -43,6 +44,7 @@ class TelegramApiClient(
     }
 }
 
+/** A Telegram failure classified for retry and invalid cached-file handling. */
 class TelegramSendException(
     val errorCode: Int?,
     val description: String?,

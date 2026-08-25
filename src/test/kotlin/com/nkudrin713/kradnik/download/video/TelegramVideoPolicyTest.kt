@@ -6,13 +6,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class TelegramVideoPolicyTest {
-    private val policy = TelegramVideoPolicy()
+    private val policy = TelegramVideoPolicy(
+        TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
+    )
 
     @Test
     fun acceptsCompatibleVideo() {
         val result = policy.evaluate(
             metadata = compatibleMetadata(),
-            sizeBytes = TelegramUploadLimits.MAX_UPLOAD_BYTES,
+            sizeBytes = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
         )
 
         assertEquals(TelegramVideoPolicyDecision.Accepted, result)
@@ -68,7 +70,7 @@ class TelegramVideoPolicyTest {
         val result = assertIs<TelegramVideoPolicyDecision.Transcode>(
             policy.evaluate(
                 metadata = compatibleMetadata(),
-                sizeBytes = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+                sizeBytes = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
             )
         )
 
@@ -79,7 +81,24 @@ class TelegramVideoPolicyTest {
     fun rejectsLargeHorizontalVideo() {
         val result = policy.evaluate(
             metadata = compatibleMetadata().copy(width = 1920, height = 1080),
-            sizeBytes = TelegramUploadLimits.MAX_UPLOAD_BYTES + 1,
+            sizeBytes = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
+        )
+
+        assertEquals(TelegramVideoPolicyDecision.RejectedTooLarge, result)
+    }
+
+    @Test
+    fun localModeRejectsLargeVerticalVideo() {
+        val localPolicy = TelegramVideoPolicy(
+            TelegramUploadLimits(
+                maxUploadBytes = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES,
+                localMode = true,
+            )
+        )
+
+        val result = localPolicy.evaluate(
+            metadata = compatibleMetadata(),
+            sizeBytes = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES + 1,
         )
 
         assertEquals(TelegramVideoPolicyDecision.RejectedTooLarge, result)

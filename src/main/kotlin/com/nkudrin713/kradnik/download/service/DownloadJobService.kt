@@ -1,9 +1,7 @@
 package com.nkudrin713.kradnik.download.service
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
-import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
-import com.nkudrin713.kradnik.download.domain.MediaMetadata
-import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
@@ -12,40 +10,45 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.UUID
 
+/** Persists queue transitions and requires lease ownership for mutations of claimed jobs. */
 @Service
 class DownloadJobService(
 	private val downloadJobRepository: DownloadJobRepository,
 ) {
 	private val logger = LoggerFactory.getLogger(javaClass)
 
+	/** Creates at most one job for a Telegram update when an update ID is present. */
 	@Transactional
-	fun createJob(command: CreateDownloadJobCommand): CreateDownloadJobResult {
+	fun createJob(command: CreateDownloadJobCommand): Boolean {
 		command.telegramUpdateId?.let { telegramUpdateId ->
 			downloadJobRepository.lockTelegramUpdate(telegramUpdateId)
-			downloadJobRepository.findByTelegramUpdateId(telegramUpdateId)?.let {
-				return CreateDownloadJobResult.Existing(it)
+			if (downloadJobRepository.findByTelegramUpdateId(telegramUpdateId) != null) {
+				return false
 			}
 		}
 
-		val job = downloadJobRepository.save(
+		val spec = command.spec
+		downloadJobRepository.save(
 			DownloadJob(
 				telegramUserId = command.telegramUserId,
 				telegramChatId = command.telegramChatId,
 				telegramUpdateId = command.telegramUpdateId,
 				telegramRequestMessageId = command.telegramRequestMessageId,
-				originalUrl = command.originalUrl,
-				normalizedUrl = command.normalizedUrl,
-				cacheKey = command.cacheKey,
-				outputType = command.outputType,
-				downloadPreset = command.downloadPreset,
-				selectedFormat = command.selectedFormat,
-				downloadExtraArgs = command.downloadExtraArgs,
+				originalUrl = spec.originalUrl,
+				normalizedUrl = spec.normalizedUrl,
+				cacheKey = spec.cacheKey,
+				outputType = spec.outputType,
+				platform = spec.platform,
+				downloadPreset = spec.presetName,
+				selectedFormat = spec.formatSelector,
+				downloadExtraArgs = spec.extraArgs,
 				telegramStatusMessageId = command.telegramStatusMessageId,
 			)
 		)
-		return CreateDownloadJobResult.Created(job)
+		return true
 	}
 
+	/** Atomically claims the oldest eligible job and associates it with [leaseToken]. */
 	@Transactional
 	fun claimNextQueuedJob(
 		leaseToken: UUID,
@@ -68,8 +71,9 @@ class DownloadJobService(
 		return downloadJobRepository.renewLease(jobId, leaseToken, leaseDurationMs) == 1
 	}
 
+	/** Recovers expired leases by requeueing retryable jobs and failing exhausted ones. */
 	@Transactional
-	fun recoverExpiredLeases(): DownloadJobRecoveryResult {
+	fun recoverExpiredLeases() {
 		val requeued = downloadJobRepository.requeueStaleInProgressJobs(
 			maxAttempts = MAX_ATTEMPTS,
 		)
@@ -85,10 +89,6 @@ class DownloadJobService(
 			)
 		}
 
-		return DownloadJobRecoveryResult(
-			requeued = requeued,
-			failed = failed,
-		)
 	}
 
 	@Transactional(readOnly = true)
@@ -99,97 +99,60 @@ class DownloadJobService(
 			)
 	}
 
+	@Transactional(readOnly = true)
+	fun ownsLease(jobId: Long, leaseToken: UUID): Boolean {
+		return downloadJobRepository.existsByIdAndLeaseToken(jobId, leaseToken)
+	}
+
 	@Transactional
-	fun markMetadata(attempt: ClaimedDownloadJob, metadata: MediaMetadata): DownloadJob {
-		val job = attempt.job
+	fun markAudioMetadata(
+		attempt: ClaimedDownloadJob,
+		durationSeconds: Int?,
+		title: String,
+		performer: String,
+	): DownloadJob {
 		val jobId = attempt.requiredId()
-		val sourceDurationSeconds = metadata.durationSeconds?.toInt()
-		ensureOwned(
+		return requireOwned(
 			downloadJobRepository.updateOwnedMetadata(
 				jobId = jobId,
 				leaseToken = attempt.leaseToken,
-				sourceTitle = metadata.title,
-				sourceExtractor = metadata.extractor,
-				sourceDurationSeconds = sourceDurationSeconds,
-				sourceAudioTitle = metadata.audioTitle,
-				sourceAudioPerformer = metadata.audioPerformer,
+				sourceDurationSeconds = durationSeconds,
+				sourceAudioTitle = title,
+				sourceAudioPerformer = performer,
 			),
 			attempt,
 		)
-
-		job.sourceTitle = metadata.title
-		job.sourceExtractor = metadata.extractor
-		job.sourceDurationSeconds = sourceDurationSeconds
-		job.sourceAudioTitle = metadata.audioTitle
-		job.sourceAudioPerformer = metadata.audioPerformer
-
-		logger.info(
-			"CHAT[{}] JOB[{}] metadata ok: source={}",
-			job.telegramChatId,
-			jobId,
-			metadata.extractor,
-		)
-
-		return job
 	}
 
 	@Transactional
 	fun markUploading(attempt: ClaimedDownloadJob): DownloadJob {
-		val job = attempt.job
-		ensureOwned(
+		return requireOwned(
 			downloadJobRepository.markOwnedUploading(
 				jobId = attempt.requiredId(),
 				leaseToken = attempt.leaseToken,
 			),
 			attempt,
 		)
-
-		job.status = DownloadJobStatus.UPLOADING
-		job.uploadingStartedAt = Instant.now()
-
-		return job
 	}
 
 	@Transactional
 	fun markCompleted(
 		attempt: ClaimedDownloadJob,
-		result: DownloadedFileResult,
+		telegramFileId: String,
 	): DownloadJob {
-		val job = attempt.job
 		val jobId = attempt.requiredId()
-		ensureOwned(
+		val updatedJob = requireOwned(
 			downloadJobRepository.markOwnedCompleted(
 				jobId = jobId,
 				leaseToken = attempt.leaseToken,
-				telegramFileId = result.telegramFileId,
-				telegramFileSize = result.telegramFileSize,
-				downloadedFileSize = result.downloadedFileSize,
-				downloadedAt = result.downloadedAt,
+				telegramFileId = telegramFileId,
 			),
 			attempt,
 		)
 
-		job.status = DownloadJobStatus.COMPLETED
+		logger.info("CHAT[{}] JOB[{}] done", updatedJob.telegramChatId, jobId)
 
-		job.downloadedFileSize = result.downloadedFileSize
-
-		job.telegramFileId = result.telegramFileId
-		job.telegramFileSize = result.telegramFileSize
-
-		job.errorMessage = null
-		job.leaseToken = null
-		job.leaseExpiresAt = null
-		job.downloadedAt = result.downloadedAt ?: Instant.now()
-		job.completedAt = Instant.now()
-
-		logger.info(
-			"CHAT[{}] JOB[{}] done: telegramFileSize={}",
-			job.telegramChatId,
-			jobId,
-			result.telegramFileSize,
-		)
-
-		return job
+		return updatedJob
 	}
 
 	@Transactional
@@ -197,20 +160,20 @@ class DownloadJobService(
 		attempt: ClaimedDownloadJob,
 		errorMessage: String,
 		retryAt: Instant,
-	): DownloadFailureResolution {
+	): DownloadJob {
 		return resolveFailure(attempt, errorMessage, retryAt)
 	}
 
+	/** Requeues without consuming an attempt because no source request was made. */
 	@Transactional
 	fun deferBeforeAttempt(
 		attempt: ClaimedDownloadJob,
 		retryAt: Instant,
 		reason: String,
 	): DownloadJob {
-		val job = attempt.job
 		val jobId = attempt.requiredId()
 		val storedReason = reason.take(MAX_ERROR_LENGTH)
-		ensureOwned(
+		val updatedJob = requireOwned(
 			downloadJobRepository.deferOwnedJob(
 				jobId = jobId,
 				leaseToken = attempt.leaseToken,
@@ -219,31 +182,25 @@ class DownloadJobService(
 			),
 			attempt,
 		)
-		job.status = DownloadJobStatus.QUEUED
-		job.attempts = (job.attempts - 1).coerceAtLeast(0)
-		job.nextAttemptAt = retryAt
-		job.errorMessage = storedReason
-		job.leaseToken = null
-		job.leaseExpiresAt = null
 
 		logger.info(
 			"CHAT[{}] JOB[{}] deferred before request: retryAt={}",
-			job.telegramChatId,
+			updatedJob.telegramChatId,
 			jobId,
 			retryAt,
 		)
 
-		return job
+		return updatedJob
 	}
 
 	private fun resolveFailure(
 		attempt: ClaimedDownloadJob,
 		errorMessage: String,
 		retryAt: Instant,
-	): DownloadFailureResolution {
+	): DownloadJob {
 		val job = attempt.job
 		val storedError = errorMessage.take(MAX_ERROR_LENGTH)
-		val updatedRows = if (job.attempts >= MAX_ATTEMPTS) {
+		val updatedJob = if (job.attempts >= MAX_ATTEMPTS) {
 			downloadJobRepository.failOwnedJob(
 				jobId = attempt.requiredId(),
 				leaseToken = attempt.leaseToken,
@@ -257,34 +214,18 @@ class DownloadJobService(
 				nextAttemptAt = retryAt,
 			)
 		}
-		ensureOwned(updatedRows, attempt)
-
-		job.errorMessage = storedError
-		job.leaseToken = null
-		job.leaseExpiresAt = null
-
-		if (job.attempts >= MAX_ATTEMPTS) {
-			job.status = DownloadJobStatus.FAILED
-			job.completedAt = Instant.now()
-		} else {
-			job.status = DownloadJobStatus.QUEUED
-			job.nextAttemptAt = retryAt
-		}
+		val resolvedJob = requireOwned(updatedJob, attempt)
 
 		logger.warn(
 			"CHAT[{}] JOB[{}] failed: status={}, attempts={}, error={}",
-			job.telegramChatId,
-			requireNotNull(job.id),
-			job.status,
-			job.attempts,
-			job.errorMessage,
+			resolvedJob.telegramChatId,
+			requireNotNull(resolvedJob.id),
+			resolvedJob.status,
+			resolvedJob.attempts,
+			resolvedJob.errorMessage,
 		)
 
-		return if (job.status == DownloadJobStatus.QUEUED) {
-			DownloadFailureResolution.RetryScheduled(job)
-		} else {
-			DownloadFailureResolution.TerminalFailure(job)
-		}
+		return resolvedJob
 	}
 
 	@Transactional
@@ -292,10 +233,9 @@ class DownloadJobService(
 		attempt: ClaimedDownloadJob,
 		errorMessage: String,
 	): DownloadJob {
-		val job = attempt.job
 		val jobId = attempt.requiredId()
 		val storedError = errorMessage.take(MAX_ERROR_LENGTH)
-		ensureOwned(
+		val updatedJob = requireOwned(
 			downloadJobRepository.failOwnedJob(
 				jobId = jobId,
 				leaseToken = attempt.leaseToken,
@@ -304,38 +244,20 @@ class DownloadJobService(
 			attempt,
 		)
 
-		job.status = DownloadJobStatus.FAILED
-		job.errorMessage = storedError
-		job.completedAt = Instant.now()
-		job.leaseToken = null
-		job.leaseExpiresAt = null
-
 		logger.warn(
 			"CHAT[{}] JOB[{}] failed: status={}, attempts={}, error={}",
-			job.telegramChatId,
+			updatedJob.telegramChatId,
 			jobId,
-			job.status,
-			job.attempts,
-			job.errorMessage,
+			updatedJob.status,
+			updatedJob.attempts,
+			updatedJob.errorMessage,
 		)
 
-		return job
+		return updatedJob
 	}
 
-	@Transactional(readOnly = true)
-	fun getJob(jobId: Long): DownloadJob {
-		return getJobInternal(jobId)
-	}
-
-	private fun getJobInternal(jobId: Long): DownloadJob {
-		return downloadJobRepository.findById(jobId)
-			.orElseThrow { DownloadJobNotFoundException(jobId) }
-	}
-
-	private fun ensureOwned(updatedRows: Int, attempt: ClaimedDownloadJob) {
-		if (updatedRows != 1) {
-			throw DownloadJobLeaseLostException(attempt.requiredId())
-		}
+	private fun requireOwned(updatedJob: DownloadJob?, attempt: ClaimedDownloadJob): DownloadJob {
+		return updatedJob ?: throw DownloadJobLeaseLostException(attempt.requiredId())
 	}
 
 	private companion object {
@@ -344,12 +266,11 @@ class DownloadJobService(
 	}
 }
 
-class DownloadJobNotFoundException(jobId: Long) :
-	RuntimeException("Download job not found: $jobId")
-
+/** Cancels the current attempt when its database lease no longer belongs to this worker. */
 class DownloadJobLeaseLostException(jobId: Long) :
 	CancellationException("Download job lease lost: $jobId")
 
+/** A job snapshot paired with the token required to mutate its current lease. */
 data class ClaimedDownloadJob(
 	val job: DownloadJob,
 	val leaseToken: UUID,
@@ -362,48 +283,6 @@ data class CreateDownloadJobCommand(
 	val telegramChatId: Long,
 	val telegramUpdateId: Int? = null,
 	val telegramRequestMessageId: Int? = null,
-	val originalUrl: String,
-	val normalizedUrl: String,
-	val cacheKey: String,
-	val outputType: OutputType,
-	val downloadPreset: String,
-	val selectedFormat: String,
-	val downloadExtraArgs: List<String> = emptyList(),
+	val spec: DownloadSpec,
 	val telegramStatusMessageId: Int? = null,
 )
-
-sealed interface CreateDownloadJobResult {
-	val job: DownloadJob
-
-	data class Created(
-		override val job: DownloadJob,
-	) : CreateDownloadJobResult
-
-	data class Existing(
-		override val job: DownloadJob,
-	) : CreateDownloadJobResult
-}
-
-data class DownloadedFileResult(
-	val telegramFileId: String,
-	val telegramFileSize: Long? = null,
-	val downloadedFileSize: Long? = null,
-	val downloadedAt: Instant? = null,
-)
-
-data class DownloadJobRecoveryResult(
-	val requeued: Int,
-	val failed: Int,
-)
-
-sealed interface DownloadFailureResolution {
-	val job: DownloadJob
-
-	data class RetryScheduled(
-		override val job: DownloadJob,
-	) : DownloadFailureResolution
-
-	data class TerminalFailure(
-		override val job: DownloadJob,
-	) : DownloadFailureResolution
-}

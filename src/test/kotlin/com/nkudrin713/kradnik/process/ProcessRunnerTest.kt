@@ -68,6 +68,21 @@ class ProcessRunnerTest {
     }
 
     @Test
+    fun `terminates process when working directory exceeds limit`() = runTest {
+        val result = runner.run(
+            TestCommand(
+                executable = "sh",
+                args = listOf("-c", "dd if=/dev/zero of=large.bin bs=1024 count=2048 2>/dev/null; sleep 10"),
+                workingDir = tempDir,
+                timeout = 15.seconds,
+                maxWorkingDirectoryBytes = 1_000_000,
+            )
+        )
+
+        assertTrue(result.workingDirectoryLimitExceeded)
+    }
+
+    @Test
     fun `drains both streams concurrently and bounds captured output`() = runTest {
         val result = runner.run(
             TestCommand(
@@ -134,4 +149,5 @@ private data class TestCommand(
     override val args: List<String>,
     override val workingDir: Path?,
     override val timeout: kotlin.time.Duration,
+    override val maxWorkingDirectoryBytes: Long? = null,
 ) : Command

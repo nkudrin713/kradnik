@@ -1,0 +1,35 @@
+ARG ALPINE_VERSION=3.24.1
+
+FROM alpine:${ALPINE_VERSION} AS build
+
+ARG TELEGRAM_BOT_API_COMMIT=adfd7f6a8e990272851777eeb3ae0def4216f161
+
+RUN apk add --no-cache build-base cmake git gperf linux-headers openssl-dev zlib-dev
+
+WORKDIR /src/telegram-bot-api
+
+RUN git init \
+    && git remote add origin https://github.com/tdlib/telegram-bot-api.git \
+    && git fetch --depth=1 origin "${TELEGRAM_BOT_API_COMMIT}" \
+    && git checkout --detach FETCH_HEAD \
+    && git submodule update --init --recursive --depth=1
+
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build build --target telegram-bot-api -j2 \
+    && strip build/telegram-bot-api
+
+FROM alpine:${ALPINE_VERSION}
+
+RUN apk add --no-cache ca-certificates libstdc++ openssl zlib \
+    && addgroup -g 101 -S telegram-bot-api \
+    && adduser -u 101 -S -D -H -G telegram-bot-api telegram-bot-api \
+    && install -d -o telegram-bot-api -g telegram-bot-api /var/lib/telegram-bot-api /tmp/telegram-bot-api
+
+COPY --from=build /src/telegram-bot-api/build/telegram-bot-api /usr/local/bin/telegram-bot-api
+
+USER telegram-bot-api
+
+HEALTHCHECK --interval=5s --timeout=3s --retries=12 CMD nc -z 127.0.0.1 8081
+
+ENTRYPOINT ["/usr/local/bin/telegram-bot-api"]
+CMD ["--local", "--http-port=8081", "--dir=/var/lib/telegram-bot-api", "--temp-dir=/tmp/telegram-bot-api"]

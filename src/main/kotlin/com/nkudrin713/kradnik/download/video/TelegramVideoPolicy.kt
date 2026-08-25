@@ -4,12 +4,14 @@ import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import org.springframework.stereotype.Component
 
 @Component
-class TelegramVideoPolicy {
+class TelegramVideoPolicy(
+    private val uploadLimits: TelegramUploadLimits,
+) {
     fun evaluate(
         metadata: VideoMetadata,
         sizeBytes: Long,
     ): TelegramVideoPolicyDecision {
-        if (sizeBytes > TelegramUploadLimits.MAX_UPLOAD_BYTES && !metadata.isVertical) {
+        if (sizeBytes > uploadLimits.maxUploadBytes && (uploadLimits.localMode || !metadata.isVertical)) {
             return TelegramVideoPolicyDecision.RejectedTooLarge
         }
 
@@ -26,7 +28,7 @@ class TelegramVideoPolicy {
             if (metadata.audioCodec != null && metadata.audioCodec != AAC_CODEC) {
                 add(TelegramVideoIssue.AUDIO_CODEC)
             }
-            if (sizeBytes > TelegramUploadLimits.MAX_UPLOAD_BYTES) {
+            if (sizeBytes > uploadLimits.maxUploadBytes) {
                 add(TelegramVideoIssue.FILE_SIZE)
             }
         }

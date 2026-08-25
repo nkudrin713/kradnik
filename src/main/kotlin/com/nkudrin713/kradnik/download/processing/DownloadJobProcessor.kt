@@ -1,22 +1,26 @@
 package com.nkudrin713.kradnik.download.processing
 
-import com.nkudrin713.kradnik.analytics.DownloadAnalytics
+import com.nkudrin713.kradnik.download.DownloadEngine
+import com.nkudrin713.kradnik.download.DownloadPreparation
+import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
+import com.nkudrin713.kradnik.download.cover.CoverTooLargeException
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.domain.requiredId
-import com.nkudrin713.kradnik.download.executor.DownloadExecutorResolver
-import com.nkudrin713.kradnik.download.executor.DownloadPreparation
+import com.nkudrin713.kradnik.download.instagram.InstagramMediaTooLargeException
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
+import com.nkudrin713.kradnik.download.video.VideoTooLargeException
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpFileSizeLimitException
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
@@ -26,17 +30,18 @@ import java.nio.file.Path
 import java.util.Locale
 import kotlin.io.path.createDirectories
 
+/** Runs one claimed job from cache lookup through download, preparation, and Telegram delivery. */
 @Component
 class DownloadJobProcessor(
     private val downloadJobService: DownloadJobService,
     private val downloadPreflightService: DownloadPreflightService,
     private val telegramVideoPreparer: TelegramVideoPreparer,
     private val telegramFileSender: TelegramFileSender,
-    private val downloadExecutorResolver: DownloadExecutorResolver,
-    private val mediaMetadataMapper: MediaMetadataMapper,
+    private val downloadEngine: DownloadEngine,
     private val downloadJobLifecycle: DownloadJobLifecycle,
-    private val downloadAnalytics: DownloadAnalytics,
     private val workDirCleaner: WorkDirCleaner,
+    private val workDirCapacityGuard: WorkDirCapacityGuard,
+    private val uploadLimits: TelegramUploadLimits,
     @Value("\${download.work-dir:/tmp/kradnik-downloads}")
     private val workDir: String,
     @Value("\${download.telegram-file-cache.enabled:true}")
@@ -44,21 +49,23 @@ class DownloadJobProcessor(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
+    /** Always removes the job workspace, including after cancellation or lease loss. */
     suspend fun process(attempt: ClaimedDownloadJob) {
         val job = attempt.job
         val jobId = requireNotNull(job.id)
-        val outputDir = Path.of(workDir)
-            .resolve(jobId.toString())
+        val jobDir = Path.of(workDir).resolve(jobId.toString())
+        val outputDir = jobDir
             .resolve(attempt.leaseToken.toString())
-            .createDirectories()
 
         try {
+            workDirCleaner.deleteRecursively(jobDir)
+            outputDir.createDirectories()
             if (sendCached(attempt)) {
                 return
             }
 
-            val request = DownloadRequest.fromJob(job)
-            val preparation = downloadExecutorResolver.resolve(request).prepare(request)
+            val spec = DownloadSpec.fromJob(job)
+            val preparation = downloadEngine.prepare(spec)
             val session = when (preparation) {
                 is DownloadPreparation.Ready -> preparation.session
                 is DownloadPreparation.NotReady -> {
@@ -82,20 +89,27 @@ class DownloadJobProcessor(
                 }
             }
             val metadata = session.metadata
-            val preflightDecision = downloadPreflightService.check(request, metadata)
-            downloadAnalytics.recordPreflightDecision(request, metadata, preflightDecision)
+            val preflightDecision = downloadPreflightService.check(spec, metadata)
             if (preflightDecision is DownloadPreflightDecision.Rejected) {
                 downloadJobLifecycle.rejectTooLarge(attempt, preflightDecision.reason)
                 return
             }
-            val downloadRequest = (preflightDecision as DownloadPreflightDecision.Allowed).request
+            val downloadSpec = (preflightDecision as DownloadPreflightDecision.Allowed).spec
 
+            workDirCapacityGuard.ensureDownloadCapacity(outputDir)
             downloadJobLifecycle.markDownloading(attempt)
 
             val uploadJob = markMetadata(attempt, metadata)
 
-            val downloadedFile = session.download(downloadRequest, outputDir)
+            val downloadedFile = session.download(downloadSpec, outputDir)
             val uploadFile = prepareForUpload(uploadJob, downloadedFile, outputDir, jobId)
+            if (uploadFile.sizeBytes > uploadLimits.maxUploadBytes) {
+                downloadJobLifecycle.rejectTooLarge(
+                    attempt,
+                    uploadLimitReason(uploadJob.outputType, uploadFile.sizeBytes),
+                )
+                return
+            }
 
             upload(attempt, uploadJob, uploadFile)
         } catch (error: YtDlpAuthenticationRequiredException) {
@@ -106,6 +120,30 @@ class DownloadJobProcessor(
             )
         } catch (error: CancellationException) {
             throw error
+        } catch (error: VideoTooLargeException) {
+            logger.warn("JOB[{}] video exceeds Telegram upload limit", jobId)
+            downloadJobLifecycle.rejectTooLarge(
+                attempt,
+                uploadLimitReason(OutputType.VIDEO, error.sizeBytes),
+            )
+        } catch (error: YtDlpFileSizeLimitException) {
+            logger.warn("JOB[{}] download exceeded safe file size limit", jobId)
+            downloadJobLifecycle.rejectTooLarge(
+                attempt,
+                uploadLimitReason(job.outputType, error.limitBytes + 1),
+            )
+        } catch (error: InstagramMediaTooLargeException) {
+            logger.warn("JOB[{}] Instagram media exceeds Telegram upload limit", jobId)
+            downloadJobLifecycle.rejectTooLarge(
+                attempt,
+                uploadLimitReason(job.outputType, error.sizeBytes),
+            )
+        } catch (error: CoverTooLargeException) {
+            logger.warn("JOB[{}] cover exceeds upload limit", jobId)
+            downloadJobLifecycle.rejectTooLarge(
+                attempt,
+                uploadLimitReason(OutputType.COVER, error.sizeBytes),
+            )
         } catch (error: TelegramSendException) {
             logger.error("JOB[{}] Telegram send failed", jobId, error)
             val errorMessage = error.message ?: error.javaClass.simpleName
@@ -118,7 +156,7 @@ class DownloadJobProcessor(
             logger.error("JOB[{}] processing failed", jobId, error)
             downloadJobLifecycle.failOrRetry(attempt, error.message ?: error.javaClass.simpleName)
         } finally {
-            workDirCleaner.deleteRecursively(outputDir)
+            workDirCleaner.deleteRecursively(jobDir)
         }
     }
 
@@ -130,7 +168,7 @@ class DownloadJobProcessor(
     ): DownloadedFile {
         return when (job.outputType) {
             OutputType.VIDEO -> telegramVideoPreparer.prepare(downloadedFile, outputDir, jobId)
-            OutputType.AUDIO -> downloadedFile
+            OutputType.AUDIO, OutputType.COVER -> downloadedFile
         }
     }
 
@@ -147,9 +185,12 @@ class DownloadJobProcessor(
             formatMegabytes(uploadFile.sizeBytes),
         )
 
-        val telegramResult = telegramFileSender.send(job, uploadFile)
+        val telegramFileId = telegramFileSender.send(job, uploadFile)
 
-        downloadJobLifecycle.complete(attempt, telegramResult.toDownloadedFileResult())
+        downloadJobLifecycle.complete(
+            attempt = attempt,
+            telegramFileId = telegramFileId,
+        )
     }
 
     private suspend fun sendCached(attempt: ClaimedDownloadJob): Boolean {
@@ -159,15 +200,13 @@ class DownloadJobProcessor(
         }
 
         val cachedJob = downloadJobService.findCachedJob(job)
-        downloadAnalytics.recordTelegramCacheLookup(job, cachedJob)
         cachedJob ?: return false
         val fileId = cachedJob.telegramFileId ?: return false
 
-        val telegramResult = try {
+        val telegramFileId = try {
             telegramFileSender.sendCached(
                 job = job,
                 fileId = fileId,
-                downloadedFileSize = cachedJob.downloadedFileSize,
             )
         } catch (error: TelegramSendException) {
             if (!error.isInvalidCachedFile()) {
@@ -178,7 +217,10 @@ class DownloadJobProcessor(
         }
 
         downloadJobLifecycle.markUploading(attempt)
-        downloadJobLifecycle.complete(attempt, telegramResult.toDownloadedFileResult())
+        downloadJobLifecycle.complete(
+            attempt = attempt,
+            telegramFileId = telegramFileId,
+        )
 
         return true
     }
@@ -187,20 +229,30 @@ class DownloadJobProcessor(
         attempt: ClaimedDownloadJob,
         metadata: YtDlpMetadataDto,
     ): DownloadJob {
-        val mappedMetadata = mediaMetadataMapper.toMediaMetadata(metadata)
-        val job = downloadJobService.markMetadata(
+        return downloadJobService.markAudioMetadata(
             attempt = attempt,
-            metadata = mappedMetadata,
+            durationSeconds = metadata.duration?.toInt(),
+            title = metadata.track ?: metadata.title ?: DEFAULT_AUDIO_TITLE,
+            performer = metadata.artist
+                ?: metadata.uploader
+                ?: metadata.channel
+                ?: metadata.extractor
+                ?: DEFAULT_AUDIO_PERFORMER,
         )
-        downloadAnalytics.recordMetadataExtracted(attempt.requiredId(), mappedMetadata, job)
-        return job
     }
 
     private fun formatMegabytes(bytes: Long): String {
         return String.format(Locale.US, "%.2f", bytes / BYTES_IN_MEGABYTE)
     }
 
+    private fun uploadLimitReason(outputType: OutputType, sizeBytes: Long): String {
+        return "Selected ${outputType.dbValue} is too large for Telegram: " +
+                "sizeMb=${formatMegabytes(sizeBytes)}, limitMb=${formatMegabytes(uploadLimits.maxUploadBytes)}"
+    }
+
     private companion object {
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
+        private const val DEFAULT_AUDIO_TITLE = "Audio"
+        private const val DEFAULT_AUDIO_PERFORMER = "Unknown"
     }
 }

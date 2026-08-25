@@ -11,7 +11,7 @@ on:
           - development
           - production
       confirm:
-        description: "Type RESET to drop server containers, images, and database volume"
+        description: "Type RESET to drop server containers and volumes"
         required: true
         type: string
 
@@ -23,12 +23,33 @@ concurrency:
   group: deploy-${{ inputs.environment }}
   cancel-in-progress: false
 
+env:
+  TELEGRAM_BOT_API_COMMIT: adfd7f6a8e990272851777eeb3ae0def4216f161
+  TELEGRAM_BOT_API_IMAGE: ghcr.io/nkudrin713/kradnik-telegram-bot-api:adfd7f6a8e990272851777eeb3ae0def4216f161
+  YOUTUBE_PO_TOKEN_PROVIDER_IMAGE: brainicism/bgutil-ytdlp-pot-provider:1.3.2-deno
+
 jobs:
+  validate:
+    name: Validate clean deploy target
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation and branch
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          CONFIRMATION: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "RESET"
+          case "$TARGET_ENVIRONMENT:$GITHUB_REF" in
+            development:refs/heads/develop|production:refs/heads/main) ;;
+            *) echo "Clean deploy target does not match branch: $TARGET_ENVIRONMENT from $GITHUB_REF" >&2; exit 1 ;;
+          esac
+
   checks:
     name: Tests and checks
     runs-on: ubuntu-latest
+    needs: validate
     environment: ${{ inputs.environment }}
-    if: ${{ inputs.confirm == 'RESET' }}
 
     steps:
       - name: Checkout
@@ -78,6 +99,27 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
 
+      - name: Check Telegram Bot API image
+        id: telegram_bot_api_image
+        run: |
+          if docker buildx imagetools inspect "$TELEGRAM_BOT_API_IMAGE" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push Telegram Bot API image
+        if: ${{ steps.telegram_bot_api_image.outputs.exists != 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.telegram-bot-api
+          push: true
+          build-args: TELEGRAM_BOT_API_COMMIT=${{ env.TELEGRAM_BOT_API_COMMIT }}
+          cache-from: type=gha,scope=telegram-bot-api
+          cache-to: type=gha,mode=max,scope=telegram-bot-api
+          tags: ${{ env.TELEGRAM_BOT_API_IMAGE }}
+
   clean-deploy:
     name: Clean deploy to server
     runs-on: ubuntu-latest
@@ -120,63 +162,35 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          METABASE_ANALYTICS_DB_PASSWORD: ${{ secrets.METABASE_ANALYTICS_DB_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_LOCAL_API_ENABLED: ${{ vars.TELEGRAM_LOCAL_API_ENABLED || 'false' }}
+          YOUTUBE_PO_TOKEN_PROVIDER_ENABLED: ${{ vars.YOUTUBE_PO_TOKEN_PROVIDER_ENABLED || 'false' }}
+          TELEGRAM_BOT_API_URL: ${{ vars.TELEGRAM_BOT_API_URL }}
+          TELEGRAM_BOT_FILE_API_URL: ${{ vars.TELEGRAM_BOT_FILE_API_URL }}
+          TELEGRAM_MAX_UPLOAD_BYTES: ${{ vars.TELEGRAM_MAX_UPLOAD_BYTES }}
+          TELEGRAM_CONNECT_TIMEOUT: ${{ vars.TELEGRAM_CONNECT_TIMEOUT || '10s' }}
+          TELEGRAM_REQUEST_TIMEOUT: ${{ vars.TELEGRAM_REQUEST_TIMEOUT || '60m' }}
+          DOWNLOAD_WORK_DIR_RESERVE_BYTES: ${{ vars.DOWNLOAD_WORK_DIR_RESERVE_BYTES || '536870912' }}
+          DOWNLOAD_YT_DLP_METADATA_TIMEOUT: ${{ vars.DOWNLOAD_YT_DLP_METADATA_TIMEOUT || '30s' }}
+          DOWNLOAD_YT_DLP_DOWNLOAD_TIMEOUT: ${{ vars.DOWNLOAD_YT_DLP_DOWNLOAD_TIMEOUT || '30m' }}
+          DOWNLOAD_INSTAGRAM_METADATA_TIMEOUT: ${{ vars.DOWNLOAD_INSTAGRAM_METADATA_TIMEOUT || '30s' }}
+          DOWNLOAD_INSTAGRAM_DOWNLOAD_TIMEOUT: ${{ vars.DOWNLOAD_INSTAGRAM_DOWNLOAD_TIMEOUT || '10m' }}
+          DOWNLOAD_VIDEO_FFMPEG_TIMEOUT: ${{ vars.DOWNLOAD_VIDEO_FFMPEG_TIMEOUT || '20m' }}
+          DOWNLOAD_CHOICE_SESSION_TTL: ${{ vars.DOWNLOAD_CHOICE_SESSION_TTL || '30m' }}
           TELEGRAM_DONATION_URL: ${{ vars.TELEGRAM_DONATION_URL || secrets.TELEGRAM_DONATION_URL }}
           TELEGRAM_DONATION_CHANNEL_ID: ${{ vars.TELEGRAM_DONATION_CHANNEL_ID || secrets.TELEGRAM_DONATION_CHANNEL_ID }}
           TELEGRAM_DONATION_PIN_ENABLED: ${{ vars.TELEGRAM_DONATION_PIN_ENABLED || secrets.TELEGRAM_DONATION_PIN_ENABLED }}
           TELEGRAM_DONATION_PIN_MESSAGE_ID: ${{ vars.TELEGRAM_DONATION_PIN_MESSAGE_ID || secrets.TELEGRAM_DONATION_PIN_MESSAGE_ID }}
-          DOWNLOAD_PLATFORM_YOUTUBE_ENABLED: ${{ vars.DOWNLOAD_PLATFORM_YOUTUBE_ENABLED || secrets.DOWNLOAD_PLATFORM_YOUTUBE_ENABLED }}
-          DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED: ${{ vars.DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED || secrets.DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED }}
         run: |
           set -euo pipefail
           test -n "$DEPLOY_PATH"
           test "$DEPLOY_PATH" != "/"
           app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
-          metabase_analytics_db_password="${METABASE_ANALYTICS_DB_PASSWORD:-$POSTGRES_PASSWORD}"
-          if [ "${{ inputs.environment }}" = "production" ]; then
-            app_environment="prod"
-            app_container_name="kradnik-prod-app"
-            postgres_container_name="kradnik-prod-postgres"
-            postgres_db="kradnik_prod"
-            postgres_volume_name="kradnik-prod-postgres-data"
-            postgres_public_port="5434"
-            metabase_container_name="kradnik-prod-metabase"
-            metabase_volume_name="kradnik-prod-metabase-data"
-            metabase_public_port="3001"
-          else
-            app_environment="test"
-            app_container_name="kradnik-test-app"
-            postgres_container_name="kradnik-test-postgres"
-            postgres_db="kradnik_test"
-            postgres_volume_name="kradnik-test-postgres-data"
-            postgres_public_port="5433"
-            metabase_container_name="kradnik-test-metabase"
-            metabase_volume_name="kradnik-test-metabase-data"
-            metabase_public_port="3000"
-          fi
-          {
-            printf 'APP_IMAGE=%s\n' "$app_image"
-            printf 'APP_ENV=%s\n' "$app_environment"
-            printf 'APP_CONTAINER_NAME=%s\n' "$app_container_name"
-            printf 'POSTGRES_CONTAINER_NAME=%s\n' "$postgres_container_name"
-            printf 'POSTGRES_DB=%s\n' "$postgres_db"
-            printf 'POSTGRES_USER=kradnik\n'
-            printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
-            printf 'POSTGRES_VOLUME_NAME=%s\n' "$postgres_volume_name"
-            printf 'POSTGRES_PUBLIC_PORT=%s\n' "$postgres_public_port"
-            printf 'METABASE_CONTAINER_NAME=%s\n' "$metabase_container_name"
-            printf 'METABASE_VOLUME_NAME=%s\n' "$metabase_volume_name"
-            printf 'METABASE_PUBLIC_PORT=%s\n' "$metabase_public_port"
-            printf 'METABASE_ANALYTICS_DB_PASSWORD=%s\n' "$metabase_analytics_db_password"
-            printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
-            printf 'TELEGRAM_DONATION_URL=%s\n' "${TELEGRAM_DONATION_URL:-https://pay.cloudtips.ru/p/6f779a3d}"
-            printf 'TELEGRAM_DONATION_CHANNEL_ID=%s\n' "${TELEGRAM_DONATION_CHANNEL_ID:-@mediakradnik}"
-            printf 'TELEGRAM_DONATION_PIN_ENABLED=%s\n' "${TELEGRAM_DONATION_PIN_ENABLED:-false}"
-            printf 'TELEGRAM_DONATION_PIN_MESSAGE_ID=%s\n' "${TELEGRAM_DONATION_PIN_MESSAGE_ID:-}"
-            printf 'DOWNLOAD_PLATFORM_YOUTUBE_ENABLED=%s\n' "${DOWNLOAD_PLATFORM_YOUTUBE_ENABLED:-false}"
-            printf 'DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED=%s\n' "${DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED:-false}"
-          } | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$DEPLOY_PATH/.env'"
+          scripts/render-deploy-env.sh "${{ inputs.environment }}" "$app_image" \
+            | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+                "umask 077 && cat > '$DEPLOY_PATH/.env' && chmod 600 '$DEPLOY_PATH/.env'"
 
       - name: Login to GHCR on server
         env:
@@ -200,12 +214,23 @@ jobs:
           test "$DEPLOY_PATH" != "/"
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
             cd '$DEPLOY_PATH' && \
-            docker compose --profile analytics down --volumes --rmi all --remove-orphans && \
-            rm -f .metabase-enabled && \
+            docker compose --profile telegram-local --profile youtube-pot down --volumes --remove-orphans && \
+            profiles='' && \
+            if [ \"\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env)\" = 'true' ]; then profiles='telegram-local'; fi && \
+            if [ \"\$(sed -n 's/^YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=//p' .env)\" = 'true' ]; then \
+              if [ -n \"\$profiles\" ]; then profiles=\"\$profiles,youtube-pot\"; else profiles='youtube-pot'; fi; \
+            fi && \
+            if [ -n \"\$profiles\" ]; then export COMPOSE_PROFILES=\"\$profiles\"; else unset COMPOSE_PROFILES; fi && \
             docker compose pull app && \
+            if [ \"\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env)\" = 'true' ]; then docker compose pull telegram-bot-api; fi && \
+            if [ \"\$(sed -n 's/^YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=//p' .env)\" = 'true' ]; then docker compose pull youtube-pot-provider; fi && \
             docker compose up -d --remove-orphans && \
             docker compose ps && \
             test \"\$(docker compose ps -q app | xargs docker inspect -f '{{.State.Status}}')\" = running && \
-            docker compose exec -T postgres sh -c 'printf \"%s\n\" \"ALTER ROLE kradnik_analytics_reader WITH LOGIN PASSWORD :'\\''analytics_password'\\'';\" | PGPASSWORD=\"\$POSTGRES_PASSWORD\" psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -v analytics_password=\"\$METABASE_ANALYTICS_DB_PASSWORD\"' && \
+            if [ \"\$(sed -n 's/^YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=//p' .env)\" = 'true' ]; then \
+              youtube_pot_container=\$(docker compose ps -q youtube-pot-provider); \
+              test -n \"\$youtube_pot_container\"; \
+              test \"\$(docker inspect -f '{{.State.Health.Status}}' \"\$youtube_pot_container\")\" = healthy; \
+            fi && \
             docker image prune -f\
           "

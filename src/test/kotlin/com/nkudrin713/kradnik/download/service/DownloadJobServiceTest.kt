@@ -2,17 +2,19 @@ package com.nkudrin713.kradnik.download.service
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
-import com.nkudrin713.kradnik.download.domain.MediaMetadata
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import java.time.Instant
-import java.util.Optional
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -23,25 +25,28 @@ class DownloadJobServiceTest {
 
     @Test
     fun createsJobAtomicallyForTelegramUpdate() {
+        val savedJob = slot<DownloadJob>()
         every { repository.lockTelegramUpdate(3) } returns 1
         every { repository.findByTelegramUpdateId(3) } returns null
-        every { repository.save(any()) } answers { firstArg() }
+        every { repository.save(capture(savedJob)) } answers { firstArg() }
 
-        val actual = service.createJob(command())
+        val created = service.createJob(command())
+        val actual = savedJob.captured
 
-        assertTrue(actual is CreateDownloadJobResult.Created)
-        assertEquals(1, actual.job.telegramUserId)
-        assertEquals(2, actual.job.telegramChatId)
-        assertEquals(3, actual.job.telegramUpdateId)
-        assertEquals(4, actual.job.telegramRequestMessageId)
-        assertEquals("https://example.com/raw", actual.job.originalUrl)
-        assertEquals("https://example.com/normalized", actual.job.normalizedUrl)
-        assertEquals("cache-key", actual.job.cacheKey)
-        assertEquals(OutputType.AUDIO, actual.job.outputType)
-        assertEquals("preset", actual.job.downloadPreset)
-        assertEquals("format", actual.job.selectedFormat)
-        assertEquals(listOf("-x", "--audio-format", "mp3"), actual.job.downloadExtraArgs)
-        assertEquals(10, actual.job.telegramStatusMessageId)
+        assertTrue(created)
+        assertEquals(1, actual.telegramUserId)
+        assertEquals(2, actual.telegramChatId)
+        assertEquals(3, actual.telegramUpdateId)
+        assertEquals(4, actual.telegramRequestMessageId)
+        assertEquals("https://example.com/raw", actual.originalUrl)
+        assertEquals("https://example.com/normalized", actual.normalizedUrl)
+        assertEquals("cache-key", actual.cacheKey)
+        assertEquals(OutputType.AUDIO, actual.outputType)
+        assertEquals(DownloadPlatform.YOUTUBE, actual.platform)
+        assertEquals("preset", actual.downloadPreset)
+        assertEquals("format", actual.selectedFormat)
+        assertEquals(listOf("-x", "--audio-format", "mp3"), actual.downloadExtraArgs)
+        assertEquals(10, actual.telegramStatusMessageId)
         verify { repository.lockTelegramUpdate(3) }
     }
 
@@ -51,10 +56,9 @@ class DownloadJobServiceTest {
         every { repository.lockTelegramUpdate(3) } returns 1
         every { repository.findByTelegramUpdateId(3) } returns existing
 
-        val actual = service.createJob(command())
+        val created = service.createJob(command())
 
-        assertTrue(actual is CreateDownloadJobResult.Existing)
-        assertEquals(existing, actual.job)
+        assertFalse(created)
         verify(exactly = 0) { repository.save(any()) }
     }
 
@@ -62,24 +66,22 @@ class DownloadJobServiceTest {
     fun marksCompleted() {
         val job = job()
         val attempt = attempt(job)
-        val downloadedAt = Instant.parse("2026-01-01T00:00:00Z")
-        every { repository.markOwnedCompleted(1, LEASE_TOKEN, "file-id", 100, 200, downloadedAt) } returns 1
+        val storedJob = job().apply {
+            status = DownloadJobStatus.COMPLETED
+            telegramFileId = "file-id"
+            completedAt = Instant.parse("2026-01-01T00:00:00Z")
+        }
+        every {
+            repository.markOwnedCompleted(1, LEASE_TOKEN, "file-id")
+        } returns storedJob
 
         val actual = service.markCompleted(
             attempt = attempt,
-            result = DownloadedFileResult(
-                telegramFileId = "file-id",
-                telegramFileSize = 100,
-                downloadedFileSize = 200,
-                downloadedAt = downloadedAt,
-            ),
+            telegramFileId = "file-id",
         )
 
         assertEquals(DownloadJobStatus.COMPLETED, actual.status)
         assertEquals("file-id", actual.telegramFileId)
-        assertEquals(100, actual.telegramFileSize)
-        assertEquals(200, actual.downloadedFileSize)
-        assertEquals(downloadedAt, actual.downloadedAt)
         assertNotNull(actual.completedAt)
     }
 
@@ -87,35 +89,48 @@ class DownloadJobServiceTest {
     fun retriesFailedJobWhenAttemptsRemain() {
         val job = job(attempts = 1)
         val retryAt = Instant.parse("2026-01-01T01:00:00Z")
-        every { repository.requeueOwnedJob(1, LEASE_TOKEN, "failure", retryAt) } returns 1
+        val storedJob = job(attempts = 1).apply {
+            status = DownloadJobStatus.QUEUED
+            nextAttemptAt = retryAt
+            errorMessage = "failure"
+        }
+        every { repository.requeueOwnedJob(1, LEASE_TOKEN, "failure", retryAt) } returns storedJob
 
         val actual = service.retryAt(attempt(job), "failure", retryAt)
 
-        assertTrue(actual is DownloadFailureResolution.RetryScheduled)
-        assertEquals(DownloadJobStatus.QUEUED, actual.job.status)
-        assertEquals(retryAt, actual.job.nextAttemptAt)
-        assertEquals("failure", actual.job.errorMessage)
+        assertEquals(DownloadJobStatus.QUEUED, actual.status)
+        assertEquals(retryAt, actual.nextAttemptAt)
+        assertEquals("failure", actual.errorMessage)
     }
 
     @Test
     fun failsJobWhenAttemptsExhausted() {
         val job = job(attempts = 3)
         val retryAt = Instant.parse("2026-01-01T01:00:00Z")
-        every { repository.failOwnedJob(1, LEASE_TOKEN, "failure") } returns 1
+        val storedJob = job(attempts = 3).apply {
+            status = DownloadJobStatus.FAILED
+            errorMessage = "failure"
+            completedAt = retryAt
+        }
+        every { repository.failOwnedJob(1, LEASE_TOKEN, "failure") } returns storedJob
 
         val actual = service.retryAt(attempt(job), "failure", retryAt)
 
-        assertTrue(actual is DownloadFailureResolution.TerminalFailure)
-        assertEquals(DownloadJobStatus.FAILED, actual.job.status)
-        assertEquals("failure", actual.job.errorMessage)
-        assertNotNull(actual.job.completedAt)
+        assertEquals(DownloadJobStatus.FAILED, actual.status)
+        assertEquals("failure", actual.errorMessage)
+        assertNotNull(actual.completedAt)
     }
 
     @Test
     fun defersWithoutConsumingAttempt() {
         val retryAt = Instant.parse("2026-01-01T01:00:00Z")
         val job = job(attempts = 1)
-        every { repository.deferOwnedJob(1, LEASE_TOKEN, "rate limited", retryAt) } returns 1
+        val storedJob = job(attempts = 0).apply {
+            status = DownloadJobStatus.QUEUED
+            nextAttemptAt = retryAt
+            errorMessage = "rate limited"
+        }
+        every { repository.deferOwnedJob(1, LEASE_TOKEN, "rate limited", retryAt) } returns storedJob
 
         val actual = service.deferBeforeAttempt(attempt(job), retryAt, "rate limited")
 
@@ -126,34 +141,29 @@ class DownloadJobServiceTest {
     }
 
     @Test
-    fun marksMetadata() {
+    fun marksAudioMetadata() {
         val job = job()
-        val metadata = MediaMetadata(
-            title = "title",
-            extractor = "youtube",
-            durationSeconds = 120,
-            audioTitle = "audio title",
-            audioPerformer = "artist",
-            width = 1080,
-            height = 1920,
-            webpageUrl = "https://example.com",
-        )
         every {
             repository.updateOwnedMetadata(
                 1,
                 LEASE_TOKEN,
-                "title",
-                "youtube",
                 120,
                 "audio title",
                 "artist",
             )
-        } returns 1
+        } returns job().apply {
+            sourceDurationSeconds = 120
+            sourceAudioTitle = "audio title"
+            sourceAudioPerformer = "artist"
+        }
 
-        val actual = service.markMetadata(attempt(job), metadata)
+        val actual = service.markAudioMetadata(
+            attempt = attempt(job),
+            durationSeconds = 120,
+            title = "audio title",
+            performer = "artist",
+        )
 
-        assertEquals("title", actual.sourceTitle)
-        assertEquals("youtube", actual.sourceExtractor)
         assertEquals(120, actual.sourceDurationSeconds)
         assertEquals("audio title", actual.sourceAudioTitle)
         assertEquals("artist", actual.sourceAudioPerformer)
@@ -162,18 +172,23 @@ class DownloadJobServiceTest {
     @Test
     fun marksUploading() {
         val job = job()
-        every { repository.markOwnedUploading(1, LEASE_TOKEN) } returns 1
+        every { repository.markOwnedUploading(1, LEASE_TOKEN) } returns job().apply {
+            status = DownloadJobStatus.UPLOADING
+        }
 
         val actual = service.markUploading(attempt(job))
 
         assertEquals(DownloadJobStatus.UPLOADING, actual.status)
-        assertNotNull(actual.uploadingStartedAt)
     }
 
     @Test
     fun marksFailed() {
         val job = job()
-        every { repository.failOwnedJob(1, LEASE_TOKEN, "failure") } returns 1
+        every { repository.failOwnedJob(1, LEASE_TOKEN, "failure") } returns job().apply {
+            status = DownloadJobStatus.FAILED
+            errorMessage = "failure"
+            completedAt = Instant.parse("2026-01-01T00:00:00Z")
+        }
 
         val actual = service.markFailed(attempt(job), "failure")
 
@@ -184,7 +199,7 @@ class DownloadJobServiceTest {
 
     @Test
     fun rejectsStateChangeAfterLeaseIsLost() {
-        every { repository.markOwnedUploading(1, LEASE_TOKEN) } returns 0
+        every { repository.markOwnedUploading(1, LEASE_TOKEN) } returns null
 
         assertFailsWith<DownloadJobLeaseLostException> {
             service.markUploading(attempt(job()))
@@ -226,27 +241,10 @@ class DownloadJobServiceTest {
         every { repository.requeueStaleInProgressJobs(3) } returns 2
         every { repository.failStaleInProgressJobs(3) } returns 1
 
-        val actual = service.recoverExpiredLeases()
+        service.recoverExpiredLeases()
 
-        assertEquals(2, actual.requeued)
-        assertEquals(1, actual.failed)
-    }
-
-    @Test
-    fun getsJob() {
-        val job = job()
-        every { repository.findById(1) } returns Optional.of(job)
-
-        assertEquals(job, service.getJob(1))
-    }
-
-    @Test
-    fun throwsWhenJobMissing() {
-        every { repository.findById(1) } returns Optional.empty()
-
-        assertFailsWith<DownloadJobNotFoundException> {
-            service.getJob(1)
-        }
+        verify { repository.requeueStaleInProgressJobs(3) }
+        verify { repository.failStaleInProgressJobs(3) }
     }
 
     private fun command(): CreateDownloadJobCommand {
@@ -255,13 +253,16 @@ class DownloadJobServiceTest {
             telegramChatId = 2,
             telegramUpdateId = 3,
             telegramRequestMessageId = 4,
-            originalUrl = "https://example.com/raw",
-            normalizedUrl = "https://example.com/normalized",
-            cacheKey = "cache-key",
-            outputType = OutputType.AUDIO,
-            downloadPreset = "preset",
-            selectedFormat = "format",
-            downloadExtraArgs = listOf("-x", "--audio-format", "mp3"),
+            spec = DownloadSpec(
+                originalUrl = "https://example.com/raw",
+                normalizedUrl = "https://example.com/normalized",
+                cacheKey = "cache-key",
+                outputType = OutputType.AUDIO,
+                platform = DownloadPlatform.YOUTUBE,
+                presetName = "preset",
+                formatSelector = "format",
+                extraArgs = listOf("-x", "--audio-format", "mp3"),
+            ),
             telegramStatusMessageId = 10,
         )
     }

@@ -1,7 +1,6 @@
 package com.nkudrin713.kradnik.process
 
-import kotlin.time.Duration
-
+/** Captured process output; truncation flags indicate that an earlier prefix was discarded. */
 data class ProcessExecutionResult(
     val timedOut: Boolean,
     val exitCode: Int?,
@@ -9,7 +8,7 @@ data class ProcessExecutionResult(
     val stderr: String = "",
     val stdoutTruncated: Boolean = false,
     val stderrTruncated: Boolean = false,
-    val duration: Duration,
+    val workingDirectoryLimitExceeded: Boolean = false,
 ) {
     val diagnosticOutput: String
         get() = buildList {

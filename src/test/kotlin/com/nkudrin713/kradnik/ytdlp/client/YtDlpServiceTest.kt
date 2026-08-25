@@ -1,7 +1,9 @@
 package com.nkudrin713.kradnik.ytdlp.client
 
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -19,14 +21,25 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.seconds
 
 class YtDlpServiceTest {
     private val processRunner: ProcessRunner = mockk()
 
     private val service = YtDlpService(
         processRunner = processRunner,
+    )
+    private val localService = YtDlpService(
+        processRunner = processRunner,
+        uploadLimits = TelegramUploadLimits(
+            maxUploadBytes = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES,
+            localMode = true,
+        ),
+    )
+    private val serviceWithProvider = YtDlpService(
+        processRunner = processRunner,
+        youtubePoTokenProviderUrl = "http://youtube-pot-provider:4416/",
     )
 
     @Test
@@ -50,20 +63,15 @@ class YtDlpServiceTest {
             stdout = output,
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.extractMetadata(testRequest())
 
-        assertEquals("video-id", actual.id)
         assertEquals("Test video", actual.title)
         assertEquals(BigDecimal.valueOf(120), actual.duration)
-        assertEquals("webm", actual.ext)
         assertEquals(1080, actual.width)
         assertEquals(1920, actual.height)
-        assertEquals(BigDecimal.valueOf(30), actual.fps)
         assertEquals(42000000, actual.filesizeApprox)
-        assertEquals("399+251", actual.formatId)
     }
 
     @Test
@@ -72,13 +80,27 @@ class YtDlpServiceTest {
             stdout = """{"id":"video-id","title":"Test video","formats":[{"format_id":"1"}]}""",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.extractMetadata(testRequest())
 
-        assertEquals("video-id", actual.id)
         assertEquals("Test video", actual.title)
+    }
+
+    @Test
+    fun extractCatalogMetadataKeepsFormatsAndDoesNotPreselectFormat() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"video-id","formats":[{"format_id":"22","height":720,"filesize":1000}]}""",
+            timedOut = false,
+            exitCode = 0,
+        )
+
+        val actual = service.extractCatalogMetadata(testRequest())
+
+        assertEquals("22", actual.formats?.single()?.formatId)
+        val command = slot<Command>()
+        coVerify { processRunner.run(capture(command)) }
+        assertFalse(command.captured.args.contains("-f"))
     }
 
     @Test
@@ -88,12 +110,11 @@ class YtDlpServiceTest {
             stderr = "runtime warning",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.extractMetadata(testRequest())
 
-        assertEquals("video-id", actual.id)
+        assertEquals("Test video", actual.title)
     }
 
     @Test
@@ -103,7 +124,6 @@ class YtDlpServiceTest {
             stdoutTruncated = true,
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -119,7 +139,6 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = true,
             exitCode = null,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -135,7 +154,6 @@ class YtDlpServiceTest {
             stderr = "yt-dlp error",
             timedOut = false,
             exitCode = 1,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -152,7 +170,6 @@ class YtDlpServiceTest {
             stderr = "ERROR: [Instagram] id: login required. Use --cookies-from-browser or --cookies",
             timedOut = false,
             exitCode = 1,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpAuthenticationRequiredException> {
@@ -169,7 +186,6 @@ class YtDlpServiceTest {
             stderr = "ERROR: [Instagram] id: Requested content is not available, rate-limit reached or login required",
             timedOut = false,
             exitCode = 1,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpAuthenticationRequiredException> {
@@ -185,7 +201,6 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -201,7 +216,6 @@ class YtDlpServiceTest {
             stdout = """{"id":"video-id","title":"Test video"}""",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         service.extractMetadata(testRequest())
@@ -221,17 +235,62 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun extractMetadataAddsPoTokenProviderArgsForYouTube() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"video-id","title":"Test video"}""",
+            timedOut = false,
+            exitCode = 0,
+        )
+
+        serviceWithProvider.extractMetadata(youtubeRequest())
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+        assertContainsPoTokenProviderArgs(commandSlot.captured.args)
+    }
+
+    @Test
+    fun extractMetadataDoesNotAddPoTokenProviderArgsForOtherPlatforms() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"video-id","title":"Test video"}""",
+            timedOut = false,
+            exitCode = 0,
+        )
+
+        serviceWithProvider.extractMetadata(testRequest())
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+        assertFalse(commandSlot.captured.args.contains(YOUTUBE_PLAYER_CLIENT_ARG))
+        assertFalse(commandSlot.captured.args.contains(YOUTUBE_PROVIDER_ARG))
+    }
+
+    @Test
+    fun extractMetadataDoesNotAddPoTokenProviderArgsWhenDisabled() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"video-id","title":"Test video"}""",
+            timedOut = false,
+            exitCode = 0,
+        )
+
+        service.extractMetadata(youtubeRequest())
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+        assertFalse(commandSlot.captured.args.contains(YOUTUBE_PLAYER_CLIENT_ARG))
+        assertFalse(commandSlot.captured.args.contains(YOUTUBE_PROVIDER_ARG))
+    }
+
+    @Test
     fun extractMetadataSuccess() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             stdout = """{"id":"video-id","title":"Test video","filesize":1000}""",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.extractMetadata(testRequest())
 
-        assertEquals("video-id", actual.id)
         assertEquals("Test video", actual.title)
         assertEquals(1000, actual.filesize)
     }
@@ -242,7 +301,6 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = true,
             exitCode = null,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -258,7 +316,6 @@ class YtDlpServiceTest {
             stderr = "inspect error",
             timedOut = false,
             exitCode = 1,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -275,7 +332,6 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -294,7 +350,6 @@ class YtDlpServiceTest {
             stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.download(testRequest(), tempDir)
@@ -312,10 +367,9 @@ class YtDlpServiceTest {
             stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
-        service.download(testRequest(), tempDir)
+        localService.download(testRequest(), tempDir)
 
         val commandSlot = slot<Command>()
         coVerify { processRunner.run(capture(commandSlot)) }
@@ -328,9 +382,53 @@ class YtDlpServiceTest {
         assertTrue(command.args.contains("bv*+ba/b"))
         assertTrue(command.args.contains("--print"))
         assertTrue(command.args.contains("after_move:KRADNIK_FILEPATH:%(filepath)j"))
+        assertTrue(
+            command.args.windowed(2).contains(
+                listOf("--max-filesize", TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES.toString())
+            )
+        )
+        assertEquals(
+            TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES * 2,
+            command.maxWorkingDirectoryBytes,
+        )
         assertTrue(command.args.contains("--merge-output-format"))
         assertTrue(command.args.contains("mp4"))
         assertTrue(command.args.contains("https://example.com"))
+    }
+
+    @Test
+    fun cloudDownloadKeepsVerticalCompressionSourceUnbounded(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("video.mp4")
+        file.writeText("video")
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
+            timedOut = false,
+            exitCode = 0,
+        )
+
+        service.download(testRequest(), tempDir)
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+        assertFalse(commandSlot.captured.args.contains("--max-filesize"))
+        assertEquals(null, commandSlot.captured.maxWorkingDirectoryBytes)
+    }
+
+    @Test
+    fun downloadAddsPoTokenProviderArgsForYouTube(@TempDir tempDir: Path) = runTest {
+        val file = tempDir.resolve("video.mp4")
+        file.writeText("video")
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
+            timedOut = false,
+            exitCode = 0,
+        )
+
+        serviceWithProvider.download(youtubeRequest(), tempDir)
+
+        val commandSlot = slot<Command>()
+        coVerify { processRunner.run(capture(commandSlot)) }
+        assertContainsPoTokenProviderArgs(commandSlot.captured.args)
     }
 
     @Test
@@ -346,7 +444,6 @@ class YtDlpServiceTest {
             """.trimIndent(),
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val actual = service.download(testRequest(), tempDir)
@@ -360,11 +457,10 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
-            service.download(testRequest(), tempDir)
+            localService.download(testRequest(), tempDir)
         }
 
         assertTrue(exception.message!!.contains("did not print final filepath"))
@@ -378,7 +474,6 @@ class YtDlpServiceTest {
             stdout = "KRADNIK_FILEPATH:\"${missingFile.absolutePathString()}\"",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -394,7 +489,6 @@ class YtDlpServiceTest {
             stdout = "",
             timedOut = true,
             exitCode = null,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -405,12 +499,26 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun downloadFailsWhenWorkingDirectoryLimitIsExceeded(@TempDir tempDir: Path) = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            timedOut = false,
+            exitCode = 137,
+            workingDirectoryLimitExceeded = true,
+        )
+
+        val exception = assertFailsWith<YtDlpFileSizeLimitException> {
+            localService.download(testRequest(), tempDir)
+        }
+
+        assertEquals(TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES, exception.limitBytes)
+    }
+
+    @Test
     fun downloadFailure(@TempDir tempDir: Path) = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             stderr = "download error",
             timedOut = false,
             exitCode = 1,
-            duration = 5.seconds,
         )
 
         val exception = assertFailsWith<YtDlpException> {
@@ -427,7 +535,6 @@ class YtDlpServiceTest {
             stdout = "KRADNIK_FILEPATH:not-json",
             timedOut = false,
             exitCode = 0,
-            duration = 5.seconds,
         )
 
         assertFailsWith<Exception> {
@@ -435,14 +542,41 @@ class YtDlpServiceTest {
         }
     }
 
-    private fun testRequest(): DownloadRequest {
-        return DownloadRequest(
+    private fun testRequest(): DownloadSpec {
+        return DownloadSpec(
             originalUrl = "https://example.com",
             normalizedUrl = "https://example.com",
+            cacheKey = "video",
             outputType = OutputType.VIDEO,
+            platform = DownloadPlatform.VK,
             formatSelector = "bv*+ba/b",
             extraArgs = listOf("--merge-output-format", "mp4"),
             presetName = "test",
         )
+    }
+
+    private fun youtubeRequest(): DownloadSpec {
+        return testRequest().copy(
+            originalUrl = "https://youtube.com/watch?v=video-id",
+            normalizedUrl = "https://youtube.com/watch?v=video-id",
+            platform = DownloadPlatform.YOUTUBE,
+            presetName = "youtube_h264_mobile_2gb",
+        )
+    }
+
+    private fun assertContainsPoTokenProviderArgs(args: List<String>) {
+        val expectedArgs = listOf(
+            "--extractor-args",
+            YOUTUBE_PLAYER_CLIENT_ARG,
+            "--extractor-args",
+            YOUTUBE_PROVIDER_ARG,
+        )
+        assertTrue(args.windowed(expectedArgs.size).contains(expectedArgs))
+    }
+
+    private companion object {
+        private const val YOUTUBE_PLAYER_CLIENT_ARG = "youtube:player_client=mweb"
+        private const val YOUTUBE_PROVIDER_ARG =
+            "youtubepot-bgutilhttp:base_url=http://youtube-pot-provider:4416"
     }
 }

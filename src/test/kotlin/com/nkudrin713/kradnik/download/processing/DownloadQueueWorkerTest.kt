@@ -2,7 +2,6 @@ package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
-import com.nkudrin713.kradnik.download.service.DownloadJobRecoveryResult
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import io.mockk.coVerify
 import io.mockk.every
@@ -19,7 +18,7 @@ class DownloadQueueWorkerTest {
     fun processesClaimedJob() {
         val job = DownloadJob(id = 1)
         val attempt = attempt(job)
-        every { downloadJobService.recoverExpiredLeases() } returns DownloadJobRecoveryResult(0, 0)
+        every { downloadJobService.recoverExpiredLeases() } returns Unit
         every { downloadJobService.claimNextQueuedJob(any(), any()) } returns attempt
         coEveryProcess(attempt)
 
@@ -31,7 +30,7 @@ class DownloadQueueWorkerTest {
 
     @Test
     fun returnsWhenQueueIsEmpty() {
-        every { downloadJobService.recoverExpiredLeases() } returns DownloadJobRecoveryResult(0, 0)
+        every { downloadJobService.recoverExpiredLeases() } returns Unit
         every { downloadJobService.claimNextQueuedJob(any(), any()) } returns null
 
         worker().processNextJob()

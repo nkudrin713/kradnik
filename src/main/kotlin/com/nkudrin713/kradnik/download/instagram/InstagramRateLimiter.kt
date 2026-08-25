@@ -1,51 +1,98 @@
 package com.nkudrin713.kradnik.download.instagram
 
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitBucketKey
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitCoordinator
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitDecision
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitPolicy
-import com.nkudrin713.kradnik.download.ratelimit.RateLimitPermit
-import com.nkudrin713.kradnik.download.ratelimit.RateLimiter
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
+/**
+ * A process-local limiter with a minimum request interval and adaptive cooldown after throttling.
+ * Its state is not shared between application instances.
+ */
 @Component
 class InstagramRateLimiter(
-    private val coordinator: RateLimitCoordinator,
-    @Value("\${download.instagram.rate-limit.scope:vps-direct}")
-    scope: String,
+    private val clock: Clock,
     @Value("\${download.instagram.rate-limit.min-interval:30s}")
-    minInterval: Duration,
-    @Value("\${download.instagram.rate-limit.max-jitter:15s}")
-    maxJitter: Duration,
+    private val minInterval: Duration,
     @Value("\${download.instagram.rate-limit.initial-cooldown:30m}")
-    initialCooldown: Duration,
+    private val initialCooldown: Duration,
     @Value("\${download.instagram.rate-limit.max-cooldown:6h}")
-    maxCooldown: Duration,
+    private val maxCooldown: Duration,
     @Value("\${download.instagram.rate-limit.cooldown-multiplier:2}")
-    cooldownMultiplier: Int,
-) : RateLimiter {
-    private val key = RateLimitBucketKey(
-        provider = "instagram",
-        operation = "embed",
-        scope = scope,
-    )
-    private val policy = RateLimitPolicy(
-        minInterval = minInterval,
-        maxJitter = maxJitter,
-        initialCooldown = initialCooldown,
-        maxCooldown = maxCooldown,
-        cooldownMultiplier = cooldownMultiplier,
-    )
-    override fun acquire(): RateLimitDecision = coordinator.acquire(key, policy)
+    private val cooldownMultiplier: Int,
+) {
+    private val lock = Any()
+    private var nextAllowedAt = Instant.EPOCH
+    private var cooldownUntil: Instant? = null
+    private var consecutiveThrottles = 0
+    private var lastThrottleAt: Instant? = null
 
-    override fun recordSuccess(permit: RateLimitPermit) {
-        coordinator.recordSuccess(key, permit)
+    init {
+        require(!minInterval.isNegative && !minInterval.isZero) { "Instagram rate limit interval must be positive" }
+        require(!initialCooldown.isNegative && !initialCooldown.isZero) {
+            "Instagram initial cooldown must be positive"
+        }
+        require(maxCooldown >= initialCooldown) {
+            "Instagram max cooldown must not be shorter than initial cooldown"
+        }
+        require(cooldownMultiplier >= 1) { "Instagram cooldown multiplier must be at least one" }
     }
 
-    override fun recordThrottle(permit: RateLimitPermit, retryAfter: Duration?): Instant {
-        return coordinator.recordThrottle(key, policy, permit, retryAfter)
+    /** Reserves the next request slot or reports when another attempt may start. */
+    fun acquire(): InstagramRateLimitDecision = synchronized(lock) {
+        val now = clock.instant()
+        val allowedAt = maxOf(nextAllowedAt, cooldownUntil ?: Instant.EPOCH)
+        if (now.isBefore(allowedAt)) {
+            return@synchronized InstagramRateLimitDecision.Deferred(allowedAt)
+        }
+
+        nextAllowedAt = now.plus(minInterval)
+        InstagramRateLimitDecision.Granted(now)
     }
+
+    /** Clears cooldown only when no newer request has already observed throttling. */
+    fun recordSuccess(acquiredAt: Instant) = synchronized(lock) {
+        if (lastThrottleAt?.isBefore(acquiredAt) == false) {
+            return@synchronized
+        }
+
+        cooldownUntil = null
+        consecutiveThrottles = 0
+    }
+
+    /** Extends the cooldown using both local backoff and the remote Retry-After value. */
+    fun recordThrottle(
+        acquiredAt: Instant,
+        retryAfter: Duration?,
+    ): Instant = synchronized(lock) {
+        val now = clock.instant()
+        consecutiveThrottles += 1
+        val retryAfterCooldown = retryAfter?.takeIf { !it.isNegative } ?: Duration.ZERO
+        val cooldown = maxOf(cooldown(consecutiveThrottles), retryAfterCooldown)
+        cooldownUntil = maxOf(cooldownUntil ?: Instant.EPOCH, now.plus(cooldown))
+        lastThrottleAt = maxOf(lastThrottleAt ?: Instant.EPOCH, acquiredAt, now)
+        requireNotNull(cooldownUntil)
+    }
+
+    private fun cooldown(throttleCount: Int): Duration {
+        var result = initialCooldown
+        repeat(throttleCount - 1) {
+            if (result >= maxCooldown) {
+                return maxCooldown
+            }
+            result = result.multipliedBy(cooldownMultiplier.toLong())
+        }
+        return minOf(result, maxCooldown)
+    }
+}
+
+sealed interface InstagramRateLimitDecision {
+    data class Granted(
+        val acquiredAt: Instant,
+    ) : InstagramRateLimitDecision
+
+    data class Deferred(
+        val retryAt: Instant,
+    ) : InstagramRateLimitDecision
 }

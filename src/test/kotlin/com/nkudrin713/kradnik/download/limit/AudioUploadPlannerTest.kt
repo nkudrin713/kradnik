@@ -7,7 +7,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class AudioUploadPlannerTest {
-    private val planner = AudioUploadPlanner()
+    private val planner = AudioUploadPlanner(
+        TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
+    )
 
     @Test
     fun selectsHighQualityForShortAudio() {
@@ -46,25 +48,16 @@ class AudioUploadPlannerTest {
 
     private fun metadata(durationSeconds: Long?): YtDlpMetadataDto {
         return YtDlpMetadataDto(
-            id = "id",
             title = "title",
             extractor = "youtube",
-            webpageUrl = "https://example.com",
             thumbnail = null,
             duration = durationSeconds?.let { BigDecimal.valueOf(it) },
-            ext = "mp4",
             width = 1920,
             height = 1080,
-            fps = null,
             filesize = null,
-            vcodec = null,
-            acodec = null,
             filesizeApprox = null,
-            formatId = "format",
-            format = null,
             track = null,
             artist = null,
-            creator = null,
             uploader = null,
             channel = null,
             requestedFormats = null,

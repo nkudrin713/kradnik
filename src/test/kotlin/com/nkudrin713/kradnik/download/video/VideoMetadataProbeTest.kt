@@ -12,7 +12,6 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.time.Duration.Companion.seconds
 
 class VideoMetadataProbeTest {
     private val processRunner: ProcessRunner = mockk()
@@ -75,7 +74,6 @@ class VideoMetadataProbeTest {
             exitCode = 0,
             stdout = metadataOutput(),
             stderr = "runtime warning",
-            duration = 1.seconds,
         )
 
         val actual = probe.probe(Path.of("video.mp4"))
@@ -188,7 +186,6 @@ class VideoMetadataProbeTest {
             exitCode = exitCode,
             stdout = if (exitCode == 0) output else "",
             stderr = if (exitCode == 0) "" else output,
-            duration = 1.seconds,
         )
     }
 

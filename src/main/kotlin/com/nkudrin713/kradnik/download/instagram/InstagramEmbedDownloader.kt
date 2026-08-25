@@ -3,9 +3,7 @@ package com.nkudrin713.kradnik.download.instagram
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
-import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
-import com.nkudrin713.kradnik.download.identity.pathSegments
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -13,6 +11,10 @@ import java.math.BigDecimal
 import java.net.URI
 import java.nio.file.Path
 
+/**
+ * Extracts metadata and an optional direct video URL from the public Instagram embed payload.
+ * Direct media is accepted only from HTTPS Instagram CDN origins.
+ */
 @Service
 class InstagramEmbedDownloader(
     private val httpClient: InstagramHttpClient,
@@ -20,17 +22,8 @@ class InstagramEmbedDownloader(
     private val objectMapper = jacksonObjectMapper()
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun isInstagramRequest(request: DownloadRequest): Boolean {
-        val uri = parseUrlOrNull(request.originalUrl.trim()) ?: return false
-        return isInstagramHost(uri.host)
-    }
-
-    fun supports(request: DownloadRequest): Boolean {
-        return extractShortcode(request.originalUrl) != null
-    }
-
-    suspend fun prepare(request: DownloadRequest): InstagramPreparedDownload {
-        val shortcode = extractShortcode(request.originalUrl)
+    suspend fun prepare(spec: DownloadSpec): InstagramPreparedDownload {
+        val shortcode = parseInstagramMediaUrl(spec.originalUrl)?.shortcode
             ?: throw InstagramEmbedException("Instagram URL is not supported by embed downloader")
         val embedUri = URI.create("https://www.instagram.com/p/$shortcode/embed/captioned/")
         val html = try {
@@ -45,30 +38,22 @@ class InstagramEmbedDownloader(
         if (mediaUri == null && context.findFirstBoolean(IS_VIDEO) != true) {
             throw InstagramEmbedException("Instagram embed response does not contain video")
         }
+        val mediaSize = mediaUri?.let { httpClient.contentLength(it) }
 
         val preparedDownload = InstagramPreparedDownload(
             shortcode = shortcode,
             mediaUri = mediaUri,
             metadata = YtDlpMetadataDto(
-                id = shortcode,
                 title = "Instagram $shortcode",
                 extractor = "instagram:embed",
-                webpageUrl = request.normalizedUrl,
                 thumbnail = context.findFirstText(DISPLAY_URL, THUMBNAIL_URL),
                 duration = context.findFirstDecimal(VIDEO_DURATION),
-                ext = "mp4",
                 width = context.findFirstInt(ORIGINAL_WIDTH, WIDTH),
                 height = context.findFirstInt(ORIGINAL_HEIGHT, HEIGHT),
-                fps = null,
-                filesize = null,
-                vcodec = null,
-                acodec = null,
+                filesize = mediaSize,
                 filesizeApprox = null,
-                formatId = "instagram_embed_mp4",
-                format = "Instagram embed MP4",
                 track = null,
                 artist = null,
-                creator = null,
                 uploader = context.findFirstText(USERNAME),
                 channel = null,
                 requestedFormats = null,
@@ -143,19 +128,6 @@ class InstagramEmbedDownloader(
         return uri
     }
 
-    private fun extractShortcode(url: String): String? {
-        val uri = parseUrlOrNull(url.trim()) ?: return null
-        if (!isInstagramHost(uri.host)) {
-            return null
-        }
-        val segments = uri.pathSegments()
-        if (segments.firstOrNull() !in SUPPORTED_PATH_PREFIXES) {
-            return null
-        }
-
-        return segments.getOrNull(1)?.takeIf { SHORTCODE_REGEX.matches(it) }
-    }
-
     private fun JsonNode.findFirstText(vararg fieldNames: String): String? {
         if (isObject) {
             for (fieldName in fieldNames) {
@@ -208,13 +180,6 @@ class InstagramEmbedDownloader(
         return null
     }
 
-    private fun isInstagramHost(host: String?): Boolean {
-        return when (host?.lowercase()) {
-            "instagram.com", "www.instagram.com", "m.instagram.com" -> true
-            else -> false
-        }
-    }
-
     private fun isInstagramCdnHost(host: String): Boolean {
         return host == "cdninstagram.com" ||
                 host.endsWith(".cdninstagram.com") ||
@@ -227,8 +192,6 @@ class InstagramEmbedDownloader(
             pattern = "\"init\",\\[\\],\\[(.*?)\\]\\],",
             option = RegexOption.DOT_MATCHES_ALL,
         )
-        private val SHORTCODE_REGEX = Regex("[A-Za-z0-9_-]+")
-        private val SUPPORTED_PATH_PREFIXES = setOf("p", "reel", "reels", "tv")
         private const val CONTEXT_JSON = "contextJSON"
         private const val VIDEO_URL = "video_url"
         private const val IS_VIDEO = "is_video"

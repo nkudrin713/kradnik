@@ -6,15 +6,6 @@ on:
       - develop
   workflow_dispatch:
     inputs:
-      operation:
-        description: "Operation to run"
-        required: true
-        default: deploy
-        type: choice
-        options:
-          - deploy
-          - analytics-start
-          - analytics-stop
       environment:
         description: "Environment to deploy"
         required: true
@@ -24,7 +15,7 @@ on:
           - production
       version:
         description: "Image tag for deploy, for example v1.4.0"
-        required: false
+        required: true
         type: string
 
 permissions:
@@ -34,6 +25,11 @@ permissions:
 concurrency:
   group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
   cancel-in-progress: true
+
+env:
+  TELEGRAM_BOT_API_COMMIT: adfd7f6a8e990272851777eeb3ae0def4216f161
+  TELEGRAM_BOT_API_IMAGE: ghcr.io/nkudrin713/kradnik-telegram-bot-api:adfd7f6a8e990272851777eeb3ae0def4216f161
+  YOUTUBE_PO_TOKEN_PROVIDER_IMAGE: brainicism/bgutil-ytdlp-pot-provider:1.3.2-deno
 
 jobs:
   checks:
@@ -127,85 +123,33 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
 
-  analytics:
-    name: Manage Metabase
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.operation == 'analytics-start' || inputs.operation == 'analytics-stop') }}
-    environment: ${{ inputs.environment }}
-    concurrency:
-      group: deploy-server
-      cancel-in-progress: false
-
-    steps:
-      - name: Configure SSH
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Check Telegram Bot API image
+        id: telegram_bot_api_image
+        if: ${{ steps.latest_before_push.outputs.is_latest == 'true' }}
         run: |
-          set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          if docker buildx imagetools inspect "$TELEGRAM_BOT_API_IMAGE" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Manage Metabase
-        env:
-          OPERATION: ${{ inputs.operation }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          set -euo pipefail
-          test -n "$DEPLOY_PATH"
-          test "$DEPLOY_PATH" != "/"
-          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "\
-            set -euo pipefail && \
-            cd '$DEPLOY_PATH' && \
-            test -f docker-compose.yml && \
-            test -f .env && \
-            case '$OPERATION' in \
-              analytics-start) \
-                available_memory_mb=\$(awk '/MemAvailable:/ {print int(\$2 / 1024)}' /proc/meminfo); \
-                test -n \"\$available_memory_mb\"; \
-                if [ \"\$available_memory_mb\" -lt 1800 ]; then \
-                  echo \"Metabase start refused: only \${available_memory_mb} MiB available\" >&2; \
-                  exit 1; \
-                fi; \
-                touch .metabase-enabled; \
-                start_failed() { \
-                  rm -f .metabase-enabled; \
-                  DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose rm -sf metabase || true; \
-                  exit 1; \
-                }; \
-                DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose --profile analytics up -d metabase || start_failed; \
-                container=\$(DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose --profile analytics ps -q metabase); \
-                test -n \"\$container\" || start_failed; \
-                port=\$(sed -n 's/^METABASE_PUBLIC_PORT=//p' .env); \
-                case \"\$port\" in ''|*[!0-9]*) start_failed ;; esac; \
-                ready=false; \
-                for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do \
-                  if curl --fail --silent --show-error \"http://127.0.0.1:\$port/api/health\" >/dev/null; then ready=true; break; fi; \
-                  sleep 5; \
-                done; \
-                test \"\$ready\" = true || start_failed; \
-                ;; \
-              analytics-stop) \
-                rm -f .metabase-enabled; \
-                DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose rm -sf metabase; \
-                test -z \"\$(DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose --profile analytics ps -aq metabase)\"; \
-                ;; \
-              *) \
-                echo 'Unsupported analytics operation' >&2; \
-                exit 1; \
-                ;; \
-            esac\
-          "
+      - name: Build and push Telegram Bot API image
+        if: ${{ steps.latest_before_push.outputs.is_latest == 'true' && steps.telegram_bot_api_image.outputs.exists != 'true' }}
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.telegram-bot-api
+          push: true
+          build-args: TELEGRAM_BOT_API_COMMIT=${{ env.TELEGRAM_BOT_API_COMMIT }}
+          cache-from: type=gha,scope=telegram-bot-api
+          cache-to: type=gha,mode=max,scope=telegram-bot-api
+          tags: ${{ env.TELEGRAM_BOT_API_IMAGE }}
 
   deploy:
     name: Deploy to server
     runs-on: ubuntu-latest
     needs: checks
-    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.operation == 'deploy') || (github.event_name == 'push' && needs.checks.outputs.deployable == 'true')) }}
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.checks.result == 'success' && needs.checks.outputs.deployable == 'true')) }}
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}
     concurrency:
       group: deploy-server
@@ -214,6 +158,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Validate manual deploy target
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          IMAGE_TAG: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          test -n "$IMAGE_TAG"
+          case "$TARGET_ENVIRONMENT:$GITHUB_REF" in
+            development:refs/heads/develop|production:refs/heads/main) ;;
+            *) echo "Deploy target does not match branch: $TARGET_ENVIRONMENT from $GITHUB_REF" >&2; exit 1 ;;
+          esac
+          if [ "$TARGET_ENVIRONMENT" = "production" ] &&
+            ! printf '%s\n' "$IMAGE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Production image tag must use the vX.Y.Z release format: $IMAGE_TAG" >&2
+            exit 1
+          fi
 
       - name: Login to GHCR for image verification
         if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -271,14 +233,27 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          METABASE_ANALYTICS_DB_PASSWORD: ${{ secrets.METABASE_ANALYTICS_DB_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_LOCAL_API_ENABLED: ${{ vars.TELEGRAM_LOCAL_API_ENABLED || 'false' }}
+          YOUTUBE_PO_TOKEN_PROVIDER_ENABLED: ${{ vars.YOUTUBE_PO_TOKEN_PROVIDER_ENABLED || 'false' }}
+          TELEGRAM_BOT_API_URL: ${{ vars.TELEGRAM_BOT_API_URL }}
+          TELEGRAM_BOT_FILE_API_URL: ${{ vars.TELEGRAM_BOT_FILE_API_URL }}
+          TELEGRAM_MAX_UPLOAD_BYTES: ${{ vars.TELEGRAM_MAX_UPLOAD_BYTES }}
+          TELEGRAM_CONNECT_TIMEOUT: ${{ vars.TELEGRAM_CONNECT_TIMEOUT || '10s' }}
+          TELEGRAM_REQUEST_TIMEOUT: ${{ vars.TELEGRAM_REQUEST_TIMEOUT || '60m' }}
+          DOWNLOAD_WORK_DIR_RESERVE_BYTES: ${{ vars.DOWNLOAD_WORK_DIR_RESERVE_BYTES || '536870912' }}
+          DOWNLOAD_YT_DLP_METADATA_TIMEOUT: ${{ vars.DOWNLOAD_YT_DLP_METADATA_TIMEOUT || '30s' }}
+          DOWNLOAD_YT_DLP_DOWNLOAD_TIMEOUT: ${{ vars.DOWNLOAD_YT_DLP_DOWNLOAD_TIMEOUT || '30m' }}
+          DOWNLOAD_INSTAGRAM_METADATA_TIMEOUT: ${{ vars.DOWNLOAD_INSTAGRAM_METADATA_TIMEOUT || '30s' }}
+          DOWNLOAD_INSTAGRAM_DOWNLOAD_TIMEOUT: ${{ vars.DOWNLOAD_INSTAGRAM_DOWNLOAD_TIMEOUT || '10m' }}
+          DOWNLOAD_VIDEO_FFMPEG_TIMEOUT: ${{ vars.DOWNLOAD_VIDEO_FFMPEG_TIMEOUT || '20m' }}
+          DOWNLOAD_CHOICE_SESSION_TTL: ${{ vars.DOWNLOAD_CHOICE_SESSION_TTL || '30m' }}
           TELEGRAM_DONATION_URL: ${{ vars.TELEGRAM_DONATION_URL || secrets.TELEGRAM_DONATION_URL }}
           TELEGRAM_DONATION_CHANNEL_ID: ${{ vars.TELEGRAM_DONATION_CHANNEL_ID || secrets.TELEGRAM_DONATION_CHANNEL_ID }}
           TELEGRAM_DONATION_PIN_ENABLED: ${{ vars.TELEGRAM_DONATION_PIN_ENABLED || secrets.TELEGRAM_DONATION_PIN_ENABLED }}
           TELEGRAM_DONATION_PIN_MESSAGE_ID: ${{ vars.TELEGRAM_DONATION_PIN_MESSAGE_ID || secrets.TELEGRAM_DONATION_PIN_MESSAGE_ID }}
-          DOWNLOAD_PLATFORM_YOUTUBE_ENABLED: ${{ vars.DOWNLOAD_PLATFORM_YOUTUBE_ENABLED || secrets.DOWNLOAD_PLATFORM_YOUTUBE_ENABLED }}
-          DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED: ${{ vars.DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED || secrets.DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED }}
         run: |
           set -euo pipefail
           test -n "$DEPLOY_PATH"
@@ -286,53 +261,9 @@ jobs:
           image_tag="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
           app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$image_tag"
           deploy_environment="${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}"
-          metabase_analytics_db_password="${METABASE_ANALYTICS_DB_PASSWORD:-$POSTGRES_PASSWORD}"
-          if [ "$deploy_environment" = "production" ]; then
-            app_environment="prod"
-            app_container_name="kradnik-prod-app"
-            postgres_container_name="kradnik-prod-postgres"
-            postgres_db="kradnik_prod"
-            postgres_volume_name="kradnik-prod-postgres-data"
-            postgres_public_port="5434"
-            metabase_container_name="kradnik-prod-metabase"
-            metabase_volume_name="kradnik-prod-metabase-data"
-            metabase_public_port="3001"
-            metabase_site_url="https://analytics.nkudrin.dev"
-          else
-            app_environment="test"
-            app_container_name="kradnik-test-app"
-            postgres_container_name="kradnik-test-postgres"
-            postgres_db="kradnik_test"
-            postgres_volume_name="kradnik-test-postgres-data"
-            postgres_public_port="5433"
-            metabase_container_name="kradnik-test-metabase"
-            metabase_volume_name="kradnik-test-metabase-data"
-            metabase_public_port="3000"
-            metabase_site_url="https://analytics-test.nkudrin.dev"
-          fi
-          {
-            printf 'APP_IMAGE=%s\n' "$app_image"
-            printf 'APP_ENV=%s\n' "$app_environment"
-            printf 'APP_CONTAINER_NAME=%s\n' "$app_container_name"
-            printf 'POSTGRES_CONTAINER_NAME=%s\n' "$postgres_container_name"
-            printf 'POSTGRES_DB=%s\n' "$postgres_db"
-            printf 'POSTGRES_USER=kradnik\n'
-            printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
-            printf 'POSTGRES_VOLUME_NAME=%s\n' "$postgres_volume_name"
-            printf 'POSTGRES_PUBLIC_PORT=%s\n' "$postgres_public_port"
-            printf 'METABASE_CONTAINER_NAME=%s\n' "$metabase_container_name"
-            printf 'METABASE_VOLUME_NAME=%s\n' "$metabase_volume_name"
-            printf 'METABASE_PUBLIC_PORT=%s\n' "$metabase_public_port"
-            printf 'METABASE_SITE_URL=%s\n' "$metabase_site_url"
-            printf 'METABASE_ANALYTICS_DB_PASSWORD=%s\n' "$metabase_analytics_db_password"
-            printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
-            printf 'TELEGRAM_DONATION_URL=%s\n' "${TELEGRAM_DONATION_URL:-https://pay.cloudtips.ru/p/6f779a3d}"
-            printf 'TELEGRAM_DONATION_CHANNEL_ID=%s\n' "${TELEGRAM_DONATION_CHANNEL_ID:-@mediakradnik}"
-            printf 'TELEGRAM_DONATION_PIN_ENABLED=%s\n' "${TELEGRAM_DONATION_PIN_ENABLED:-false}"
-            printf 'TELEGRAM_DONATION_PIN_MESSAGE_ID=%s\n' "${TELEGRAM_DONATION_PIN_MESSAGE_ID:-}"
-            printf 'DOWNLOAD_PLATFORM_YOUTUBE_ENABLED=%s\n' "${DOWNLOAD_PLATFORM_YOUTUBE_ENABLED:-false}"
-            printf 'DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED=%s\n' "${DOWNLOAD_PLATFORM_INSTAGRAM_ENABLED:-false}"
-          } | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$DEPLOY_PATH/.env.next'"
+          scripts/render-deploy-env.sh "$deploy_environment" "$app_image" \
+            | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+                "umask 077 && cat > '$DEPLOY_PATH/.env.next' && chmod 600 '$DEPLOY_PATH/.env.next'"
 
       - name: Check latest commit before restart
         if: ${{ github.event_name == 'push' }}
@@ -373,35 +304,60 @@ jobs:
             set -euo pipefail && \
             cd '$DEPLOY_PATH' && \
             test -f .env.next && \
-            if [ -f .metabase-enabled ]; then export COMPOSE_PROFILES=analytics; else unset COMPOSE_PROFILES; fi && \
+            set_profiles() { \
+              profiles=''; \
+              local_enabled=\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env 2>/dev/null); \
+              if [ \"\$local_enabled\" = 'true' ]; then \
+                if [ -n \"\$profiles\" ]; then profiles=\"\$profiles,telegram-local\"; else profiles='telegram-local'; fi; \
+              fi; \
+              youtube_pot_enabled=\$(sed -n 's/^YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=//p' .env 2>/dev/null); \
+              if [ \"\$youtube_pot_enabled\" = 'true' ]; then \
+                if [ -n \"\$profiles\" ]; then profiles=\"\$profiles,youtube-pot\"; else profiles='youtube-pot'; fi; \
+              fi; \
+              if [ -n \"\$profiles\" ]; then export COMPOSE_PROFILES=\"\$profiles\"; else unset COMPOSE_PROFILES; fi; \
+            } && \
             if [ -f .env ]; then cp .env .env.previous; else rm -f .env.previous; fi && \
             rollback() { \
               status=\$?; \
               if [ \"\$status\" -ne 0 ] && [ -f .env.previous ]; then \
                 mv .env.previous .env; \
+                set_profiles; \
                 DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose up -d --remove-orphans || true; \
               fi; \
               exit \"\$status\"; \
             } && \
-            pull_app() { \
+            pull_images() { \
               for attempt in 1 2 3; do \
-                DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose pull app && return 0; \
+                if DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose pull app && \
+                  { [ \"\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env)\" != 'true' ] || DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose pull telegram-bot-api; } && \
+                  { [ \"\$(sed -n 's/^YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=//p' .env)\" != 'true' ] || DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose pull youtube-pot-provider; }; then \
+                  return 0; \
+                fi; \
                 sleep \$((attempt * 5)); \
               done; \
               return 1; \
             } && \
             trap rollback EXIT && \
             mv .env.next .env && \
-            pull_app && \
+            set_profiles && \
+            pull_images && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose up -d --remove-orphans && \
-            if [ ! -f .metabase-enabled ]; then DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose rm -sf metabase; fi && \
             DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose ps && \
             app_container=\$(docker compose ps -q app) && \
             test -n \"\$app_container\" && \
             test \"\$(docker inspect -f '{{.State.Status}}' \"\$app_container\")\" = running && \
             sleep 15 && \
             test \"\$(docker inspect -f '{{.State.Status}}' \"\$app_container\")\" = running && \
-            DOCKER_CONFIG='$DEPLOY_PATH/.docker' docker compose exec -T postgres sh -c 'printf \"%s\n\" \"ALTER ROLE kradnik_analytics_reader WITH LOGIN PASSWORD :'\\''analytics_password'\\'';\" | PGPASSWORD=\"\$POSTGRES_PASSWORD\" psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -v analytics_password=\"\$METABASE_ANALYTICS_DB_PASSWORD\"' && \
+            if [ \"\$(sed -n 's/^TELEGRAM_LOCAL_API_ENABLED=//p' .env)\" = 'true' ]; then \
+              telegram_api_container=\$(docker compose ps -q telegram-bot-api); \
+              test -n \"\$telegram_api_container\"; \
+              test \"\$(docker inspect -f '{{.State.Health.Status}}' \"\$telegram_api_container\")\" = healthy; \
+            fi && \
+            if [ \"\$(sed -n 's/^YOUTUBE_PO_TOKEN_PROVIDER_ENABLED=//p' .env)\" = 'true' ]; then \
+              youtube_pot_container=\$(docker compose ps -q youtube-pot-provider); \
+              test -n \"\$youtube_pot_container\"; \
+              test \"\$(docker inspect -f '{{.State.Health.Status}}' \"\$youtube_pot_container\")\" = healthy; \
+            fi && \
             rm -f .env.previous && \
             docker image prune -f --filter until=24h\
           "

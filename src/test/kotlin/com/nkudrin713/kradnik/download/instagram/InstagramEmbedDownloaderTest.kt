@@ -3,7 +3,8 @@ package com.nkudrin713.kradnik.download.instagram
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.request.DownloadRequest
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -14,37 +15,18 @@ import java.net.URI
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
 
 class InstagramEmbedDownloaderTest {
-    private val httpClient: InstagramHttpClient = mockk()
+    private val httpClient: InstagramHttpClient = mockk(relaxed = true)
     private val downloader = InstagramEmbedDownloader(httpClient)
-
-    @Test
-    fun supportsPublicInstagramVideoUrls() {
-        assertTrue(downloader.isInstagramRequest(request("https://www.instagram.com/stories/user/123/")))
-        assertFalse(downloader.isInstagramRequest(request("https://example.com/reel/ABC_123/")))
-        assertTrue(downloader.supports(request("https://www.instagram.com/reel/ABC_123/")))
-        assertTrue(downloader.supports(request("https://instagram.com/p/ABC-123?utm_source=test")))
-        assertFalse(downloader.supports(request("https://www.instagram.com/stories/user/123/")))
-        assertFalse(downloader.supports(request("https://example.com/reel/ABC_123/")))
-        assertTrue(
-            downloader.supports(
-                request(
-                    url = "https://www.instagram.com/reel/ABC_123/",
-                    outputType = OutputType.AUDIO,
-                ),
-            ),
-        )
-    }
 
     @Test
     fun preparesDownloadFromEmbedPayload() = runTest {
         val request = request("https://www.instagram.com/reel/ABC_123/")
         val embedUri = URI.create("https://www.instagram.com/p/ABC_123/embed/captioned/")
         coEvery { httpClient.getText(embedUri) } returns embedHtml()
+        coEvery { httpClient.contentLength(URI.create(MEDIA_URL)) } returns 42_000_000
 
         val prepared = downloader.prepare(request)
 
@@ -56,6 +38,7 @@ class InstagramEmbedDownloaderTest {
         assertEquals(1280, prepared.metadata.height)
         assertEquals("owner", prepared.metadata.uploader)
         assertEquals(THUMBNAIL_URL, prepared.metadata.thumbnail)
+        assertEquals(42_000_000, prepared.metadata.filesize)
     }
 
     @Test
@@ -157,11 +140,13 @@ class InstagramEmbedDownloaderTest {
     private fun request(
         url: String,
         outputType: OutputType = OutputType.VIDEO,
-    ): DownloadRequest {
-        return DownloadRequest(
+    ): DownloadSpec {
+        return DownloadSpec(
             originalUrl = url,
             normalizedUrl = url,
+            cacheKey = "instagram",
             outputType = outputType,
+            platform = DownloadPlatform.INSTAGRAM,
             formatSelector = "format",
             presetName = "instagram",
         )

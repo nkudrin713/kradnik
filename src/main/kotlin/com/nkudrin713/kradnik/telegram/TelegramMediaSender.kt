@@ -1,8 +1,10 @@
 package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
+import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.SendAudio
+import com.pengrad.telegrambot.request.SendDocument
 import com.pengrad.telegrambot.request.SendVideo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,10 +14,15 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Locale
 
+/**
+ * Sends media through multipart upload in cloud mode or shared-volume file URIs in local API mode.
+ * Every successful call returns the reusable Telegram file ID.
+ */
 @Component
 class TelegramMediaSender(
     private val apiClient: TelegramApiClient,
     private val videoMetadataProbe: VideoMetadataProbe,
+    private val properties: TelegramBotProperties,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -23,7 +30,7 @@ class TelegramMediaSender(
         chatId: Long,
         file: Path,
         replyToMessageId: Int? = null,
-    ): TelegramSendResult {
+    ): String {
         val fileSize = fileSize(file)
         val metadata = videoMetadataProbe.probe(file)
         logger.info(
@@ -47,7 +54,7 @@ class TelegramMediaSender(
             metadata.colorTransfer,
             metadata.colorPrimaries,
         )
-        val request = SendVideo(chatId, file.toFile())
+        val request = videoRequest(chatId, file)
             .width(metadata.width)
             .height(metadata.height)
             .supportsStreaming(true)
@@ -58,20 +65,20 @@ class TelegramMediaSender(
         )
         val video = response.message()?.video()
             ?: throw TelegramSendException("Telegram response does not contain video")
-        return TelegramSendResult(video.fileId, video.fileSize)
+        return video.fileId
     }
 
     suspend fun sendCachedVideo(
         chatId: Long,
         fileId: String,
         replyToMessageId: Int? = null,
-    ): TelegramSendResult {
+    ): String {
         val request = SendVideo(chatId, fileId).supportsStreaming(true)
         addReplyParameters(request, replyToMessageId)
         val response = apiClient.executeIo(request)
         val video = response.message()?.video()
             ?: throw TelegramSendException("Telegram response does not contain video")
-        return TelegramSendResult(video.fileId, video.fileSize)
+        return video.fileId
     }
 
     suspend fun sendAudio(
@@ -81,9 +88,9 @@ class TelegramMediaSender(
         performer: String?,
         durationSeconds: Int?,
         replyToMessageId: Int? = null,
-    ): TelegramSendResult {
+    ): String {
         val fileSize = fileSize(file)
-        val request = SendAudio(chatId, file.toFile())
+        val request = audioRequest(chatId, file)
         title?.let(request::title)
         performer?.let(request::performer)
         durationSeconds?.let(request::duration)
@@ -95,32 +102,84 @@ class TelegramMediaSender(
         )
         val audio = response.message()?.audio()
             ?: throw TelegramSendException("Telegram response does not contain audio")
-        return TelegramSendResult(
-            fileId = audio.fileId ?: throw TelegramSendException("Telegram audio file_id is empty"),
-            fileSize = audio.fileSize,
-        )
+        return audio.fileId ?: throw TelegramSendException("Telegram audio file_id is empty")
     }
 
     suspend fun sendCachedAudio(
         chatId: Long,
         fileId: String,
         replyToMessageId: Int? = null,
-    ): TelegramSendResult {
+    ): String {
         val request = SendAudio(chatId, fileId)
         addReplyParameters(request, replyToMessageId)
         val response = apiClient.executeIo(request)
         val audio = response.message()?.audio()
             ?: throw TelegramSendException("Telegram response does not contain audio")
-        return TelegramSendResult(
-            fileId = audio.fileId ?: throw TelegramSendException("Telegram audio file_id is empty"),
-            fileSize = audio.fileSize,
+        return audio.fileId ?: throw TelegramSendException("Telegram audio file_id is empty")
+    }
+
+    suspend fun sendDocument(
+        chatId: Long,
+        file: Path,
+        replyToMessageId: Int? = null,
+    ): String {
+        val fileSize = fileSize(file)
+        val request = documentRequest(chatId, file)
+        addReplyParameters(request, replyToMessageId)
+        val response = apiClient.executeIo(
+            request,
+            errorContext = "(sizeMb=${formatMegabytes(fileSize)})",
         )
+        val document = response.message()?.document()
+            ?: throw TelegramSendException("Telegram response does not contain document")
+        return document.fileId()
+    }
+
+    suspend fun sendCachedDocument(
+        chatId: Long,
+        fileId: String,
+        replyToMessageId: Int? = null,
+    ): String {
+        val request = SendDocument(chatId, fileId)
+        addReplyParameters(request, replyToMessageId)
+        val response = apiClient.executeIo(request)
+        val document = response.message()?.document()
+            ?: throw TelegramSendException("Telegram response does not contain document")
+        return document.fileId()
     }
 
     private suspend fun fileSize(file: Path): Long {
         return withContext(Dispatchers.IO) {
             Files.size(file)
         }
+    }
+
+    private fun videoRequest(chatId: Long, file: Path): SendVideo {
+        return if (properties.localApi) {
+            SendVideo(chatId, localFileUri(file))
+        } else {
+            SendVideo(chatId, file.toFile())
+        }
+    }
+
+    private fun audioRequest(chatId: Long, file: Path): SendAudio {
+        return if (properties.localApi) {
+            SendAudio(chatId, localFileUri(file))
+        } else {
+            SendAudio(chatId, file.toFile())
+        }
+    }
+
+    private fun documentRequest(chatId: Long, file: Path): SendDocument {
+        return if (properties.localApi) {
+            SendDocument(chatId, localFileUri(file))
+        } else {
+            SendDocument(chatId, file.toFile())
+        }
+    }
+
+    private fun localFileUri(file: Path): String {
+        return file.toAbsolutePath().normalize().toUri().toString()
     }
 
     private fun formatMegabytes(bytes: Long): String {
@@ -142,8 +201,3 @@ class TelegramMediaSender(
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
     }
 }
-
-data class TelegramSendResult(
-    val fileId: String,
-    val fileSize: Long?,
-)

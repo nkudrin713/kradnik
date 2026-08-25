@@ -3,22 +3,31 @@ package com.nkudrin713.kradnik.process
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.springframework.stereotype.Service
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.TimeSource
 
+/**
+ * Enforces time, output, and optional workspace limits for external processes.
+ * The complete process tree is terminated on timeout, cancellation, or limit breach.
+ */
 @Service
 class DefaultProcessRunner : ProcessRunner {
     override suspend fun run(command: Command): ProcessExecutionResult = coroutineScope {
-        val start = TimeSource.Monotonic.markNow()
         val process = ProcessBuilder(command.executable, *command.args.toTypedArray())
             .directory(command.workingDir?.toFile())
             .start()
@@ -29,6 +38,12 @@ class DefaultProcessRunner : ProcessRunner {
         val stderrDeferred = async(Dispatchers.IO) {
             readOutput(process.errorStream)
         }
+        val workingDirectoryLimitExceeded = AtomicBoolean(false)
+        val workingDirectoryMonitor = startWorkingDirectoryMonitor(
+            process = process,
+            command = command,
+            limitExceeded = workingDirectoryLimitExceeded,
+        )
 
         try {
             val finished = runInterruptible(Dispatchers.IO) {
@@ -53,9 +68,10 @@ class DefaultProcessRunner : ProcessRunner {
                 stderr = capturedStreams.second.value,
                 stdoutTruncated = capturedStreams.first.truncated,
                 stderrTruncated = capturedStreams.second.truncated,
-                duration = start.elapsedNow(),
+                workingDirectoryLimitExceeded = workingDirectoryLimitExceeded.get(),
             )
         } finally {
+            workingDirectoryMonitor?.cancelAndJoin()
             terminateProcessTree(process)
             stdoutDeferred.cancel()
             stderrDeferred.cancel()
@@ -63,6 +79,51 @@ class DefaultProcessRunner : ProcessRunner {
             runCatching { process.outputStream.close() }
             runCatching { process.errorStream.close() }
         }
+    }
+
+    private fun kotlinx.coroutines.CoroutineScope.startWorkingDirectoryMonitor(
+        process: Process,
+        command: Command,
+        limitExceeded: AtomicBoolean,
+    ) = command.maxWorkingDirectoryBytes?.let { maxBytes ->
+        require(maxBytes > 0) { "maxWorkingDirectoryBytes must be positive" }
+        val workingDir = requireNotNull(command.workingDir) {
+            "workingDir is required when maxWorkingDirectoryBytes is set"
+        }
+
+        launch(Dispatchers.IO) {
+            while (isActive && process.isAlive) {
+                if (runCatching { directorySizeExceeds(workingDir, maxBytes) }.getOrDefault(false)) {
+                    limitExceeded.set(true)
+                    terminateProcessTree(process)
+                    return@launch
+                }
+                delay(WORKING_DIRECTORY_POLL_MS)
+            }
+        }
+    }
+
+    private fun directorySizeExceeds(directory: Path, maxBytes: Long): Boolean {
+        if (!Files.exists(directory)) {
+            return false
+        }
+
+        var totalBytes = 0L
+        Files.walk(directory).use { paths ->
+            val iterator = paths.iterator()
+            while (iterator.hasNext()) {
+                val path = iterator.next()
+                if (!Files.isRegularFile(path)) {
+                    continue
+                }
+                val size = Files.size(path)
+                if (size > maxBytes - totalBytes) {
+                    return true
+                }
+                totalBytes += size
+            }
+        }
+        return false
     }
 
     private suspend fun terminateProcessTree(process: Process) {
@@ -126,6 +187,7 @@ class DefaultProcessRunner : ProcessRunner {
         private const val OUTPUT_READ_BUFFER_CHARS = 8 * 1024
         private const val PROCESS_OUTPUT_DRAIN_TIMEOUT_MS = 2_000L
         private const val PROCESS_EXIT_POLL_MS = 20L
+        private const val WORKING_DIRECTORY_POLL_MS = 250L
     }
 }
 

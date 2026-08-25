@@ -4,7 +4,6 @@ import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
-import com.nkudrin713.kradnik.telegram.TelegramSendResult
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -27,13 +26,11 @@ class TelegramFileSenderTest {
                 file = file.file,
                 replyToMessageId = 200,
             )
-        } returns TelegramSendResult("video-id", 456)
+        } returns "video-id"
 
         val actual = sender.send(job(OutputType.VIDEO), file)
 
-        assertEquals("video-id", actual.telegramFileId)
-        assertEquals(456, actual.telegramFileSize)
-        assertEquals(123, actual.downloadedFileSize)
+        assertEquals("video-id", actual)
         coVerify {
             telegramMediaSender.sendVideo(
                 chatId = 100,
@@ -55,13 +52,11 @@ class TelegramFileSenderTest {
                 durationSeconds = 120,
                 replyToMessageId = 200,
             )
-        } returns TelegramSendResult("audio-id", 456)
+        } returns "audio-id"
 
         val actual = sender.send(audioJob(), file)
 
-        assertEquals("audio-id", actual.telegramFileId)
-        assertEquals(456, actual.telegramFileSize)
-        assertEquals(123, actual.downloadedFileSize)
+        assertEquals("audio-id", actual)
         coVerify {
             telegramMediaSender.sendAudio(
                 chatId = 100,
@@ -75,6 +70,19 @@ class TelegramFileSenderTest {
     }
 
     @Test
+    fun sendsCoverFileAsDocument(@TempDir tempDir: Path) = runTest {
+        val file = DownloadedFile(tempDir.resolve("cover.jpg"), sizeBytes = 123)
+        coEvery {
+            telegramMediaSender.sendDocument(100, file.file, replyToMessageId = 200)
+        } returns "cover-id"
+
+        val actual = sender.send(job(OutputType.COVER), file)
+
+        assertEquals("cover-id", actual)
+        coVerify { telegramMediaSender.sendDocument(100, file.file, replyToMessageId = 200) }
+    }
+
+    @Test
     fun sendsCachedVideo() = runTest {
         coEvery {
             telegramMediaSender.sendCachedVideo(
@@ -82,13 +90,11 @@ class TelegramFileSenderTest {
                 fileId = "cached-id",
                 replyToMessageId = 200,
             )
-        } returns TelegramSendResult("video-id", 456)
+        } returns "video-id"
 
-        val actual = sender.sendCached(job(OutputType.VIDEO), "cached-id", downloadedFileSize = 123)
+        val actual = sender.sendCached(job(OutputType.VIDEO), "cached-id")
 
-        assertEquals("video-id", actual.telegramFileId)
-        assertEquals(456, actual.telegramFileSize)
-        assertEquals(123, actual.downloadedFileSize)
+        assertEquals("video-id", actual)
         coVerify {
             telegramMediaSender.sendCachedVideo(
                 chatId = 100,
@@ -106,13 +112,11 @@ class TelegramFileSenderTest {
                 fileId = "cached-id",
                 replyToMessageId = 200,
             )
-        } returns TelegramSendResult("audio-id", 456)
+        } returns "audio-id"
 
-        val actual = sender.sendCached(job(OutputType.AUDIO), "cached-id", downloadedFileSize = 123)
+        val actual = sender.sendCached(job(OutputType.AUDIO), "cached-id")
 
-        assertEquals("audio-id", actual.telegramFileId)
-        assertEquals(456, actual.telegramFileSize)
-        assertEquals(123, actual.downloadedFileSize)
+        assertEquals("audio-id", actual)
         coVerify {
             telegramMediaSender.sendCachedAudio(
                 chatId = 100,
@@ -123,16 +127,15 @@ class TelegramFileSenderTest {
     }
 
     @Test
-    fun mapsResultToDownloadedFileResult() {
-        val actual = TelegramFileSendResult(
-            telegramFileId = "file-id",
-            telegramFileSize = 456,
-            downloadedFileSize = 123,
-        ).toDownloadedFileResult()
+    fun sendsCachedCoverDocument() = runTest {
+        coEvery {
+            telegramMediaSender.sendCachedDocument(100, "cached-id", replyToMessageId = 200)
+        } returns "cover-id"
 
-        assertEquals("file-id", actual.telegramFileId)
-        assertEquals(456, actual.telegramFileSize)
-        assertEquals(123, actual.downloadedFileSize)
+        val actual = sender.sendCached(job(OutputType.COVER), "cached-id")
+
+        assertEquals("cover-id", actual)
+        coVerify { telegramMediaSender.sendCachedDocument(100, "cached-id", replyToMessageId = 200) }
     }
 
     private fun job(outputType: OutputType): DownloadJob {

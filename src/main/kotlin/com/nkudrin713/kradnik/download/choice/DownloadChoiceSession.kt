@@ -8,7 +8,7 @@ import jakarta.persistence.Table
 import java.time.Instant
 import java.util.UUID
 
-/** A short-lived menu snapshot used to validate and serialize a Telegram callback selection. */
+/** A menu snapshot retained until selection and used to validate and serialize a Telegram callback. */
 @Entity
 @Table(name = "download_choice_sessions")
 class DownloadChoiceSession(
@@ -35,7 +35,7 @@ class DownloadChoiceSession(
     var options: List<DownloadChoiceOptionSnapshot> = emptyList(),
 
     @Column(name = "expires_at", nullable = false)
-    var expiresAt: Instant = Instant.EPOCH,
+    var cleanupAfter: Instant = Instant.EPOCH,
 
     @Column(name = "selected_at")
     var selectedAt: Instant? = null,

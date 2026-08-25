@@ -10,8 +10,11 @@ import java.util.UUID
 
 interface DownloadChoiceSessionRepository : JpaRepository<DownloadChoiceSession, UUID> {
     @Modifying
-    @Query("DELETE FROM DownloadChoiceSession session WHERE session.expiresAt <= :cutoff")
-    fun deleteExpired(cutoff: Instant): Int
+    @Query(
+        "DELETE FROM DownloadChoiceSession session " +
+            "WHERE session.selectedAt IS NOT NULL AND session.cleanupAfter <= :cutoff"
+    )
+    fun deleteConsumed(cutoff: Instant): Int
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT session FROM DownloadChoiceSession session WHERE session.token = :token")

@@ -129,7 +129,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 telegramRequestMessageId = 4,
                 telegramMenuMessageId = 5,
                 options = listOf(option),
-                expiresAt = Instant.now().plusSeconds(60),
+                cleanupAfter = Instant.now().plusSeconds(60),
             )
         )
         val coverJob = repository.saveAndFlush(
@@ -145,6 +145,32 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         assertEquals(DownloadPlatform.YOUTUBE, persistedOption.spec.platform)
         assertEquals(OutputType.COVER, persistedJob.outputType)
         assertEquals(DownloadPlatform.YOUTUBE, persistedJob.platform)
+    }
+
+    @Test
+    fun deletesOnlyConsumedChoiceSessionsAfterRetentionDeadline() {
+        val cleanupDeadline = Instant.now().minusSeconds(1)
+        val availableSession = choiceSessionRepository.saveAndFlush(
+            DownloadChoiceSession(
+                telegramUpdateId = 10,
+                cleanupAfter = cleanupDeadline,
+            )
+        )
+        val consumedSession = choiceSessionRepository.saveAndFlush(
+            DownloadChoiceSession(
+                telegramUpdateId = 11,
+                cleanupAfter = cleanupDeadline,
+                selectedAt = cleanupDeadline,
+            )
+        )
+
+        val deleted = transactionTemplate.execute {
+            choiceSessionRepository.deleteConsumed(Instant.now())
+        }
+
+        assertEquals(1, deleted)
+        assertEquals(true, choiceSessionRepository.existsById(availableSession.token))
+        assertEquals(false, choiceSessionRepository.existsById(consumedSession.token))
     }
 
     @Test

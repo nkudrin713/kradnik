@@ -14,11 +14,6 @@ on:
       - closed
   workflow_dispatch:
     inputs:
-      target_ref:
-        description: "Commit, branch, or tag to release"
-        required: true
-        default: "main"
-        type: string
       version:
         description: "Explicit version, for example v1.4.0. Leave empty to auto-increment."
         required: false
@@ -46,12 +41,13 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate release PR
+    name: Validate main PR
     runs-on: ubuntu-latest
-    if: "${{ github.event_name == 'pull_request' && github.event.action != 'closed' && startsWith(github.event.pull_request.title, 'release: ') }}"
+    if: "${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}"
 
     steps:
       - name: Validate release input
+        if: "${{ startsWith(github.event.pull_request.title, 'release: ') }}"
         env:
           TITLE: ${{ github.event.pull_request.title }}
           PATCH: ${{ contains(github.event.pull_request.labels.*.name, 'release:patch') }}
@@ -75,6 +71,45 @@ jobs:
             exit 1
           fi
 
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Validate release snapshot
+        if: "${{ startsWith(github.event.pull_request.title, 'release: ') }}"
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          source_count="$(printf '%s\n' "$PR_BODY" | grep -Ec '^Source develop SHA: [0-9a-f]{40}$' || true)"
+          if [ "$source_count" -ne 1 ]; then
+            echo "PR body must contain exactly one line: Source develop SHA: <40-character SHA>" >&2
+            exit 1
+          fi
+
+          source_sha="$(printf '%s\n' "$PR_BODY" | sed -nE 's/^Source develop SHA: ([0-9a-f]{40})$/\1/p')"
+          git cat-file -e "$source_sha^{commit}"
+          source_tree="$(git rev-parse "$source_sha^{tree}")"
+          release_tree="$(git rev-parse HEAD^{tree})"
+          echo "Source develop SHA: $source_sha"
+          echo "Source tree:        $source_tree"
+          echo "Release tree:       $release_tree"
+          test "$release_tree" = "$source_tree"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Run tests and build jar
+        run: ./gradlew check bootJar
+
   release:
     name: Create release
     runs-on: ubuntu-latest
@@ -84,10 +119,16 @@ jobs:
       packages: write
 
     steps:
+      - name: Validate manual release target
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+
       - name: Checkout release target
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.target_ref || github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
 
       - name: Resolve release input

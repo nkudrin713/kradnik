@@ -24,7 +24,7 @@ permissions:
 
 concurrency:
   group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   TELEGRAM_BOT_API_COMMIT: adfd7f6a8e990272851777eeb3ae0def4216f161

@@ -19,6 +19,7 @@ import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
+/** The HTTP boundary for public Instagram embed metadata and direct media. */
 interface InstagramHttpClient {
     suspend fun getText(uri: URI): String
 
@@ -30,6 +31,10 @@ interface InstagramHttpClient {
     ): DownloadedFile
 }
 
+/**
+ * Runs JDK HTTP calls on the IO dispatcher and validates media while streaming it.
+ * Local Bot API mode stops the stream as soon as its upload limit is exceeded.
+ */
 @Component
 class JdkInstagramHttpClient(
     private val uploadLimits: TelegramUploadLimits = TelegramUploadLimits(

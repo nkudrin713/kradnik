@@ -21,6 +21,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
+/**
+ * Enforces time, output, and optional workspace limits for external processes.
+ * The complete process tree is terminated on timeout, cancellation, or limit breach.
+ */
 @Service
 class DefaultProcessRunner : ProcessRunner {
     override suspend fun run(command: Command): ProcessExecutionResult = coroutineScope {

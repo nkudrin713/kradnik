@@ -10,6 +10,7 @@ import com.pengrad.telegrambot.model.CallbackQuery
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
+/** Consumes a persisted menu selection and releases it if job creation fails. */
 @Component
 class DownloadChoiceHandler(
     private val sessionService: DownloadChoiceSessionService,

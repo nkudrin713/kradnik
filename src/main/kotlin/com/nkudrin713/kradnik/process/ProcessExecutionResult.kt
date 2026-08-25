@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.process
 
+/** Captured process output; truncation flags indicate that an earlier prefix was discarded. */
 data class ProcessExecutionResult(
     val timedOut: Boolean,
     val exitCode: Int?,

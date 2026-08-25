@@ -6,6 +6,7 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
 import org.springframework.stereotype.Component
 
+/** Keeps fresh-file and cached-file Telegram delivery aligned for every output type. */
 @Component
 class TelegramFileSender(
     private val telegramMediaSender: TelegramMediaSender,

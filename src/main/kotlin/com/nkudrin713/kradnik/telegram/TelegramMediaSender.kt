@@ -14,6 +14,10 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Locale
 
+/**
+ * Sends media through multipart upload in cloud mode or shared-volume file URIs in local API mode.
+ * Every successful call returns the reusable Telegram file ID.
+ */
 @Component
 class TelegramMediaSender(
     private val apiClient: TelegramApiClient,

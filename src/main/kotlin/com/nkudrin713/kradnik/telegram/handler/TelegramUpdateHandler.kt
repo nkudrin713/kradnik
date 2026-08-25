@@ -9,6 +9,7 @@ import com.pengrad.telegrambot.model.Update
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
+/** Routes supported Telegram update shapes into commands, link preparation, or choice handling. */
 @Service
 class TelegramUpdateHandler(
     private val downloadChoiceCoordinator: DownloadChoiceCoordinator,

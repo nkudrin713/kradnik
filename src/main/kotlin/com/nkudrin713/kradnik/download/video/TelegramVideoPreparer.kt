@@ -16,6 +16,7 @@ import java.util.Locale
 import kotlin.time.Duration
 import kotlin.time.toKotlinDuration
 
+/** Applies Telegram video policy, transcodes when needed, and validates the resulting file again. */
 @Service
 class TelegramVideoPreparer(
     private val processRunner: ProcessRunner,

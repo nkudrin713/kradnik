@@ -7,11 +7,13 @@ import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.springframework.stereotype.Service
 import java.util.Locale
 
+/** Rejects known oversize downloads early and adjusts audio quality to fit Telegram limits. */
 @Service
 class DownloadPreflightService(
     private val audioUploadPlanner: AudioUploadPlanner,
     private val uploadLimits: TelegramUploadLimits,
 ) {
+    /** Unknown source size is allowed because the final file is checked again before upload. */
     fun check(
         spec: DownloadSpec,
         metadata: YtDlpMetadataDto,

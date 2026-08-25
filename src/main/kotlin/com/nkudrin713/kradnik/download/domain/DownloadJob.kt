@@ -17,6 +17,7 @@ import org.hibernate.annotations.UpdateTimestamp
 import java.time.Instant
 import java.util.UUID
 
+/** A persisted request snapshot whose mutable fields track queue and delivery progress. */
 @Entity
 @Table(name = "download_jobs")
 class DownloadJob(

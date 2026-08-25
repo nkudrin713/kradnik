@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.util.concurrent.Executors
 
+/** Prepares choice menus off the Telegram polling thread and persists their callback state. */
 @Component
 class DownloadChoiceCoordinator(
     private val planner: DownloadChoicePlanner,

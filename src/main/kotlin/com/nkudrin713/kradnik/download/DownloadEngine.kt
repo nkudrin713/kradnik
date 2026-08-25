@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component
 import java.nio.file.Path
 import java.time.Instant
 
+/** Selects the download strategy and keeps preparation outcomes independent of platform details. */
 @Component
 class DownloadEngine(
     private val ytDlpService: YtDlpService,
@@ -29,6 +30,7 @@ class DownloadEngine(
         }
     }
 
+    /** Prepares the full format catalog used to build a download-choice menu. */
     suspend fun prepareCatalog(spec: DownloadSpec): DownloadPreparation {
         return when (spec.platform) {
             DownloadPlatform.INSTAGRAM -> instagramDownloader.prepare(spec)
@@ -86,6 +88,7 @@ class DownloadEngine(
     }
 }
 
+/** Binds a metadata snapshot to the downloader that produced it for one processing attempt. */
 interface PreparedDownloadSession {
     val metadata: YtDlpMetadataDto
 
@@ -95,16 +98,19 @@ interface PreparedDownloadSession {
     ): DownloadedFile
 }
 
+/** A platform-neutral preparation result that tells the queue how to continue. */
 sealed interface DownloadPreparation {
     data class Ready(
         val session: PreparedDownloadSession,
     ) : DownloadPreparation
 
+    /** Preparation was deferred before a source request, so it must not consume an attempt. */
     data class NotReady(
         val retryAt: Instant,
         val reason: String,
     ) : DownloadPreparation
 
+    /** A source request failed transiently and should count toward the retry limit. */
     data class RetryableFailure(
         val retryAt: Instant,
         val reason: String,

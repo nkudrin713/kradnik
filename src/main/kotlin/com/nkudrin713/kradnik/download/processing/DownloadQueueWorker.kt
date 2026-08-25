@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component
 import java.util.UUID
 import kotlin.math.max
 
+/** Claims one job per tick and renews its lease while processing remains active. */
 @Component
 @ConditionalOnProperty(
     name = ["download.worker.enabled"],

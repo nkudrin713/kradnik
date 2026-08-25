@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service
 
 class UnsupportedPlatformException(message: String) : RuntimeException(message)
 
+/** Resolves a user URL into canonical video and audio download specifications. */
 @Service
 class PlatformResolver(
     private val handlers: List<PlatformDownloadHandler>,
@@ -24,6 +25,7 @@ class PlatformResolver(
     }
 }
 
+/** Owns URL recognition and download specifications for one supported platform. */
 interface PlatformDownloadHandler {
     val platform: DownloadPlatform
 

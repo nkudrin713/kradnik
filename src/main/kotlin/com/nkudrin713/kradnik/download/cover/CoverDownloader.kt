@@ -13,6 +13,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 
+/** Downloads supported image types with both header and streaming size enforcement. */
 @Component
 class CoverDownloader(
     uploadLimits: TelegramUploadLimits,

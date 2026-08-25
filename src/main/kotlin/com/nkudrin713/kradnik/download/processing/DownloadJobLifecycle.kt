@@ -12,6 +12,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
+/** Maps processing outcomes to persisted transitions and best-effort Telegram status updates. */
 @Component
 class DownloadJobLifecycle(
     private val downloadJobService: DownloadJobService,

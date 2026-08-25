@@ -7,6 +7,7 @@ import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
+/** Stores expiring choice menus and serializes selection with a database row lock. */
 @Service
 class DownloadChoiceSessionService(
     private val repository: DownloadChoiceSessionRepository,
@@ -34,6 +35,10 @@ class DownloadChoiceSessionService(
         )
     }
 
+    /**
+     * Marks a valid option as selected before job creation.
+     * Call [release] if downstream job creation fails.
+     */
     @Transactional
     fun select(command: SelectDownloadChoiceCommand): DownloadChoiceSelection {
         val session = repository.findForUpdate(command.token)
@@ -68,6 +73,7 @@ class DownloadChoiceSessionService(
         )
     }
 
+    /** Makes a previously selected option available again after a failed enqueue. */
     @Transactional
     fun release(token: UUID) {
         repository.findForUpdate(token)?.selectedAt = null

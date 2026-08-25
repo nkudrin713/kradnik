@@ -8,6 +8,7 @@ import jakarta.persistence.Table
 import java.time.Instant
 import java.util.UUID
 
+/** A short-lived menu snapshot used to validate and serialize a Telegram callback selection. */
 @Entity
 @Table(name = "download_choice_sessions")
 class DownloadChoiceSession(

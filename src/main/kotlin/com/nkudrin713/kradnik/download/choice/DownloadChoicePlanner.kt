@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.RoundingMode
 
+/** Builds user-visible options from a single metadata catalog and current upload constraints. */
 @Component
 class DownloadChoicePlanner(
     private val platformResolver: PlatformResolver,

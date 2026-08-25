@@ -11,6 +11,10 @@ import java.math.BigDecimal
 import java.net.URI
 import java.nio.file.Path
 
+/**
+ * Extracts metadata and an optional direct video URL from the public Instagram embed payload.
+ * Direct media is accepted only from HTTPS Instagram CDN origins.
+ */
 @Service
 class InstagramEmbedDownloader(
     private val httpClient: InstagramHttpClient,

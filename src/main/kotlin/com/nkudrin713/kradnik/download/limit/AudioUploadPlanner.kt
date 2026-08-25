@@ -6,6 +6,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.Locale
 
+/** Chooses the highest configured audio bitrate that fits the upload limit with safety margin. */
 @Component
 class AudioUploadPlanner(
     private val uploadLimits: TelegramUploadLimits,

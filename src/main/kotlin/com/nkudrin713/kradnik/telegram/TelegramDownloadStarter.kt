@@ -8,6 +8,7 @@ import com.nkudrin713.kradnik.download.video.TelegramVideoPolicy
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
+/** Creates a queued job and removes its status message when enqueueing fails or is deduplicated. */
 @Component
 class TelegramDownloadStarter(
     private val downloadJobService: DownloadJobService,

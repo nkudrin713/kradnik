@@ -45,6 +45,7 @@ private data class YtDlpCommand(
     override val executable: String = YT_DLP,
 ) : Command
 
+/** Builds yt-dlp invocations, parses metadata JSON, and verifies the reported output file. */
 @Service
 class YtDlpService(
     private val processRunner: ProcessRunner,
@@ -65,10 +66,12 @@ class YtDlpService(
         require(downloadTimeout.isPositive()) { "download.yt-dlp.download-timeout must be positive" }
     }
 
+    /** Extracts metadata for the format selector that will be downloaded. */
     suspend fun extractMetadata(spec: DownloadSpec): YtDlpMetadataDto {
         return extractMetadata(spec, spec.formatSelector)
     }
 
+    /** Extracts the complete format catalog used to build user choices. */
     suspend fun extractCatalogMetadata(spec: DownloadSpec): YtDlpMetadataDto {
         return extractMetadata(spec, formatSelector = null)
     }
@@ -106,6 +109,7 @@ class YtDlpService(
         return objectMapper.readValue(result.stdout)
     }
 
+    /** Returns only a regular file path explicitly reported by yt-dlp after post-processing. */
     suspend fun download(
         spec: DownloadSpec,
         outputDir: Path,

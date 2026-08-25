@@ -30,6 +30,7 @@ import java.nio.file.Path
 import java.util.Locale
 import kotlin.io.path.createDirectories
 
+/** Runs one claimed job from cache lookup through download, preparation, and Telegram delivery. */
 @Component
 class DownloadJobProcessor(
     private val downloadJobService: DownloadJobService,
@@ -48,6 +49,7 @@ class DownloadJobProcessor(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
+    /** Always removes the job workspace, including after cancellation or lease loss. */
     suspend fun process(attempt: ClaimedDownloadJob) {
         val job = attempt.job
         val jobId = requireNotNull(job.id)

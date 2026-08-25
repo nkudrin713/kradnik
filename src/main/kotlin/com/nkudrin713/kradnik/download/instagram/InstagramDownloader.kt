@@ -11,6 +11,10 @@ import org.springframework.stereotype.Component
 import java.nio.file.Path
 import java.time.Instant
 
+/**
+ * Applies process-local throttling before Instagram embed preparation.
+ * Direct embed media is used for video; yt-dlp handles audio and missing direct media.
+ */
 @Component
 class InstagramDownloader(
     private val embedDownloader: InstagramEmbedDownloader,

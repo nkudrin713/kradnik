@@ -39,6 +39,7 @@ jobs:
     environment: development
     outputs:
       deployable: ${{ steps.latest_before_push.outputs.is_latest }}
+      image_digest: ${{ steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
@@ -112,6 +113,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Build and push image
+        id: build
         if: ${{ steps.latest_before_push.outputs.is_latest == 'true' }}
         uses: docker/build-push-action@v7
         with:
@@ -185,15 +187,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Verify deploy image exists
+      - name: Resolve manual deploy image
+        id: manual_image
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           IMAGE_TAG: ${{ inputs.version }}
         run: |
           set -euo pipefail
           image="ghcr.io/${GITHUB_REPOSITORY,,}:$IMAGE_TAG"
-          docker buildx imagetools inspect "$image" >/dev/null
-          echo "Image is available: $image"
+          digest="sha256:$(docker buildx imagetools inspect "$image" --raw | sha256sum | cut -d' ' -f1)"
+          if ! printf '%s\n' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "Could not resolve image digest for $image" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "Resolved $image to $digest"
 
       - name: Check latest commit before deploy
         if: ${{ github.event_name == 'push' }}
@@ -258,8 +266,12 @@ jobs:
           set -euo pipefail
           test -n "$DEPLOY_PATH"
           test "$DEPLOY_PATH" != "/"
-          image_tag="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
-          app_image="ghcr.io/${GITHUB_REPOSITORY,,}:$image_tag"
+          image_digest="${{ github.event_name == 'workflow_dispatch' && steps.manual_image.outputs.digest || needs.checks.outputs.image_digest }}"
+          if ! printf '%s\n' "$image_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "Invalid image digest: $image_digest" >&2
+            exit 1
+          fi
+          app_image="ghcr.io/${GITHUB_REPOSITORY,,}@$image_digest"
           deploy_environment="${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}"
           scripts/render-deploy-env.sh "$deploy_environment" "$app_image" \
             | ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \

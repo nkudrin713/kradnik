@@ -287,6 +287,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -335,10 +336,12 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           DESCRIPTION: ${{ steps.release_input.outputs.description }}
           TARGET_SHA: ${{ steps.version.outputs.target_sha }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
 
-          notes="$(printf 'Image: ghcr.io/%s:%s\nCommit: %s\n' "${GITHUB_REPOSITORY,,}" "$VERSION" "$TARGET_SHA")"
+          test -n "$IMAGE_DIGEST"
+          notes="$(printf 'Image: ghcr.io/%s:%s\nDigest: %s\nCommit: %s\n' "${GITHUB_REPOSITORY,,}" "$VERSION" "$IMAGE_DIGEST" "$TARGET_SHA")"
           if gh release view "$VERSION" >/dev/null 2>&1; then
             gh release edit "$VERSION" \
               --title "$VERSION $DESCRIPTION" \

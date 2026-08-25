@@ -43,11 +43,6 @@ class DownloadChoiceHandler(
                 selection = selection,
             )
             is DownloadChoiceSelection.Unavailable -> answer(callbackQuery.id(), selection.reason, showAlert = true)
-            DownloadChoiceSelection.Expired -> answer(
-                callbackQuery.id(),
-                "Меню устарело. Отправьте ссылку ещё раз",
-                showAlert = true,
-            )
             DownloadChoiceSelection.NotOwner -> answer(
                 callbackQuery.id(),
                 "Это меню другого пользователя",

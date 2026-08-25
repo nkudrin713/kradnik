@@ -70,20 +70,6 @@ class DownloadChoiceHandlerTest {
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
     }
 
-    @Test
-    fun reportsExpiredMenu() {
-        every { sessionService.select(any()) } returns DownloadChoiceSelection.Expired
-        every {
-            telegramSender.answerCallback(
-                "callback-id",
-                "Меню устарело. Отправьте ссылку ещё раз",
-                true,
-            )
-        } just runs
-
-        handler.handle(callbackQuery(userId = 300))
-    }
-
     private fun readySelection(): DownloadChoiceSelection.Ready {
         val option = DownloadChoiceOptionSnapshot(
             key = "video_720",
@@ -111,7 +97,7 @@ class DownloadChoiceHandlerTest {
                 telegramRequestMessageId = 200,
                 telegramMenuMessageId = 500,
                 options = listOf(option),
-                expiresAt = Instant.now().plusSeconds(60),
+                cleanupAfter = Instant.now().plusSeconds(60),
             ),
             option = option,
         )

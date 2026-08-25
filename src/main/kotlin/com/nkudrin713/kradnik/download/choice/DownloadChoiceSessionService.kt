@@ -7,21 +7,21 @@ import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
-/** Stores expiring choice menus and serializes selection with a database row lock. */
+/** Stores choice menus and serializes selection with a database row lock. */
 @Service
 class DownloadChoiceSessionService(
     private val repository: DownloadChoiceSessionRepository,
     @Value("\${download.choice-session-ttl:30m}")
-    private val sessionTtl: Duration = Duration.ofMinutes(30),
+    private val consumedSessionTtl: Duration = Duration.ofMinutes(30),
 ) {
     init {
-        require(sessionTtl.isPositive()) { "download.choice-session-ttl must be positive" }
+        require(consumedSessionTtl.isPositive()) { "download.choice-session-ttl must be positive" }
     }
 
     @Transactional
     fun create(command: CreateDownloadChoiceSessionCommand): DownloadChoiceSession {
         val now = Instant.now()
-        repository.deleteExpired(now)
+        repository.deleteConsumed(now)
         return repository.save(
             DownloadChoiceSession(
                 telegramUserId = command.telegramUserId,
@@ -30,7 +30,7 @@ class DownloadChoiceSessionService(
                 telegramRequestMessageId = command.telegramRequestMessageId,
                 telegramMenuMessageId = command.telegramMenuMessageId,
                 options = command.plan.options,
-                expiresAt = now.plus(sessionTtl),
+                cleanupAfter = now.plus(consumedSessionTtl),
             ),
         )
     }
@@ -42,12 +42,9 @@ class DownloadChoiceSessionService(
     @Transactional
     fun select(command: SelectDownloadChoiceCommand): DownloadChoiceSelection {
         val session = repository.findForUpdate(command.token)
-            ?: return DownloadChoiceSelection.Expired
+            ?: return DownloadChoiceSelection.Invalid
         val now = Instant.now()
 
-        if (session.expiresAt <= now) {
-            return DownloadChoiceSelection.Expired
-        }
         if (session.telegramUserId != command.telegramUserId || session.telegramChatId != command.telegramChatId) {
             return DownloadChoiceSelection.NotOwner
         }
@@ -67,6 +64,7 @@ class DownloadChoiceSessionService(
         }
 
         session.selectedAt = now
+        session.cleanupAfter = now.plus(consumedSessionTtl)
         return DownloadChoiceSelection.Ready(
             session = session,
             option = option,
@@ -104,8 +102,6 @@ sealed interface DownloadChoiceSelection {
     ) : DownloadChoiceSelection
 
     data class Unavailable(val reason: String) : DownloadChoiceSelection
-
-    data object Expired : DownloadChoiceSelection
 
     data object NotOwner : DownloadChoiceSelection
 

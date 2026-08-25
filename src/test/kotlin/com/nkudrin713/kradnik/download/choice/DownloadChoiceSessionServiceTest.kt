@@ -15,6 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class DownloadChoiceSessionServiceTest {
     private val repository: DownloadChoiceSessionRepository = mockk()
@@ -23,15 +24,15 @@ class DownloadChoiceSessionServiceTest {
     @Test
     fun createsSessionWithPlanSnapshot() {
         val saved = slot<DownloadChoiceSession>()
-        every { repository.deleteExpired(any()) } returns 2
+        every { repository.deleteConsumed(any()) } returns 2
         every { repository.save(capture(saved)) } answers { saved.captured }
 
         val actual = service.create(createCommand())
 
         assertEquals(300, actual.telegramUserId)
         assertEquals(listOf("video_720"), actual.options.map { it.key })
-        assertNotNull(actual.expiresAt)
-        verify(exactly = 1) { repository.deleteExpired(any()) }
+        assertNotNull(actual.cleanupAfter)
+        verify(exactly = 1) { repository.deleteConsumed(any()) }
     }
 
     @Test
@@ -46,10 +47,10 @@ class DownloadChoiceSessionServiceTest {
     }
 
     @Test
-    fun rejectsExpiredForeignUnavailableAndRepeatedSelections() {
-        val expired = session().apply { expiresAt = Instant.now().minusSeconds(1) }
-        every { repository.findForUpdate(expired.token) } returns expired
-        assertEquals(DownloadChoiceSelection.Expired, service.select(selectCommand(expired.token)))
+    fun rejectsForeignUnavailableAndRepeatedSelections() {
+        val missingToken = UUID.randomUUID()
+        every { repository.findForUpdate(missingToken) } returns null
+        assertEquals(DownloadChoiceSelection.Invalid, service.select(selectCommand(missingToken)))
 
         val foreign = session()
         every { repository.findForUpdate(foreign.token) } returns foreign
@@ -65,6 +66,18 @@ class DownloadChoiceSessionServiceTest {
         val selected = session().apply { selectedAt = Instant.now() }
         every { repository.findForUpdate(selected.token) } returns selected
         assertEquals(DownloadChoiceSelection.AlreadySelected, service.select(selectCommand(selected.token)))
+    }
+
+    @Test
+    fun selectsAvailableOptionAfterRetentionDeadline() {
+        val session = session().apply { cleanupAfter = Instant.now().minusSeconds(1) }
+        every { repository.findForUpdate(session.token) } returns session
+
+        val actual = service.select(selectCommand(session.token))
+
+        assertIs<DownloadChoiceSelection.Ready>(actual)
+        assertNotNull(session.selectedAt)
+        assertTrue(session.cleanupAfter > Instant.now())
     }
 
     @Test
@@ -104,7 +117,7 @@ class DownloadChoiceSessionServiceTest {
             telegramRequestMessageId = 200,
             telegramMenuMessageId = 500,
             options = listOf(option),
-            expiresAt = Instant.now().plusSeconds(60),
+            cleanupAfter = Instant.now().plusSeconds(60),
         )
     }
 

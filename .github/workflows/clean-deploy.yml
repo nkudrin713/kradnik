@@ -9,7 +9,6 @@ on:
         type: choice
         options:
           - development
-          - production
       confirm:
         description: "Type RESET to drop server containers and volumes"
         required: true
@@ -41,7 +40,7 @@ jobs:
           set -euo pipefail
           test "$CONFIRMATION" = "RESET"
           case "$TARGET_ENVIRONMENT:$GITHUB_REF" in
-            development:refs/heads/develop|production:refs/heads/main) ;;
+            development:refs/heads/develop) ;;
             *) echo "Clean deploy target does not match branch: $TARGET_ENVIRONMENT from $GITHUB_REF" >&2; exit 1 ;;
           esac
 

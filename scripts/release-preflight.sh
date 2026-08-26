@@ -46,7 +46,10 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 if git remote get-url origin >/dev/null 2>&1; then
-  git fetch --prune --tags origin >/dev/null
+  git fetch --prune --tags origin \
+    '+refs/heads/main:refs/remotes/origin/main' \
+    '+refs/heads/develop:refs/remotes/origin/develop' \
+    >/dev/null
 fi
 
 develop_sha="$(git rev-parse origin/develop)"

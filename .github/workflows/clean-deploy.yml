@@ -16,7 +16,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: deploy-${{ inputs.environment }}
@@ -49,6 +48,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout
@@ -124,6 +126,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: checks
     environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      packages: read
     concurrency:
       group: deploy-server
       cancel-in-progress: false

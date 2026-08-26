@@ -20,7 +20,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
@@ -37,6 +36,9 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'push' }}
     environment: development
+    permissions:
+      contents: read
+      packages: write
     outputs:
       deployable: ${{ steps.latest_before_push.outputs.is_latest }}
       image_digest: ${{ steps.build.outputs.digest }}
@@ -153,6 +155,9 @@ jobs:
     needs: checks
     if: ${{ always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.checks.result == 'success' && needs.checks.outputs.deployable == 'true')) }}
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}
+    permissions:
+      contents: read
+      packages: read
     concurrency:
       group: deploy-server
       cancel-in-progress: false

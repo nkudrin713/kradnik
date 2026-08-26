@@ -370,6 +370,25 @@ jobs:
               test -n \"\$youtube_pot_container\"; \
               test \"\$(docker inspect -f '{{.State.Health.Status}}' \"\$youtube_pot_container\")\" = healthy; \
             fi && \
+            expected_app_image=\$(sed -n 's/^APP_IMAGE=//p' .env) && \
+            test -n \"\$expected_app_image\" && \
+            configured_app_image=\$(docker inspect -f '{{.Config.Image}}' \"\$app_container\") && \
+            test \"\$configured_app_image\" = \"\$expected_app_image\" && \
+            app_restart_count=\$(docker inspect -f '{{.RestartCount}}' \"\$app_container\") && \
+            test \"\$app_restart_count\" = 0 && \
+            startup_log='' && \
+            for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do \
+              startup_log=\$(docker logs --since 5m \"\$app_container\" 2>&1 | grep -E 'Started [^ ]+ in ' | tail -n 1 || true); \
+              if [ -n \"\$startup_log\" ]; then break; fi; \
+              sleep 5; \
+            done && \
+            test -n \"\$startup_log\" && \
+            postgres_container=\$(docker compose ps -q postgres) && \
+            test -n \"\$postgres_container\" && \
+            flyway_version=\$(docker exec \"\$postgres_container\" sh -lc 'psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT version FROM flyway_schema_history WHERE success = true AND version IS NOT NULL ORDER BY installed_rank DESC LIMIT 1\"') && \
+            test -n \"\$flyway_version\" && \
+            printf 'Application image: %s\nRestart count: %s\nFlyway version: %s\nStartup: %s\n' \
+              \"\$configured_app_image\" \"\$app_restart_count\" \"\$flyway_version\" \"\$startup_log\" && \
             rm -f .env.previous && \
             docker image prune -f --filter until=24h\
           "

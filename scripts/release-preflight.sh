@@ -31,11 +31,17 @@ case "$bump" in
     ;;
 esac
 
+if [ -z "$description" ]; then
+  echo "Release description must not be empty" >&2
+  usage >&2
+  exit 1
+fi
+
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-if [ "$(git branch --show-current)" != "develop" ]; then
-  echo "Expected branch: develop" >&2
+if [ "$(git branch --show-current)" != "main" ]; then
+  echo "Expected branch: main" >&2
   exit 1
 fi
 
@@ -48,30 +54,35 @@ fi
 if git remote get-url origin >/dev/null 2>&1; then
   git fetch --prune --tags origin \
     '+refs/heads/main:refs/remotes/origin/main' \
-    '+refs/heads/develop:refs/remotes/origin/develop' \
     >/dev/null
 fi
 
-develop_sha="$(git rev-parse origin/develop)"
 main_sha="$(git rev-parse origin/main)"
 head_sha="$(git rev-parse HEAD)"
 
-if [ "$head_sha" != "$develop_sha" ]; then
-  echo "Local develop must match origin/develop" >&2
-  echo "HEAD:           $head_sha" >&2
-  echo "origin/develop: $develop_sha" >&2
+if [ "$head_sha" != "$main_sha" ]; then
+  echo "Local main must match origin/main" >&2
+  echo "HEAD:        $head_sha" >&2
+  echo "origin/main: $main_sha" >&2
   exit 1
 fi
 
+latest_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+if [ -n "$latest_tag" ]; then
+  scope_base="$latest_tag"
+else
+  scope_base="$(git hash-object -t tree /dev/null)"
+fi
+
 echo "Release scope:"
-echo "  origin/main:    $main_sha"
-echo "  origin/develop: $develop_sha"
-git diff --stat origin/main origin/develop
+echo "  from: ${latest_tag:-initial commit}"
+echo "  to:   $main_sha"
+git diff --stat "$scope_base" HEAD
 
 echo
 echo "Flyway changes:"
 flyway_changes="$(
-  git diff --name-only --diff-filter=ACMR origin/main origin/develop -- \
+  git diff --name-only --diff-filter=ACMR "$scope_base" HEAD -- \
     'src/main/resources/db/migration/*.sql'
 )"
 if [ -n "$flyway_changes" ]; then
@@ -80,11 +91,10 @@ else
   echo "  none"
 fi
 
-echo "Running local checks..."
-./gradlew clean check jacocoTestReport bootJar
-
-latest_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
-if [ -z "$latest_tag" ]; then
+existing_target_tag="$(git tag --points-at "$head_sha" --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+if [ -n "$existing_target_tag" ]; then
+  next_version="$existing_target_tag"
+elif [ -z "$latest_tag" ]; then
   major=0
   minor=0
   patch=0
@@ -96,41 +106,29 @@ else
   patch="${rest#*.}"
 fi
 
-case "$bump" in
-  patch)
-    patch=$((patch + 1))
-    ;;
-  minor)
-    minor=$((minor + 1))
-    patch=0
-    ;;
-  major)
-    major=$((major + 1))
-    minor=0
-    patch=0
-    ;;
-esac
-
-next_version="v${major}.${minor}.${patch}"
-release_title="${description:-<short description>}"
-release_branch="release/$next_version"
-release_body="Release $next_version
-
-Source develop SHA: $develop_sha"
+if [ -z "$existing_target_tag" ]; then
+  case "$bump" in
+    patch)
+      patch=$((patch + 1))
+      ;;
+    minor)
+      minor=$((minor + 1))
+      patch=0
+      ;;
+    major)
+      major=$((major + 1))
+      minor=0
+      patch=0
+      ;;
+  esac
+  next_version="v${major}.${minor}.${patch}"
+fi
 
 echo
 echo "Release preflight OK"
 echo "Latest tag: ${latest_tag:-none}"
 echo "Next version: $next_version"
-echo "Source develop SHA: $develop_sha"
+echo "Target main SHA: $main_sha"
 echo
-echo "Prepare release snapshot:"
-echo "  git switch -c $(shell_quote "$release_branch") origin/main"
-echo "  git restore --source=$(shell_quote "$develop_sha") --staged --worktree -- ."
-echo "  git commit -m $(shell_quote "release: $release_title")"
-echo "  test \"\$(git rev-parse HEAD^{tree})\" = \"\$(git rev-parse $(shell_quote "$develop_sha^{tree}"))\""
-echo "  git push -u origin $(shell_quote "$release_branch")"
-echo "  gh pr create --base main --head $(shell_quote "$release_branch") --title $(shell_quote "release: $release_title") --body $(shell_quote "$release_body") --label $(shell_quote "release:$bump")"
-echo
-echo "Deploy after release:"
-echo "  gh workflow run deploy.yml --ref main -f environment=production -f version=$next_version"
+echo "Create tag, GitHub Release, and deploy production:"
+echo "  gh workflow run release.yml --ref main -f bump=$(shell_quote "$bump") -f description=$(shell_quote "$description")"

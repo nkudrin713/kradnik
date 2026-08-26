@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           test "$CONFIRMATION" = "RESET"
           case "$TARGET_ENVIRONMENT:$GITHUB_REF" in
-            development:refs/heads/develop) ;;
+            development:refs/heads/main) ;;
             *) echo "Clean deploy target does not match branch: $TARGET_ENVIRONMENT from $GITHUB_REF" >&2; exit 1 ;;
           esac
 

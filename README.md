@@ -97,6 +97,6 @@ docker build -t kradnik:local .
 APP_IMAGE=kradnik:local docker compose up -d
 ```
 
-Compose-профили `telegram-local` и `youtube-pot` включают необязательные сервисы. В GitHub Actions ветка `develop` разворачивается в test-окружение, а `main` используется для release/deploy production. Значения окружений остаются в GitHub Environments и server-side `.env`, а не в Kotlin-коде.
+Compose-профили `telegram-local` и `youtube-pot` включают необязательные сервисы. В GitHub Actions каждый успешный push в `main` разворачивается в test-окружение. Production-релиз помечает Git-тегом `vX.Y.Z` уже проверенный коммит `main` и разворачивает тот же image digest без повторной сборки. Значения окружений остаются в GitHub Environments и server-side `.env`, а не в Kotlin-коде.
 
 Миграции базы выполняет Flyway. Уже применённые миграции не изменяются; любое изменение схемы добавляется новым файлом.

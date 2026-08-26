@@ -1,17 +1,6 @@
 name: Release
 
 on:
-  pull_request:
-    branches:
-      - main
-    types:
-      - opened
-      - edited
-      - synchronize
-      - reopened
-      - labeled
-      - unlabeled
-      - closed
   workflow_dispatch:
     inputs:
       version:
@@ -40,170 +29,69 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  validate:
-    name: Validate main PR
-    runs-on: ubuntu-latest
-    if: "${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}"
-
-    steps:
-      - name: Validate release input
-        if: "${{ startsWith(github.event.pull_request.title, 'release: ') }}"
-        env:
-          TITLE: ${{ github.event.pull_request.title }}
-          PATCH: ${{ contains(github.event.pull_request.labels.*.name, 'release:patch') }}
-          MINOR: ${{ contains(github.event.pull_request.labels.*.name, 'release:minor') }}
-          MAJOR: ${{ contains(github.event.pull_request.labels.*.name, 'release:major') }}
-        run: |
-          set -euo pipefail
-
-          if ! printf '%s\n' "$TITLE" | grep -Eq '^release: .+'; then
-            echo "PR title must match: release: <short description>"
-            exit 1
-          fi
-
-          bump_count=0
-          if [ "$PATCH" = "true" ]; then bump_count=$((bump_count + 1)); fi
-          if [ "$MINOR" = "true" ]; then bump_count=$((bump_count + 1)); fi
-          if [ "$MAJOR" = "true" ]; then bump_count=$((bump_count + 1)); fi
-
-          if [ "$bump_count" -ne 1 ]; then
-            echo "PR must have exactly one label: release:patch, release:minor, or release:major"
-            exit 1
-          fi
-
-      - name: Checkout PR head
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-
-      - name: Validate release snapshot
-        if: "${{ startsWith(github.event.pull_request.title, 'release: ') }}"
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          set -euo pipefail
-          source_count="$(printf '%s\n' "$PR_BODY" | grep -Ec '^Source develop SHA: [0-9a-f]{40}$' || true)"
-          if [ "$source_count" -ne 1 ]; then
-            echo "PR body must contain exactly one line: Source develop SHA: <40-character SHA>" >&2
-            exit 1
-          fi
-
-          source_sha="$(printf '%s\n' "$PR_BODY" | sed -nE 's/^Source develop SHA: ([0-9a-f]{40})$/\1/p')"
-          git cat-file -e "$source_sha^{commit}"
-          source_tree="$(git rev-parse "$source_sha^{tree}")"
-          release_tree="$(git rev-parse HEAD^{tree})"
-          echo "Source develop SHA: $source_sha"
-          echo "Source tree:        $source_tree"
-          echo "Release tree:       $release_tree"
-          test "$release_tree" = "$source_tree"
-
-      - name: Set up JDK
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
-
-      - name: Run tests and build jar
-        run: ./gradlew check bootJar
-
   release:
-    name: Create release
+    name: Create release tag
     runs-on: ubuntu-latest
-    if: "${{ github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'release: ')) }}"
     permissions:
+      actions: read
       contents: write
       packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      target_sha: ${{ steps.version.outputs.target_sha }}
+      image_digest: ${{ steps.image.outputs.digest }}
 
     steps:
-      - name: Validate manual release target
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - name: Validate release target
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/main"
 
-      - name: Checkout release target
+      - name: Checkout main
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.event.pull_request.merge_commit_sha }}
+          ref: main
           fetch-depth: 0
 
-      - name: Resolve release input
-        id: release_input
+      - name: Validate release input
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_TITLE: ${{ github.event_name == 'pull_request' && github.event.pull_request.title || '' }}
-          PATCH: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release:patch') || false }}
-          MINOR: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release:minor') || false }}
-          MAJOR: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release:major') || false }}
-          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
-          INPUT_BUMP: ${{ github.event_name == 'workflow_dispatch' && inputs.bump || '' }}
-          INPUT_DESCRIPTION: ${{ github.event_name == 'workflow_dispatch' && inputs.description || '' }}
+          BUMP: ${{ inputs.bump }}
+          DESCRIPTION: ${{ inputs.description }}
         run: |
           set -euo pipefail
-
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            bump="$INPUT_BUMP"
-            version="$INPUT_VERSION"
-            description="$INPUT_DESCRIPTION"
-          else
-            if ! printf '%s\n' "$PR_TITLE" | grep -Eq '^release: .+'; then
-              echo "PR title must match: release: <short description>"
-              exit 1
-            fi
-
-            bump_count=0
-            bump=""
-            if [ "$PATCH" = "true" ]; then bump_count=$((bump_count + 1)); bump="patch"; fi
-            if [ "$MINOR" = "true" ]; then bump_count=$((bump_count + 1)); bump="minor"; fi
-            if [ "$MAJOR" = "true" ]; then bump_count=$((bump_count + 1)); bump="major"; fi
-
-            if [ "$bump_count" -ne 1 ]; then
-              echo "PR must have exactly one label: release:patch, release:minor, or release:major"
-              exit 1
-            fi
-
-            version=""
-            description="${PR_TITLE#release: }"
-          fi
-
-          if [ -z "$description" ]; then
-            echo "Release description must not be empty"
-            exit 1
-          fi
-
-          case "$bump" in
-            patch|minor|major)
-              ;;
-            *)
-              echo "Version bump must be one of: patch, minor, major"
-              exit 1
-              ;;
+          test -n "$DESCRIPTION"
+          case "$BUMP" in
+            patch|minor|major) ;;
+            *) echo "Version bump must be one of: patch, minor, major" >&2; exit 1 ;;
           esac
-
-          {
-            printf 'bump=%s\n' "$bump"
-            printf 'version=%s\n' "$version"
-            printf 'description=%s\n' "$description"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Calculate version
         id: version
         env:
-          BUMP: ${{ steps.release_input.outputs.bump }}
-          VERSION_INPUT: ${{ steps.release_input.outputs.version }}
+          BUMP: ${{ inputs.bump }}
+          VERSION_INPUT: ${{ inputs.version }}
         run: |
           set -euo pipefail
+          git fetch --force --tags origin main:refs/remotes/origin/main
 
+          target_sha="$(git rev-parse HEAD)"
+          remote_main_sha="$(git rev-parse origin/main)"
+          if [ "$target_sha" != "$remote_main_sha" ]; then
+            echo "Release target is not the latest main commit" >&2
+            echo "HEAD:        $target_sha" >&2
+            echo "origin/main: $remote_main_sha" >&2
+            exit 1
+          fi
+
+          existing_target_tag="$(git tag --points-at "$target_sha" --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
           if [ -n "$VERSION_INPUT" ]; then
             if ! printf '%s\n' "$VERSION_INPUT" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-              echo "Version must match: v<major>.<minor>.<patch>"
+              echo "Version must match: v<major>.<minor>.<patch>" >&2
               exit 1
             fi
             next_version="$VERSION_INPUT"
+          elif [ -n "$existing_target_tag" ]; then
+            next_version="$existing_target_tag"
           else
             latest_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
             if [ -z "$latest_tag" ]; then
@@ -232,17 +120,15 @@ jobs:
                 patch=0
                 ;;
             esac
-
             next_version="v${major}.${minor}.${patch}"
           fi
 
-          target_sha="$(git rev-parse HEAD)"
           tag_exists=false
           if git rev-parse -q --verify "refs/tags/$next_version" >/dev/null; then
             tag_exists=true
             tag_sha="$(git rev-list -n 1 "$next_version")"
             if [ "$tag_sha" != "$target_sha" ]; then
-              echo "Tag $next_version already points to $tag_sha, not $target_sha"
+              echo "Tag $next_version already points to $tag_sha, not $target_sha" >&2
               exit 1
             fi
           fi
@@ -253,23 +139,26 @@ jobs:
             printf 'tag_exists=%s\n' "$tag_exists"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Set up JDK
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
-
-      - name: Run tests and build jar
-        run: ./gradlew check bootJar
-
-      - name: Prepare Docker context
+      - name: Verify successful test deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.version.outputs.target_sha }}
         run: |
           set -euo pipefail
-          mkdir -p .deploy
-          cp build/libs/app.jar .deploy/app.jar
+          run_count="$(
+            gh api --method GET \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/deploy.yml/runs" \
+              -f branch=main \
+              -f event=push \
+              -f status=success \
+              -f head_sha="$TARGET_SHA" \
+              -f per_page=1 \
+              --jq '.total_count'
+          )"
+          if [ "$run_count" -lt 1 ]; then
+            echo "No successful main test deploy found for $TARGET_SHA" >&2
+            exit 1
+          fi
 
       - name: Set image name
         run: |
@@ -286,37 +175,44 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
-      - name: Build and push image
-        id: build
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          push: true
-          cache-from: type=gha
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.target_sha }}
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-
-      - name: Verify image
+      - name: Promote tested image
+        id: image
         env:
-          IMAGE: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          TARGET_SHA: ${{ steps.version.outputs.target_sha }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4 5; do
-            if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
-              echo "Image is available: $IMAGE"
-              exit 0
-            fi
-            sleep $((attempt * 3))
-          done
+          source_image="$IMAGE_NAME:$TARGET_SHA"
+          release_image="$IMAGE_NAME:$VERSION"
+          source_digest="sha256:$(docker buildx imagetools inspect "$source_image" --raw | sha256sum | cut -d' ' -f1)"
+          if ! printf '%s\n' "$source_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "Could not resolve tested image digest for $source_image" >&2
+            exit 1
+          fi
 
-          echo "Image is not available after push: $IMAGE"
-          exit 1
+          if docker buildx imagetools inspect "$release_image" >/dev/null 2>&1; then
+            release_digest="sha256:$(docker buildx imagetools inspect "$release_image" --raw | sha256sum | cut -d' ' -f1)"
+          else
+            docker buildx imagetools create \
+              --prefer-index=false \
+              --tag "$release_image" \
+              "$IMAGE_NAME@$source_digest"
+            release_digest="sha256:$(docker buildx imagetools inspect "$release_image" --raw | sha256sum | cut -d' ' -f1)"
+          fi
+
+          if [ "$release_digest" != "$source_digest" ]; then
+            echo "$release_image does not match tested digest $source_digest" >&2
+            echo "Release digest: $release_digest" >&2
+            exit 1
+          fi
+
+          echo "digest=$release_digest" >> "$GITHUB_OUTPUT"
+          echo "Promoted $source_image to $release_image at $release_digest"
 
       - name: Create or verify tag
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          DESCRIPTION: ${{ steps.release_input.outputs.description }}
+          DESCRIPTION: ${{ inputs.description }}
           TAG_EXISTS: ${{ steps.version.outputs.tag_exists }}
         run: |
           set -euo pipefail
@@ -328,19 +224,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$VERSION" -m "$VERSION $DESCRIPTION"
-          git push origin "$VERSION"
+          git push origin "refs/tags/$VERSION"
 
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
-          DESCRIPTION: ${{ steps.release_input.outputs.description }}
+          DESCRIPTION: ${{ inputs.description }}
           TARGET_SHA: ${{ steps.version.outputs.target_sha }}
-          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         run: |
           set -euo pipefail
-
-          test -n "$IMAGE_DIGEST"
           notes="$(printf 'Image: ghcr.io/%s:%s\nDigest: %s\nCommit: %s\n' "${GITHUB_REPOSITORY,,}" "$VERSION" "$IMAGE_DIGEST" "$TARGET_SHA")"
           if gh release view "$VERSION" >/dev/null 2>&1; then
             gh release edit "$VERSION" \
@@ -353,3 +247,15 @@ jobs:
               --notes "$notes" \
               --latest
           fi
+
+  deploy-production:
+    name: Deploy release to production
+    needs: release
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      version: ${{ needs.release.outputs.version }}
+    secrets: inherit

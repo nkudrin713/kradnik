@@ -10,14 +10,18 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.UUID
 
-/** Persists queue transitions and requires lease ownership for mutations of claimed jobs. */
+/**
+ * Owns transactional [DownloadJob] creation, claiming, lease renewal, retry, and completion transitions through
+ * [DownloadJobRepository]. Mutations of claimed jobs require the matching [ClaimedDownloadJob.leaseToken], preventing
+ * a stale [DownloadQueueWorker][com.nkudrin713.kradnik.download.processing.DownloadQueueWorker] from overwriting a new attempt.
+ */
 @Service
 class DownloadJobService(
 	private val downloadJobRepository: DownloadJobRepository,
 ) {
 	private val logger = LoggerFactory.getLogger(javaClass)
 
-	/** Creates at most one job for a Telegram update when an update ID is present. */
+	/** Locks a Telegram update identity and persists at most one [DownloadJob] for a non-null update ID. */
 	@Transactional
 	fun createJob(command: CreateDownloadJobCommand): Boolean {
 		command.telegramUpdateId?.let { telegramUpdateId ->
@@ -48,7 +52,7 @@ class DownloadJobService(
 		return true
 	}
 
-	/** Atomically claims the oldest eligible job and associates it with [leaseToken]. */
+	/** Atomically claims the oldest eligible job and returns its snapshot paired with [leaseToken]. */
 	@Transactional
 	fun claimNextQueuedJob(
 		leaseToken: UUID,
@@ -71,7 +75,7 @@ class DownloadJobService(
 		return downloadJobRepository.renewLease(jobId, leaseToken, leaseDurationMs) == 1
 	}
 
-	/** Recovers expired leases by requeueing retryable jobs and failing exhausted ones. */
+	/** Requeues expired in-progress jobs below the attempt limit and marks exhausted [DownloadJob] rows as failed. */
 	@Transactional
 	fun recoverExpiredLeases() {
 		val requeued = downloadJobRepository.requeueStaleInProgressJobs(
@@ -164,7 +168,7 @@ class DownloadJobService(
 		return resolveFailure(attempt, errorMessage, retryAt)
 	}
 
-	/** Requeues without consuming an attempt because no source request was made. */
+	/** Releases the owned lease and requeues at [retryAt] without consuming an attempt because no source request was made. */
 	@Transactional
 	fun deferBeforeAttempt(
 		attempt: ClaimedDownloadJob,
@@ -266,11 +270,18 @@ class DownloadJobService(
 	}
 }
 
-/** Cancels the current attempt when its database lease no longer belongs to this worker. */
+/**
+ * Signals that a claimed [DownloadJob] no longer belongs to the current worker.
+ * As a [CancellationException], it stops [DownloadJobProcessor][com.nkudrin713.kradnik.download.processing.DownloadJobProcessor]
+ * without persisting a stale retry or failure transition.
+ */
 class DownloadJobLeaseLostException(jobId: Long) :
 	CancellationException("Download job lease lost: $jobId")
 
-/** A job snapshot paired with the token required to mutate its current lease. */
+/**
+ * Pairs a [DownloadJob] snapshot with the token required by [DownloadJobService] for lease-owned mutations.
+ * The pair is created when the queue claims a job and remains scoped to that processing attempt.
+ */
 data class ClaimedDownloadJob(
 	val job: DownloadJob,
 	val leaseToken: UUID,

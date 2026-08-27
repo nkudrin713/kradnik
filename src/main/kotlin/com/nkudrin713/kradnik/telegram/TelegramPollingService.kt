@@ -9,8 +9,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
 /**
- * Confirms updates only through the last successful handler call.
- * A failure leaves the current and later updates available for Telegram redelivery.
+ * Registers the long-polling listener and routes updates sequentially through [TelegramUpdateHandler].
+ * It confirms only through the last successful handler call; a failure stops the batch and leaves the current and
+ * later updates available for Telegram redelivery. [stop] removes the listener during application shutdown.
  */
 @Service
 class TelegramPollingService(

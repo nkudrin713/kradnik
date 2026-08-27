@@ -90,6 +90,28 @@ class DownloadChoicePlannerTest {
     }
 
     @Test
+    fun omits1080WhenItDuplicatesOriginal() = runTest {
+        val video = resolved(OutputType.VIDEO)
+        every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
+        coEvery { downloadEngine.prepareCatalog(video) } returns prepared(metadata(
+            formats = listOf(
+                videoFormat("v1080", 1080, 400_000_000),
+                videoFormat("v720", 720, 250_000_000),
+                audioFormat("a1", 20_000_000),
+            ),
+        ))
+
+        val actual = planner.plan(URL)
+
+        assertEquals(
+            listOf("video_original", "video_720", "audio", "cover"),
+            actual.options.map { it.key },
+        )
+        assertEquals("Оригинал", actual.options.first().label)
+        assertEquals("v1080+a1", actual.options.first().spec.formatSelector)
+    }
+
+    @Test
     fun usesApproximateBitrateSizeWhenFormatSizeIsMissing() = runTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))

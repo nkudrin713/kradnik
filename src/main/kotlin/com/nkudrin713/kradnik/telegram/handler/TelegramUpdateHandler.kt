@@ -9,7 +9,12 @@ import com.pengrad.telegrambot.model.Update
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
-/** Routes supported Telegram update shapes into commands, link preparation, or choice handling. */
+/**
+ * Routes updates received by [TelegramPollingService][com.nkudrin713.kradnik.telegram.TelegramPollingService] to
+ * command responses, [DownloadChoiceCoordinator] for links, or
+ * [DownloadChoiceHandler] for callbacks. Pinned-service messages are removed, and unsupported text receives the short
+ * link prompt without entering download preparation.
+ */
 @Service
 class TelegramUpdateHandler(
     private val downloadChoiceCoordinator: DownloadChoiceCoordinator,

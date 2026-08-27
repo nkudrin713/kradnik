@@ -187,6 +187,34 @@ class DownloadPreflightServiceTest {
     }
 
     @Test
+    fun prefersRequestedFormatSumToTopLevelApproximation() {
+        val actual = service.check(
+            videoRequest(),
+            metadata(
+                filesizeApprox = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
+                requestedFormats = listOf(
+                    format(
+                        formatId = "video",
+                        ext = "mp4",
+                        height = 1080,
+                        filesize = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
+                        filesizeApprox = null,
+                    ),
+                    format(
+                        formatId = "audio",
+                        ext = "m4a",
+                        height = null,
+                        filesize = 1,
+                        filesizeApprox = null,
+                    ),
+                ),
+            ),
+        )
+
+        assertIs<DownloadPreflightDecision.Rejected>(actual)
+    }
+
+    @Test
     fun allowsEmptyRequestedFormats() {
         val actual = service.check(
             videoRequest(),

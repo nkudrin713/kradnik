@@ -16,7 +16,12 @@ import java.util.Locale
 import kotlin.time.Duration
 import kotlin.time.toKotlinDuration
 
-/** Applies Telegram video policy, transcodes when needed, and validates the resulting file again. */
+/**
+ * Probes downloaded media with [VideoMetadataProbe] and applies [TelegramVideoPolicy] before upload.
+ * Incompatible video is transcoded through [ProcessRunner] after [WorkDirCapacityGuard] reserves disk space, then
+ * probed and evaluated again; only a second accepted result is returned to
+ * [DownloadJobProcessor][com.nkudrin713.kradnik.download.processing.DownloadJobProcessor].
+ */
 @Service
 class TelegramVideoPreparer(
     private val processRunner: ProcessRunner,

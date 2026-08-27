@@ -12,8 +12,9 @@ import java.net.URI
 import java.nio.file.Path
 
 /**
- * Extracts metadata and an optional direct video URL from the public Instagram embed payload.
- * Direct media is accepted only from HTTPS Instagram CDN origins.
+ * Uses [InstagramHttpClient] to extract metadata and an optional direct video URL from a public embed payload.
+ * Direct media is accepted only from HTTPS Instagram CDN origins and is returned with the metadata as
+ * [InstagramPreparedDownload] so [InstagramDownloader] can choose direct download or yt-dlp fallback.
  */
 @Service
 class InstagramEmbedDownloader(

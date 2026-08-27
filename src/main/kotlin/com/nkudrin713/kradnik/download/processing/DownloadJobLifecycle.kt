@@ -12,7 +12,11 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
-/** Maps processing outcomes to persisted transitions and best-effort Telegram status updates. */
+/**
+ * Maps [DownloadJobProcessor] outcomes to lease-checked [DownloadJobService] transitions and user-visible statuses.
+ * Database state is authoritative; [TelegramSender] edits and deletions are best effort after each successful transition.
+ * Retry scheduling combines bounded exponential backoff with any later source-provided deadline.
+ */
 @Component
 class DownloadJobLifecycle(
     private val downloadJobService: DownloadJobService,

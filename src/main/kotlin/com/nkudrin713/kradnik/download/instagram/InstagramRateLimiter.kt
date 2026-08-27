@@ -7,8 +7,9 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * A process-local limiter with a minimum request interval and adaptive cooldown after throttling.
- * Its state is not shared between application instances.
+ * Provides [InstagramDownloader] with a process-local minimum request interval and adaptive throttle cooldown.
+ * Concurrent callers share synchronized state, but separate application instances do not share a quota.
+ * Successful requests clear only older cooldowns, preventing a late success from erasing newer throttling state.
  */
 @Component
 class InstagramRateLimiter(
@@ -39,7 +40,7 @@ class InstagramRateLimiter(
         require(cooldownMultiplier >= 1) { "Instagram cooldown multiplier must be at least one" }
     }
 
-    /** Reserves the next request slot or reports when another attempt may start. */
+    /** Atomically reserves the next request slot or returns a deferred [InstagramRateLimitDecision] with its retry time. */
     fun acquire(): InstagramRateLimitDecision = synchronized(lock) {
         val now = clock.instant()
         val allowedAt = maxOf(nextAllowedAt, cooldownUntil ?: Instant.EPOCH)
@@ -51,7 +52,7 @@ class InstagramRateLimiter(
         InstagramRateLimitDecision.Granted(now)
     }
 
-    /** Clears cooldown only when no newer request has already observed throttling. */
+    /** Clears accumulated cooldown only when no request acquired after [acquiredAt] has observed throttling. */
     fun recordSuccess(acquiredAt: Instant) = synchronized(lock) {
         if (lastThrottleAt?.isBefore(acquiredAt) == false) {
             return@synchronized
@@ -61,7 +62,7 @@ class InstagramRateLimiter(
         consecutiveThrottles = 0
     }
 
-    /** Extends the cooldown using both local backoff and the remote Retry-After value. */
+    /** Records throttling and returns the later of the exponential local cooldown and remote Retry-After deadline. */
     fun recordThrottle(
         acquiredAt: Instant,
         retryAfter: Duration?,

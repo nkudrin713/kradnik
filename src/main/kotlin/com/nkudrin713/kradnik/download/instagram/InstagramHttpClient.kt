@@ -19,7 +19,10 @@ import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
-/** The HTTP boundary for public Instagram embed metadata and direct media. */
+/**
+ * Defines the HTTP operations used by [InstagramEmbedDownloader] for public embed metadata and direct media.
+ * Implementations return typed failures and a [DownloadedFile] without exposing transport details upstream.
+ */
 interface InstagramHttpClient {
     suspend fun getText(uri: URI): String
 
@@ -32,8 +35,9 @@ interface InstagramHttpClient {
 }
 
 /**
- * Runs JDK HTTP calls on the IO dispatcher and validates media while streaming it.
- * Local Bot API mode stops the stream as soon as its upload limit is exceeded.
+ * Implements [InstagramHttpClient] with JDK HTTP calls on the IO dispatcher.
+ * It validates response status and video content type, parses Retry-After for [InstagramRateLimiter], and removes
+ * partial files on failure; local Bot API mode stops the stream as soon as [TelegramUploadLimits] is exceeded.
  */
 @Component
 class JdkInstagramHttpClient(

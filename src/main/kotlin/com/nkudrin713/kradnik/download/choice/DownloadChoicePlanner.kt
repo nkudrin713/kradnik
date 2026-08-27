@@ -14,7 +14,11 @@ import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.RoundingMode
 
-/** Builds user-visible options from a single metadata catalog and current upload constraints. */
+/**
+ * Resolves a URL with [PlatformResolver], obtains one catalog through [DownloadEngine], and builds a stable menu snapshot.
+ * Video formats are ranked for Telegram compatibility, duplicate 1080p original quality is omitted, and
+ * [AudioUploadPlanner] plus [TelegramUploadLimits] determine which options can be offered.
+ */
 @Component
 class DownloadChoicePlanner(
     private val platformResolver: PlatformResolver,
@@ -78,12 +82,13 @@ class DownloadChoicePlanner(
         }
 
         return buildList {
-            selectVideo(formats, metadata, targetHeight = null)?.let { selected ->
-                add(videoOption(spec, VIDEO_ORIGINAL_KEY, "Оригинал", selected))
-            }
+            val original = selectVideo(formats, metadata, targetHeight = null)
+            original?.let { add(videoOption(spec, VIDEO_ORIGINAL_KEY, "Оригинал", it)) }
             TARGET_HEIGHTS.forEach { height ->
                 selectVideo(formats, metadata, targetHeight = height)?.let { selected ->
-                    add(videoOption(spec, "video_$height", "${height}p", selected))
+                    if (height != 1080 || selected != original) {
+                        add(videoOption(spec, "video_$height", "${height}p", selected))
+                    }
                 }
             }
         }

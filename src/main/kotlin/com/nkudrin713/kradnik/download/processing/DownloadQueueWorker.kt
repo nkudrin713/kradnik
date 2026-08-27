@@ -15,7 +15,11 @@ import org.springframework.stereotype.Component
 import java.util.UUID
 import kotlin.math.max
 
-/** Claims one job per tick and renews its lease while processing remains active. */
+/**
+ * Uses [DownloadJobService] to recover expired leases and atomically claim at most one queued job per scheduled tick.
+ * A heartbeat renews the claim while [DownloadJobProcessor] runs; losing ownership cancels the current attempt so
+ * another worker can safely recover it later.
+ */
 @Component
 @ConditionalOnProperty(
     name = ["download.worker.enabled"],

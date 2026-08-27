@@ -30,7 +30,11 @@ import java.nio.file.Path
 import java.util.Locale
 import kotlin.io.path.createDirectories
 
-/** Runs one claimed job from cache lookup through download, preparation, and Telegram delivery. */
+/**
+ * Executes one lease-owned [ClaimedDownloadJob] from Telegram cache lookup through source preparation and delivery.
+ * [DownloadEngine] binds metadata to the download path, [DownloadPreflightService] rejects known oversize media,
+ * [TelegramVideoPreparer] normalizes video, and [DownloadJobLifecycle] records every terminal or retry outcome.
+ */
 @Component
 class DownloadJobProcessor(
     private val downloadJobService: DownloadJobService,
@@ -49,7 +53,11 @@ class DownloadJobProcessor(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    /** Always removes the job workspace, including after cancellation or lease loss. */
+    /**
+     * Processes [attempt] only while its lease remains valid and always removes the job workspace in `finally`.
+     * Cancellation and [DownloadJobLeaseLostException][com.nkudrin713.kradnik.download.service.DownloadJobLeaseLostException]
+     * propagate without being converted into a retry, while known source and size failures receive explicit outcomes.
+     */
     suspend fun process(attempt: ClaimedDownloadJob) {
         val job = attempt.job
         val jobId = requireNotNull(job.id)

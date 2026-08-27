@@ -7,7 +7,11 @@ import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
-/** Stores choice menus and serializes selection with a database row lock. */
+/**
+ * Stores [DownloadChoiceSession] snapshots and serializes callback selection with a database row lock.
+ * Ownership, menu identity, option availability, and single-selection rules are checked before
+ * [DownloadChoiceHandler][com.nkudrin713.kradnik.telegram.handler.DownloadChoiceHandler] starts a job.
+ */
 @Service
 class DownloadChoiceSessionService(
     private val repository: DownloadChoiceSessionRepository,
@@ -36,8 +40,8 @@ class DownloadChoiceSessionService(
     }
 
     /**
-     * Marks a valid option as selected before job creation.
-     * Call [release] if downstream job creation fails.
+     * Locks the session and marks a valid, available option as selected before job creation.
+     * The consumed-session cleanup deadline starts at selection; call [release] if downstream job creation fails.
      */
     @Transactional
     fun select(command: SelectDownloadChoiceCommand): DownloadChoiceSelection {
@@ -71,7 +75,11 @@ class DownloadChoiceSessionService(
         )
     }
 
-    /** Makes a previously selected option available again after a failed enqueue. */
+    /**
+     * Makes a selected option available after
+     * [TelegramDownloadStarter][com.nkudrin713.kradnik.telegram.TelegramDownloadStarter] fails to enqueue it.
+     * Clearing [DownloadChoiceSession.selectedAt] also keeps the row outside consumed-session cleanup.
+     */
     @Transactional
     fun release(token: UUID) {
         repository.findForUpdate(token)?.selectedAt = null

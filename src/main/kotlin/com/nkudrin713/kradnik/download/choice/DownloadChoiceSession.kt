@@ -8,7 +8,12 @@ import jakarta.persistence.Table
 import java.time.Instant
 import java.util.UUID
 
-/** A menu snapshot retained until selection and used to validate and serialize a Telegram callback. */
+/**
+ * Persists the exact options rendered by
+ * [DownloadChoiceCoordinator][com.nkudrin713.kradnik.telegram.DownloadChoiceCoordinator].
+ * [DownloadChoiceSessionService] locks the row to validate callback ownership and allow only one active selection;
+ * unselected menus remain usable, while consumed rows become eligible for cleanup after [cleanupAfter].
+ */
 @Entity
 @Table(name = "download_choice_sessions")
 class DownloadChoiceSession(

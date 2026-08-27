@@ -22,8 +22,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Enforces time, output, and optional workspace limits for external processes.
- * The complete process tree is terminated on timeout, cancellation, or limit breach.
+ * Executes [Command] directly and returns bounded stdout, stderr, exit, timeout, and workspace-limit state in
+ * [ProcessExecutionResult]. The complete process tree is terminated on timeout, coroutine cancellation, or limit
+ * breach, and output streams are drained without allowing diagnostics to grow without bound.
  */
 @Service
 class DefaultProcessRunner : ProcessRunner {

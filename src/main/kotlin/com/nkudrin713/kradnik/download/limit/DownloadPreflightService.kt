@@ -7,13 +7,18 @@ import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.springframework.stereotype.Service
 import java.util.Locale
 
-/** Rejects known oversize downloads early and adjusts audio quality to fit Telegram limits. */
+/**
+ * Evaluates prepared metadata before
+ * [DownloadJobProcessor][com.nkudrin713.kradnik.download.processing.DownloadJobProcessor] starts source transfer.
+ * It applies [AudioUploadPlanner] output, rejects known oversize selections, and leaves unknown sizes for the final
+ * downloaded-file check; cloud-mode vertical video may continue to [TelegramVideoPreparer][com.nkudrin713.kradnik.download.video.TelegramVideoPreparer].
+ */
 @Service
 class DownloadPreflightService(
     private val audioUploadPlanner: AudioUploadPlanner,
     private val uploadLimits: TelegramUploadLimits,
 ) {
-    /** Unknown source size is allowed because the final file is checked again before upload. */
+    /** Returns an adjusted [DownloadPreflightDecision]; unknown source size remains allowed for the final file-size check. */
     fun check(
         spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
@@ -50,8 +55,8 @@ class DownloadPreflightService(
 
     private fun selectedSize(metadata: YtDlpMetadataDto): Long? {
         return metadata.filesize
-            ?: metadata.filesizeApprox
             ?: metadata.requestedFormats?.totalSize()
+            ?: metadata.filesizeApprox
     }
 
     private fun List<YtDlpFormatDto>.totalSize(): Long? {

@@ -12,8 +12,10 @@ import java.nio.file.Path
 import java.time.Instant
 
 /**
- * Applies process-local throttling before Instagram embed preparation.
- * Direct embed media is used for video; yt-dlp handles audio and missing direct media.
+ * Coordinates [InstagramRateLimiter] and [InstagramEmbedDownloader] behind the platform-neutral
+ * [DownloadPreparation] contract used by [DownloadEngine][com.nkudrin713.kradnik.download.DownloadEngine].
+ * Direct embed media is used for video; [YtDlpService] handles audio and video without a direct media URL.
+ * HTTP throttling becomes a retryable result, while invalid or unavailable content is classified separately.
  */
 @Component
 class InstagramDownloader(

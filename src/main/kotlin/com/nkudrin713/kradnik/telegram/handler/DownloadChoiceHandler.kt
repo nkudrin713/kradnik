@@ -10,7 +10,11 @@ import com.pengrad.telegrambot.model.CallbackQuery
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
-/** Consumes a persisted menu selection and releases it if job creation fails. */
+/**
+ * Parses a Telegram callback and asks [DownloadChoiceSessionService] to validate ownership and atomically select it.
+ * A ready choice is passed to [TelegramDownloadStarter]; enqueue failure releases the session, while success answers
+ * the callback and removes the menu through [TelegramSender].
+ */
 @Component
 class DownloadChoiceHandler(
     private val sessionService: DownloadChoiceSessionService,

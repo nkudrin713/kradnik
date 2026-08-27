@@ -17,7 +17,11 @@ import org.hibernate.annotations.UpdateTimestamp
 import java.time.Instant
 import java.util.UUID
 
-/** A persisted request snapshot whose mutable fields track queue and delivery progress. */
+/**
+ * Persists the resolved download request and its mutable queue, lease, retry, and Telegram delivery state.
+ * [DownloadJobService][com.nkudrin713.kradnik.download.service.DownloadJobService] owns state transitions, while
+ * [DownloadJobProcessor][com.nkudrin713.kradnik.download.processing.DownloadJobProcessor] executes the snapshot.
+ */
 @Entity
 @Table(name = "download_jobs")
 class DownloadJob(

@@ -6,14 +6,22 @@ import org.springframework.stereotype.Component
 import java.nio.file.Files
 import java.nio.file.Path
 
-/** Prevents a download or transcode from starting without its worst-case disk allowance. */
+/**
+ * Guards the shared work directory before
+ * [DownloadJobProcessor][com.nkudrin713.kradnik.download.processing.DownloadJobProcessor] downloads or
+ * [TelegramVideoPreparer][com.nkudrin713.kradnik.download.video.TelegramVideoPreparer] transcodes a file.
+ */
 interface WorkDirCapacityGuard {
     fun ensureDownloadCapacity(workDir: Path)
 
     fun ensureTranscodeCapacity(workDir: Path)
 }
 
-/** Enforces operation capacity plus a reserved amount on the actual work-directory file store. */
+/**
+ * Implements [WorkDirCapacityGuard] using the usable space of the actual file store.
+ * Download checks reserve room for source and final files; transcode checks reserve one upload-sized output plus
+ * the configured safety margin.
+ */
 @Component
 class DefaultWorkDirCapacityGuard(
     private val uploadLimits: TelegramUploadLimits,

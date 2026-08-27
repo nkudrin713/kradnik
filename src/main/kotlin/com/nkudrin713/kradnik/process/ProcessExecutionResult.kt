@@ -1,6 +1,10 @@
 package com.nkudrin713.kradnik.process
 
-/** Captured process output; truncation flags indicate that an earlier prefix was discarded. */
+/**
+ * Captures the bounded outcome returned by [ProcessRunner] for one [Command].
+ * Truncation flags mean an earlier output prefix was discarded; [diagnosticOutput] preserves that fact while placing
+ * stderr before stdout for failure reporting.
+ */
 data class ProcessExecutionResult(
     val timedOut: Boolean,
     val exitCode: Int?,

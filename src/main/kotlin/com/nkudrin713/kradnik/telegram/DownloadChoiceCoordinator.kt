@@ -12,7 +12,11 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.util.concurrent.Executors
 
-/** Prepares choice menus off the Telegram polling thread and persists their callback state. */
+/**
+ * Moves catalog extraction off [TelegramPollingService]'s listener thread after publishing an analyzing status.
+ * [DownloadChoicePlanner] builds the menu, [DownloadChoiceSessionService] persists the rendered snapshot, and
+ * [TelegramSender] replaces the status message with callbacks tied to that session; failures replace it with safe copy.
+ */
 @Component
 class DownloadChoiceCoordinator(
     private val planner: DownloadChoicePlanner,

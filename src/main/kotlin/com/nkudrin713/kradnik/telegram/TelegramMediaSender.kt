@@ -15,8 +15,9 @@ import java.nio.file.Path
 import java.util.Locale
 
 /**
- * Sends media through multipart upload in cloud mode or shared-volume file URIs in local API mode.
- * Every successful call returns the reusable Telegram file ID.
+ * Sends fresh and cached media for [TelegramFileSender][com.nkudrin713.kradnik.download.telegram.TelegramFileSender]
+ * through [TelegramApiClient]. Fresh files use multipart upload in cloud mode or shared-volume file URIs in local API
+ * mode; video dimensions come from [VideoMetadataProbe]. Every successful call returns the reusable Telegram file ID.
  */
 @Component
 class TelegramMediaSender(

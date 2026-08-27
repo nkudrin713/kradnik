@@ -13,7 +13,11 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 
-/** Downloads supported image types with both header and streaming size enforcement. */
+/**
+ * Downloads the thumbnail selected by [DownloadEngine][com.nkudrin713.kradnik.download.DownloadEngine].
+ * It accepts known image content types, enforces [TelegramUploadLimits] against both headers and streamed bytes,
+ * and removes a partial output before propagating a failure.
+ */
 @Component
 class CoverDownloader(
     uploadLimits: TelegramUploadLimits,

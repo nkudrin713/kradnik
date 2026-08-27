@@ -21,12 +21,32 @@
 - Если есть конфликт с глобальной персонализацией Codex, приоритет у этого `AGENTS.md`.
 - Общая коммуникация, экономия токенов и git safety вынесены в персонализацию Codex и не дублируются здесь.
 
-## Branches and Releases
+## Repository Language
 
-- `main` — единственная долгоживущая ветка и источник test/production-релизов.
-- Рабочие ветки создаются от `main` и вливаются обратно через squash merge. Прямой push в `main` запрещён.
-- Каждый успешный push в `main` автоматически собирается и разворачивается в test-окружение.
-- Production-релиз запускается вручную только для уже проверенного коммита `main`. Release workflow создаёт Git-тег `vX.Y.Z`, помечает этой версией уже проверенный image digest и разворачивает его в production.
+- Use English for repository artifacts and GitHub metadata: code identifiers, comments, KDoc, documentation, commit messages, branch names, PR titles and descriptions, secret and variable names, and workflow labels.
+- User-facing Telegram text follows the product language requirements and is the exception to the repository-language rule.
+
+## Branches, Features and Releases
+
+- `main` — единственная долгоживущая ветка и источник test/production-деплоев. Прямой push в `main` запрещён.
+- Каждая фича, исправление или служебное изменение выполняется в отдельной короткоживущей ветке, созданной от актуального `main`.
+- Work branch names use `<type>/<short-kebab-case-description>`; both parts are in English.
+- Choose the type by the purpose of the change, not by the files it touches:
+  - `feature/` — new user-facing or system behavior;
+  - `fix/` — a defect fix, including an urgent production fix;
+  - `refactor/` — structural change without behavior changes;
+  - `docs/` — documentation-only changes;
+  - `test/` — test-only changes or test infrastructure;
+  - `ci/` — CI/CD, build, and deployment automation;
+  - `chore/` — repository maintenance that does not fit a more specific type;
+  - `release/` — exceptional version preparation that requires repository changes; the normal production release from `main` does not create a branch.
+- Do not use a separate `hotfix/` type: urgency does not change the nature of a fix, so use `fix/`.
+- Одна рабочая ветка и один PR должны содержать одну логическую задачу. Не добавляй в них несвязанные изменения.
+- Каждое завершённое логическое изменение фиксируется отдельным коммитом рабочей ветки.
+- Рабочая ветка вливается PR-ом в `main` только после успешного обязательного CI и только через squash merge. В результате в `main` появляется один коммит на один PR.
+- После merge рабочая ветка удаляется и не переиспользуется; следующая задача начинается в новой ветке от обновлённого `main`.
+- Merge в `main` автоматически собирает и разворачивает этот коммит в test-окружение. Он не создаёт production-релиз.
+- Production-релиз запускается вручную только для последнего коммита `main`, уже успешно развёрнутого в test. Release workflow создаёт Git-тег `vX.Y.Z`, помечает этой версией проверенный image digest и разворачивает его в production.
 - Релизные теги неизменяемы: не перемещай и не переиспользуй существующую версию.
 - `develop` — архивная ветка старой модели; новая разработка и релизы через неё запрещены.
 
@@ -35,7 +55,7 @@
 Для деплоя, CI и сервера:
 
 1. Проверить ветку и `git status --short`.
-2. Проверить целевое окружение: `test/main` или `production/vX.Y.Z`.
+2. Проверить целевое окружение: `development/main` (test) или `production/vX.Y.Z`.
 3. Сначала смотреть реальные логи и факты, потом менять код или конфиги.
 4. После деплоя проверить commit/image/container/logs.
 5. Если деплой касается Telegram-бота, учитывать два окружения и раздельные базы.

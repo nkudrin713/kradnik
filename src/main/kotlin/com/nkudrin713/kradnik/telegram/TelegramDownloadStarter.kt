@@ -8,7 +8,11 @@ import com.nkudrin713.kradnik.download.video.TelegramVideoPolicy
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
-/** Creates a queued job and removes its status message when enqueueing fails or is deduplicated. */
+/**
+ * Publishes a queued status, versions video cache identity with [TelegramVideoPolicy], and delegates persistence to
+ * [DownloadJobService]. If creation fails or the Telegram update already owns a job, the new status message is removed
+ * so [DownloadChoiceHandler][com.nkudrin713.kradnik.telegram.handler.DownloadChoiceHandler] leaves no orphaned UI.
+ */
 @Component
 class TelegramDownloadStarter(
     private val downloadJobService: DownloadJobService,

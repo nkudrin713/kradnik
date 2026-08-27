@@ -45,7 +45,11 @@ private data class YtDlpCommand(
     override val executable: String = YT_DLP,
 ) : Command
 
-/** Builds yt-dlp invocations, parses metadata JSON, and verifies the reported output file. */
+/**
+ * Implements the yt-dlp boundary used by [DownloadEngine][com.nkudrin713.kradnik.download.DownloadEngine].
+ * It builds shell-free [Command] arguments for [ProcessRunner], parses metadata JSON, applies configured time and local
+ * workspace limits, classifies authentication failures, and accepts only the final regular file reported by yt-dlp.
+ */
 @Service
 class YtDlpService(
     private val processRunner: ProcessRunner,
@@ -66,12 +70,12 @@ class YtDlpService(
         require(downloadTimeout.isPositive()) { "download.yt-dlp.download-timeout must be positive" }
     }
 
-    /** Extracts metadata for the format selector that will be downloaded. */
+    /** Extracts metadata for [DownloadSpec.formatSelector], including selected-format data used by preflight checks. */
     suspend fun extractMetadata(spec: DownloadSpec): YtDlpMetadataDto {
         return extractMetadata(spec, spec.formatSelector)
     }
 
-    /** Extracts the complete format catalog used to build user choices. */
+    /** Leaves the format selector unset so [DownloadChoicePlanner][com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner] receives the complete catalog. */
     suspend fun extractCatalogMetadata(spec: DownloadSpec): YtDlpMetadataDto {
         return extractMetadata(spec, formatSelector = null)
     }
@@ -109,7 +113,10 @@ class YtDlpService(
         return objectMapper.readValue(result.stdout)
     }
 
-    /** Returns only a regular file path explicitly reported by yt-dlp after post-processing. */
+    /**
+     * Downloads [spec] and returns only the regular final path emitted by yt-dlp after merging or post-processing.
+     * Timeout, process failure, local workspace growth, missing marker, and missing file are reported as typed failures.
+     */
     suspend fun download(
         spec: DownloadSpec,
         outputDir: Path,

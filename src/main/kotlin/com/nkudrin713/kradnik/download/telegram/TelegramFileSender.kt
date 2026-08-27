@@ -6,7 +6,11 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
 import org.springframework.stereotype.Component
 
-/** Keeps fresh-file and cached-file Telegram delivery aligned for every output type. */
+/**
+ * Maps each [DownloadJob.outputType] to matching fresh-file and cached-file operations on [TelegramMediaSender].
+ * [DownloadJobProcessor][com.nkudrin713.kradnik.download.processing.DownloadJobProcessor] can therefore share one
+ * delivery path and always receive the reusable Telegram file ID returned by the API.
+ */
 @Component
 class TelegramFileSender(
     private val telegramMediaSender: TelegramMediaSender,

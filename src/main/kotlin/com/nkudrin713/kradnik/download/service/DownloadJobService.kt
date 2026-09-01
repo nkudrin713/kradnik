@@ -47,6 +47,7 @@ class DownloadJobService(
 				selectedFormat = spec.formatSelector,
 				downloadExtraArgs = spec.extraArgs,
 				telegramStatusMessageId = command.telegramStatusMessageId,
+				telegramInlineMessageId = command.telegramInlineMessageId,
 			)
 		)
 		return true
@@ -296,4 +297,5 @@ data class CreateDownloadJobCommand(
 	val telegramRequestMessageId: Int? = null,
 	val spec: DownloadSpec,
 	val telegramStatusMessageId: Int? = null,
+	val telegramInlineMessageId: String? = null,
 )

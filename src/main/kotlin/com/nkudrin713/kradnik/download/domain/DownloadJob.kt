@@ -90,6 +90,9 @@ class DownloadJob(
 	@Column(name = "telegram_status_message_id")
 	var telegramStatusMessageId: Int? = null,
 
+	@Column(name = "telegram_inline_message_id")
+	var telegramInlineMessageId: String? = null,
+
 	@Column(name = "error_message")
 	var errorMessage: String? = null,
 

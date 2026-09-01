@@ -10,10 +10,12 @@ import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.Video
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.BaseRequest
+import com.pengrad.telegrambot.request.EditMessageMedia
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendDocument
 import com.pengrad.telegrambot.request.SendVideo
 import com.pengrad.telegrambot.response.SendResponse
+import com.pengrad.telegrambot.response.BaseResponse
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.coEvery
@@ -74,6 +76,17 @@ class TelegramMediaSenderTest {
     }
 
     @Test
+    fun editsInlineVideoByFileId() = runTest {
+        val request = slot<BaseRequest<*, *>>()
+        every { bot.execute(capture(request)) } returns okResponse()
+
+        sender.editInlineVideo("inline-message", "video-id") shouldBe "video-id"
+
+        val actual = request.captured.shouldBeInstanceOf<EditMessageMedia>()
+        actual.getParameters()["inline_message_id"] shouldBe "inline-message"
+    }
+
+    @Test
     fun sendsAudioWithMetadata(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("audio.mp3")
         file.writeText("audio")
@@ -115,6 +128,17 @@ class TelegramMediaSenderTest {
     }
 
     @Test
+    fun editsInlineAudioByFileId() = runTest {
+        val request = slot<BaseRequest<*, *>>()
+        every { bot.execute(capture(request)) } returns okResponse()
+
+        sender.editInlineAudio("inline-message", "audio-id", "title", "artist", 120) shouldBe "audio-id"
+
+        val actual = request.captured.shouldBeInstanceOf<EditMessageMedia>()
+        actual.getParameters()["inline_message_id"] shouldBe "inline-message"
+    }
+
+    @Test
     fun sendsCoverAsDocument(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("cover.jpg")
         file.writeText("cover")
@@ -138,6 +162,17 @@ class TelegramMediaSenderTest {
         val actual = request.captured as SendDocument
         actual.getParameters()["document"] shouldBe "cached-id"
         result shouldBe "cover-id"
+    }
+
+    @Test
+    fun editsInlineDocumentByFileId() = runTest {
+        val request = slot<BaseRequest<*, *>>()
+        every { bot.execute(capture(request)) } returns okResponse()
+
+        sender.editInlineDocument("inline-message", "document-id") shouldBe "document-id"
+
+        val actual = request.captured.shouldBeInstanceOf<EditMessageMedia>()
+        actual.getParameters()["inline_message_id"] shouldBe "inline-message"
     }
 
     @Test
@@ -205,6 +240,12 @@ class TelegramMediaSenderTest {
                 every { audio() } returns audio
                 every { document() } returns document
             }
+        }
+    }
+
+    private fun okResponse(): BaseResponse {
+        return mockk {
+            every { isOk } returns true
         }
     }
 

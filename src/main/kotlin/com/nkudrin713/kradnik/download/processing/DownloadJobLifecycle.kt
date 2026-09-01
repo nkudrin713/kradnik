@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
+import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -151,7 +152,9 @@ class DownloadJobLifecycle(
 
     private fun setStatus(job: DownloadJob, status: TelegramDownloadStatus) {
         runCatching {
-            telegramSender.editStatus(
+            job.telegramInlineMessageId?.let {
+                telegramSender.editStatus(TelegramMessageAddress.Inline(it), status)
+            } ?: telegramSender.editStatus(
                 job.telegramChatId,
                 job.telegramStatusMessageId,
                 status,
@@ -162,6 +165,9 @@ class DownloadJobLifecycle(
     }
 
     private fun deleteStatus(job: DownloadJob) {
+        if (job.telegramInlineMessageId != null) {
+            return
+        }
         val messageId = job.telegramStatusMessageId ?: return
         runCatching {
             telegramSender.deleteMessage(job.telegramChatId, messageId)

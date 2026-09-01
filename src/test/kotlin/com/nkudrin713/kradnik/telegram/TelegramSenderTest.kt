@@ -7,16 +7,19 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.Message
+import com.pengrad.telegrambot.model.SentGuestMessage
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
+import com.pengrad.telegrambot.request.AnswerGuestQuery
 import com.pengrad.telegrambot.request.BaseRequest
 import com.pengrad.telegrambot.request.DeleteMessage
 import com.pengrad.telegrambot.request.EditMessageText
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.response.BaseResponse
 import com.pengrad.telegrambot.response.SendResponse
+import com.pengrad.telegrambot.response.SentGuestMessageResponse
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
@@ -55,6 +58,22 @@ class TelegramSenderTest {
 
         val actual = request.captured as SendMessage
         actual.getParameters()["text"] shouldBe TelegramDownloadStatus.QUEUED.text
+    }
+
+    @Test
+    fun answersGuestQueryAndReturnsInlineAddress() {
+        val request = slot<BaseRequest<*, *>>()
+        val response = mockk<SentGuestMessageResponse> {
+            every { isOk } returns true
+            every { result } returns SentGuestMessage("inline-message")
+        }
+        every { bot.execute(capture(request)) } returns response
+
+        sender.answerGuestMessage("guest-query", "Анализирую") shouldBe
+                TelegramMessageAddress.Inline("inline-message")
+
+        val actual = request.captured.shouldBeInstanceOf<AnswerGuestQuery>()
+        actual.getParameters()["guest_query_id"] shouldBe "guest-query"
     }
 
     @Test
@@ -99,6 +118,29 @@ class TelegramSenderTest {
         actual.getParameters()["reply_markup"] shouldBe keyboard
         actual.getParameters()["message_id"] shouldBe 200
         actual.getParameters()["parse_mode"] shouldBe "HTML"
+    }
+
+    @Test
+    fun editsInlineDownloadChoice() {
+        val keyboard = InlineKeyboardMarkup(InlineKeyboardButton("Video"))
+        val request = slot<BaseRequest<*, *>>()
+        val token = UUID.randomUUID()
+        val options = listOf(option())
+        val mediaInfo = DownloadChoiceMediaInfo("Channel", "Title", 120)
+        every { downloadChoiceView.text(mediaInfo) } returns "choice"
+        every { downloadChoiceView.keyboard(token, options) } returns keyboard
+        every { bot.execute(capture(request)) } returns okResponse()
+
+        sender.editDownloadChoice(
+            address = TelegramMessageAddress.Inline("inline-message"),
+            sessionToken = token,
+            mediaInfo = mediaInfo,
+            options = options,
+        )
+
+        val actual = request.captured.shouldBeInstanceOf<EditMessageText>()
+        actual.getParameters()["inline_message_id"] shouldBe "inline-message"
+        actual.getParameters()["reply_markup"] shouldBe keyboard
     }
 
     @Test

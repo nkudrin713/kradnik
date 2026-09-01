@@ -32,8 +32,11 @@ class DownloadChoiceSession(
     @Column(name = "telegram_request_message_id", nullable = false)
     var telegramRequestMessageId: Int = 0,
 
-    @Column(name = "telegram_menu_message_id", nullable = false)
-    var telegramMenuMessageId: Int = 0,
+    @Column(name = "telegram_menu_message_id")
+    var telegramMenuMessageId: Int? = null,
+
+    @Column(name = "telegram_inline_message_id")
+    var telegramInlineMessageId: String? = null,
 
     @Convert(converter = DownloadChoiceOptionsJsonConverter::class)
     @Column(name = "options_json", nullable = false)

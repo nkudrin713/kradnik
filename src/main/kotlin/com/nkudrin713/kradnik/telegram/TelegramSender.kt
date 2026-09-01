@@ -3,9 +3,11 @@ package com.nkudrin713.kradnik.telegram
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
+import com.pengrad.telegrambot.model.request.InlineQueryResultArticle
 import com.pengrad.telegrambot.model.request.ParseMode
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
+import com.pengrad.telegrambot.request.AnswerGuestQuery
 import com.pengrad.telegrambot.request.DeleteMessage
 import com.pengrad.telegrambot.request.EditMessageText
 import com.pengrad.telegrambot.request.SendMessage
@@ -29,6 +31,19 @@ class TelegramSender(
         return sendText(chatId, status.text, replyToMessageId = replyToMessageId)
     }
 
+    fun answerGuestMessage(guestQueryId: String, text: String): TelegramMessageAddress.Inline {
+        val result = InlineQueryResultArticle("download", "Крадник", text)
+        val response = apiClient.execute(AnswerGuestQuery(guestQueryId, result))
+        val inlineMessageId = response.result?.inlineMessageId
+            ?.takeIf(String::isNotBlank)
+            ?: throw TelegramSendException("Telegram response does not contain inline message ID")
+        return TelegramMessageAddress.Inline(inlineMessageId)
+    }
+
+    fun editStatus(address: TelegramMessageAddress, status: TelegramDownloadStatus) {
+        editText(address, status.text)
+    }
+
     fun editStatus(chatId: Long, messageId: Int?, status: TelegramDownloadStatus) {
         messageId ?: return
         editText(chatId, messageId, status.text)
@@ -50,8 +65,26 @@ class TelegramSender(
         )
     }
 
+    fun editDownloadChoice(
+        address: TelegramMessageAddress,
+        sessionToken: UUID,
+        mediaInfo: DownloadChoiceMediaInfo,
+        options: List<DownloadChoiceOptionSnapshot>,
+    ) {
+        editText(
+            address = address,
+            text = downloadChoiceView.text(mediaInfo),
+            keyboard = downloadChoiceView.keyboard(sessionToken, options),
+            parseMode = ParseMode.HTML,
+        )
+    }
+
     fun editMessage(chatId: Long, messageId: Int, text: String) {
         editText(chatId, messageId, text)
+    }
+
+    fun editMessage(address: TelegramMessageAddress, text: String) {
+        editText(address, text)
     }
 
     fun answerCallback(
@@ -97,6 +130,27 @@ class TelegramSender(
         parseMode?.let(request::parseMode)
         apiClient.execute(request)
     }
+
+    private fun editText(
+        address: TelegramMessageAddress,
+        text: String,
+        keyboard: InlineKeyboardMarkup? = null,
+        parseMode: ParseMode? = null,
+    ) {
+        val request = when (address) {
+            is TelegramMessageAddress.Chat -> EditMessageText(address.chatId, address.messageId, text)
+            is TelegramMessageAddress.Inline -> EditMessageText(address.inlineMessageId, text)
+        }
+        keyboard?.let(request::replyMarkup)
+        parseMode?.let(request::parseMode)
+        apiClient.execute(request)
+    }
+}
+
+sealed interface TelegramMessageAddress {
+    data class Chat(val chatId: Long, val messageId: Int) : TelegramMessageAddress
+
+    data class Inline(val inlineMessageId: String) : TelegramMessageAddress
 }
 
 enum class TelegramDownloadStatus(val text: String) {

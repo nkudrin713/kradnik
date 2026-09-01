@@ -47,6 +47,25 @@ class DownloadChoiceSessionServiceTest {
     }
 
     @Test
+    fun selectsInlineSessionByInlineMessageId() {
+        val session = session().apply {
+            telegramMenuMessageId = null
+            telegramInlineMessageId = "inline-message"
+        }
+        every { repository.findForUpdate(session.token) } returns session
+
+        val actual = service.select(
+            selectCommand(session.token).copy(
+                telegramChatId = null,
+                telegramMenuMessageId = null,
+                telegramInlineMessageId = "inline-message",
+            )
+        )
+
+        assertIs<DownloadChoiceSelection.Ready>(actual)
+    }
+
+    @Test
     fun rejectsForeignUnavailableAndRepeatedSelections() {
         val missingToken = UUID.randomUUID()
         every { repository.findForUpdate(missingToken) } returns null
@@ -105,7 +124,13 @@ class DownloadChoiceSessionServiceTest {
     }
 
     private fun selectCommand(token: UUID): SelectDownloadChoiceCommand {
-        return SelectDownloadChoiceCommand(token, "video_720", 300, 100, 500)
+        return SelectDownloadChoiceCommand(
+            token = token,
+            optionKey = "video_720",
+            telegramUserId = 300,
+            telegramChatId = 100,
+            telegramMenuMessageId = 500,
+        )
     }
 
     private fun session(option: DownloadChoiceOptionSnapshot = option()): DownloadChoiceSession {

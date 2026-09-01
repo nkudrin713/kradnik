@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.video.TelegramVideoPolicy
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
@@ -27,14 +28,16 @@ class TelegramDownloadStarter(
         telegramRequestMessageId: Int,
         messageAddress: TelegramMessageAddress,
         spec: DownloadSpec,
+        language: BotLanguage = BotLanguage.EN,
     ) {
         val statusMessageId = when (messageAddress) {
             is TelegramMessageAddress.Chat -> telegramSender.sendStatus(
                 telegramChatId,
                 TelegramDownloadStatus.QUEUED,
+                language,
             )
             is TelegramMessageAddress.Inline -> {
-                telegramSender.editStatus(messageAddress, TelegramDownloadStatus.QUEUED)
+                telegramSender.editStatus(messageAddress, TelegramDownloadStatus.QUEUED, language)
                 null
             }
         }
@@ -52,6 +55,7 @@ class TelegramDownloadStarter(
             spec = jobSpec,
             telegramStatusMessageId = statusMessageId,
             telegramInlineMessageId = (messageAddress as? TelegramMessageAddress.Inline)?.inlineMessageId,
+            language = language,
         )
         val created = try {
             downloadJobService.createJob(command)

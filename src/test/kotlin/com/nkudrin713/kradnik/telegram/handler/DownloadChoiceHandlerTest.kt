@@ -11,6 +11,9 @@ import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
+import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.Chat
 import com.pengrad.telegrambot.model.User
@@ -28,7 +31,14 @@ class DownloadChoiceHandlerTest {
     private val sessionService: DownloadChoiceSessionService = mockk()
     private val starter: TelegramDownloadStarter = mockk()
     private val telegramSender: TelegramSender = mockk()
-    private val handler = DownloadChoiceHandler(sessionService, starter, telegramSender)
+    private val preferenceService: TelegramUserPreferenceService = mockk()
+    private val handler = DownloadChoiceHandler(
+        sessionService = sessionService,
+        telegramDownloadStarter = starter,
+        telegramSender = telegramSender,
+        preferenceService = preferenceService,
+        messages = telegramMessages(),
+    )
     private val token = UUID.randomUUID()
 
     @Test
@@ -41,8 +51,9 @@ class DownloadChoiceHandlerTest {
     @Test
     fun startsSelectedDownloadAndDeletesMenu() {
         val selection = readySelection()
+        every { preferenceService.resolveLanguage(300) } returns BotLanguage.RU
         every { sessionService.select(any()) } returns selection
-        every { starter.start(any(), any(), any(), any(), any(), any()) } just runs
+        every { starter.start(any(), any(), any(), any(), any(), any(), any()) } just runs
         every { telegramSender.answerCallback("callback-id", "Выбрано: 720p", false) } just runs
         every { telegramSender.deleteMessage(100, 500) } just runs
 
@@ -56,6 +67,7 @@ class DownloadChoiceHandlerTest {
                 telegramRequestMessageId = 200,
                 messageAddress = TelegramMessageAddress.Chat(100, 500),
                 spec = selection.option.spec,
+                language = BotLanguage.RU,
             )
             telegramSender.deleteMessage(100, 500)
         }
@@ -63,12 +75,13 @@ class DownloadChoiceHandlerTest {
 
     @Test
     fun rejectsChoiceFromAnotherUser() {
+        every { preferenceService.resolveLanguage(301) } returns BotLanguage.RU
         every { sessionService.select(any()) } returns DownloadChoiceSelection.NotOwner
         every { telegramSender.answerCallback("callback-id", "Это меню другого пользователя", true) } just runs
 
         handler.handle(callbackQuery(userId = 301))
 
-        verify(exactly = 0) { starter.start(any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { starter.start(any(), any(), any(), any(), any(), any(), any()) }
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
     }
 
@@ -78,8 +91,9 @@ class DownloadChoiceHandlerTest {
             session.telegramMenuMessageId = null
             session.telegramInlineMessageId = "inline-message"
         }
+        every { preferenceService.resolveLanguage(300) } returns BotLanguage.RU
         every { sessionService.select(any()) } returns selection
-        every { starter.start(any(), any(), any(), any(), any(), any()) } just runs
+        every { starter.start(any(), any(), any(), any(), any(), any(), any()) } just runs
         every { telegramSender.answerCallback("callback-id", "Выбрано: 720p", false) } just runs
 
         handler.handle(callbackQuery(userId = 300, inlineMessageId = "inline-message"))
@@ -92,6 +106,7 @@ class DownloadChoiceHandlerTest {
                 telegramRequestMessageId = 200,
                 messageAddress = TelegramMessageAddress.Inline("inline-message"),
                 spec = selection.option.spec,
+                language = BotLanguage.RU,
             )
         }
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
@@ -123,6 +138,7 @@ class DownloadChoiceHandlerTest {
                 telegramUpdateId = 400,
                 telegramRequestMessageId = 200,
                 telegramMenuMessageId = 500,
+                language = BotLanguage.RU,
                 options = listOf(option),
                 cleanupAfter = Instant.now().plusSeconds(60),
             ),
@@ -139,10 +155,14 @@ class DownloadChoiceHandlerTest {
             every { chat() } returns mockk<Chat> { every { id() } returns 100 }
             every { messageId() } returns 500
         }
+        val user = mockk<User> {
+            every { id() } returns userId
+            every { languageCode() } returns "ru"
+        }
         return mockk {
             every { id() } returns "callback-id"
             every { data() } returns callbackData
-            every { from() } returns mockk<User> { every { id() } returns userId }
+            every { from() } returns user
             every { inlineMessageId() } returns inlineMessageId
             every { maybeInaccessibleMessage() } returns if (inlineMessageId == null) message else null
         }

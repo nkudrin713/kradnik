@@ -1,5 +1,8 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.request.EditMessageText
@@ -11,18 +14,19 @@ import org.springframework.stereotype.Component
 @Component
 class TelegramDonationSender(
     private val apiClient: TelegramApiClient,
+    private val messages: TelegramMessages,
 ) {
-    fun sendMessage(chatId: Long, donationUrl: String) {
+    fun sendMessage(chatId: Long, donationUrl: String, language: BotLanguage = BotLanguage.EN) {
         apiClient.execute(
-            SendMessage(chatId, DONATION_MESSAGE)
-                .replyMarkup(donationKeyboard(donationUrl))
+            SendMessage(chatId, messages.text(language, TelegramMessage.DONATION_MESSAGE))
+                .replyMarkup(donationKeyboard(donationUrl, language))
         )
     }
 
-    fun sendPin(channelId: String, donationUrl: String): Int {
+    fun sendPin(channelId: String, donationUrl: String, language: BotLanguage = BotLanguage.EN): Int {
         val response = apiClient.execute(
-            SendMessage(channelId, DONATION_PIN_TEXT)
-                .replyMarkup(donationKeyboard(donationUrl))
+            SendMessage(channelId, messages.text(language, TelegramMessage.DONATION_PIN))
+                .replyMarkup(donationKeyboard(donationUrl, language))
         )
         val messageId = response.message()?.messageId()
             ?: throw TelegramSendException("Telegram response does not contain donation message")
@@ -30,17 +34,22 @@ class TelegramDonationSender(
         return messageId
     }
 
-    fun updatePin(channelId: String, messageId: Int, donationUrl: String) {
-        editPin(channelId, messageId, donationUrl)
+    fun updatePin(
+        channelId: String,
+        messageId: Int,
+        donationUrl: String,
+        language: BotLanguage = BotLanguage.EN,
+    ) {
+        editPin(channelId, messageId, donationUrl, language)
         unpinMessage(channelId, messageId)
         pinMessage(channelId, messageId)
     }
 
-    private fun editPin(channelId: String, messageId: Int, donationUrl: String) {
+    private fun editPin(channelId: String, messageId: Int, donationUrl: String, language: BotLanguage) {
         try {
             apiClient.execute(
-                EditMessageText(channelId, messageId, DONATION_PIN_TEXT)
-                    .replyMarkup(donationKeyboard(donationUrl))
+                EditMessageText(channelId, messageId, messages.text(language, TelegramMessage.DONATION_PIN))
+                    .replyMarkup(donationKeyboard(donationUrl, language))
             )
         } catch (error: TelegramSendException) {
             if (error.kind != TelegramSendFailureKind.MESSAGE_NOT_MODIFIED) {
@@ -49,9 +58,9 @@ class TelegramDonationSender(
         }
     }
 
-    private fun donationKeyboard(donationUrl: String): InlineKeyboardMarkup {
+    private fun donationKeyboard(donationUrl: String, language: BotLanguage): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
-            InlineKeyboardButton(DONATION_BUTTON_TEXT).url(donationUrl)
+            InlineKeyboardButton(messages.text(language, TelegramMessage.DONATION_BUTTON)).url(donationUrl)
         )
     }
 
@@ -65,19 +74,5 @@ class TelegramDonationSender(
         apiClient.execute(
             UnpinChatMessage(channelId).messageId(messageId)
         )
-    }
-
-    private companion object {
-        private val DONATION_MESSAGE = """
-            Крадник остаётся бесплатным.
-
-            А это — банка для тех, кто хочет подкинуть топлива проекту.
-            Донаты уходят на хостинг, новые фичи и моральную устойчивость разработчика.
-            Обещаю не покупать пиво и сигареты.
-
-            Спасибо, что помогаете боту жить.
-        """.trimIndent()
-        private const val DONATION_PIN_TEXT = "Поддержать проект можно нажав на кнопку. Больше инфы в /donate"
-        private const val DONATION_BUTTON_TEXT = "Поддержать 💸"
     }
 }

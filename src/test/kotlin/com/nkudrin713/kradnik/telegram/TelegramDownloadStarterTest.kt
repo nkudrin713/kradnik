@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -27,7 +28,7 @@ class TelegramDownloadStarterTest {
     fun createsJobWithRequestMessage() {
         val command = slot<CreateDownloadJobCommand>()
         every {
-            telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED)
+            telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED, BotLanguage.EN)
         } returns 500
         every {
             downloadJobService.createJob(capture(command))
@@ -36,13 +37,14 @@ class TelegramDownloadStarterTest {
         start(OutputType.VIDEO)
 
         assertEquals(200, command.captured.telegramRequestMessageId)
+        assertEquals(BotLanguage.EN, command.captured.language)
         assertEquals("video:telegram-video-h264-v1", command.captured.spec.cacheKey)
     }
 
     @Test
     fun removesDuplicateStatus() {
         every {
-            telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED)
+            telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED, BotLanguage.EN)
         } returns 500
         every {
             downloadJobService.createJob(any())
@@ -57,7 +59,7 @@ class TelegramDownloadStarterTest {
     @Test
     fun removesStatusWhenJobCreationFails() {
         every {
-            telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED)
+            telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED, BotLanguage.EN)
         } returns 500
         every {
             downloadJobService.createJob(any())
@@ -75,7 +77,7 @@ class TelegramDownloadStarterTest {
     fun reusesInlineMessageAsJobStatus() {
         val command = slot<CreateDownloadJobCommand>()
         val address = TelegramMessageAddress.Inline("inline-message")
-        every { telegramSender.editStatus(address, TelegramDownloadStatus.QUEUED) } just runs
+        every { telegramSender.editStatus(address, TelegramDownloadStatus.QUEUED, BotLanguage.EN) } just runs
         every { downloadJobService.createJob(capture(command)) } returns true
 
         start(OutputType.VIDEO, address)

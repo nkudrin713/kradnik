@@ -16,16 +16,9 @@ class PlatformResolver(
 ) {
     fun resolve(url: String): PlatformDownloadSpecs {
         val handler = handlers.firstOrNull { it.supports(url) }
-            ?: throw UnsupportedPlatformException(unsupportedPlatformMessage())
+            ?: throw UnsupportedPlatformException("Unsupported platform")
 
         return handler.resolve(url)
-    }
-
-    private fun unsupportedPlatformMessage(): String {
-        val platforms = DownloadPlatform.entries
-            .map { it.displayName }
-            .joinToString(", ")
-        return "Платформа не поддерживается. Доступные платформы: $platforms."
     }
 }
 

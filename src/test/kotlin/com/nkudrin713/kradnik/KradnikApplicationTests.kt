@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import com.nkudrin713.kradnik.process.ProcessRunner
 import com.nkudrin713.kradnik.telegram.TelegramPollingService
 import com.nkudrin713.kradnik.telegram.config.TelegramCommandsInitializer
+import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceRepository
 import io.mockk.mockk
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
@@ -39,6 +40,9 @@ class KradnikApplicationTests {
 
 		@Bean
 		fun downloadChoiceSessionRepository(): DownloadChoiceSessionRepository = mockk(relaxed = true)
+
+		@Bean
+		fun telegramUserPreferenceRepository(): TelegramUserPreferenceRepository = mockk(relaxed = true)
 
 		@Bean
 		fun processRunner(): ProcessRunner = mockk(relaxed = true)

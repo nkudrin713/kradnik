@@ -5,6 +5,8 @@ import com.nkudrin713.kradnik.download.repository.DownloadPlatformConverter
 import com.nkudrin713.kradnik.download.repository.DownloadJobStatusConverter
 import com.nkudrin713.kradnik.download.repository.DownloadOutputTypeConverter
 import com.nkudrin713.kradnik.download.repository.StringListJsonConverter
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.BotLanguageConverter
 import jakarta.persistence.Column
 import jakarta.persistence.Convert
 import jakarta.persistence.Entity
@@ -40,6 +42,10 @@ class DownloadJob(
 
 	@Column(name = "telegram_request_message_id")
 	var telegramRequestMessageId: Int? = null,
+
+	@Convert(converter = BotLanguageConverter::class)
+	@Column(nullable = false)
+	var language: BotLanguage = BotLanguage.EN,
 
 	@Column(name = "original_url", nullable = false)
 	var originalUrl: String = "",

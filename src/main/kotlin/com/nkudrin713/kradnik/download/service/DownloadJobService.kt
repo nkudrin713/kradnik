@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.service
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -38,6 +39,7 @@ class DownloadJobService(
 				telegramChatId = command.telegramChatId,
 				telegramUpdateId = command.telegramUpdateId,
 				telegramRequestMessageId = command.telegramRequestMessageId,
+				language = command.language,
 				originalUrl = spec.originalUrl,
 				normalizedUrl = spec.normalizedUrl,
 				cacheKey = spec.cacheKey,
@@ -295,6 +297,7 @@ data class CreateDownloadJobCommand(
 	val telegramChatId: Long,
 	val telegramUpdateId: Int? = null,
 	val telegramRequestMessageId: Int? = null,
+	val language: BotLanguage = BotLanguage.EN,
 	val spec: DownloadSpec,
 	val telegramStatusMessageId: Int? = null,
 	val telegramInlineMessageId: String? = null,

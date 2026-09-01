@@ -153,11 +153,12 @@ class DownloadJobLifecycle(
     private fun setStatus(job: DownloadJob, status: TelegramDownloadStatus) {
         runCatching {
             job.telegramInlineMessageId?.let {
-                telegramSender.editStatus(TelegramMessageAddress.Inline(it), status)
+                telegramSender.editStatus(TelegramMessageAddress.Inline(it), status, job.language)
             } ?: telegramSender.editStatus(
                 job.telegramChatId,
                 job.telegramStatusMessageId,
                 status,
+                job.language,
             )
         }.onFailure {
             logger.warn("JOB[{}] status message update failed: {}", job.id, it.message)

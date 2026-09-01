@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.telegram.config
 
 import com.nkudrin713.kradnik.telegram.TelegramDonationSender
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.ApplicationArguments
@@ -18,6 +19,8 @@ class TelegramDonationPinInitializer(
     private val donationUrl: String,
     @Value("\${telegram.donation.pin-message-id:}")
     private val pinMessageId: String,
+    @Value("\${telegram.donation.pin-language:en}")
+    private val pinLanguage: String = "en",
 ) : ApplicationRunner {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -32,12 +35,13 @@ class TelegramDonationPinInitializer(
         }
 
         runCatching {
+            val language = BotLanguage.fromCode(pinLanguage) ?: BotLanguage.EN
             val messageId = pinMessageId.toIntOrNull()
             if (messageId == null) {
-                val createdMessageId = telegramDonationSender.sendPin(channelId, donationUrl)
+                val createdMessageId = telegramDonationSender.sendPin(channelId, donationUrl, language)
                 logger.info("Telegram donation pin created: channel={}, messageId={}", channelId, createdMessageId)
             } else {
-                telegramDonationSender.updatePin(channelId, messageId, donationUrl)
+                telegramDonationSender.updatePin(channelId, messageId, donationUrl, language)
                 logger.info("Telegram donation pin updated: channel={}, messageId={}", channelId, messageId)
             }
         }.onFailure {

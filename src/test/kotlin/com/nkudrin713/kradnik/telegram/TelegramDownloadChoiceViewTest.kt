@@ -5,13 +5,15 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class TelegramDownloadChoiceViewTest {
-    private val view = TelegramDownloadChoiceView()
+    private val view = TelegramDownloadChoiceView(telegramMessages())
 
     @Test
     fun createsPreformattedEscapedTitleAndNonClickableDuration() {
@@ -20,7 +22,8 @@ class TelegramDownloadChoiceViewTest {
                 channelName = "Channel <official>",
                 title = "Title & more",
                 durationSeconds = 3_723,
-            )
+            ),
+            BotLanguage.RU,
         )
 
         assertEquals(
@@ -39,7 +42,8 @@ class TelegramDownloadChoiceViewTest {
                 channelName = "Channel",
                 title = null,
                 durationSeconds = null,
-            )
+            ),
+            BotLanguage.RU,
         )
 
         assertEquals("<pre>Название недоступно</pre>", actual)
@@ -56,6 +60,13 @@ class TelegramDownloadChoiceViewTest {
                 option("audio", "Только звук", 24_500_000, approximate = true),
                 option("cover", "Обложка", null, approximate = false),
             ),
+            language = BotLanguage.RU,
+        ).inlineKeyboard()
+
+        val englishKeyboard = view.keyboard(
+            sessionToken = token,
+            options = listOf(option("video_original", "Original", 1_420_000_000, approximate = true)),
+            language = BotLanguage.EN,
         ).inlineKeyboard()
 
         assertEquals(
@@ -67,6 +78,7 @@ class TelegramDownloadChoiceViewTest {
             ),
             keyboard.map { it.single().text },
         )
+        assertEquals("🎬 Original · ≈ 1.42 GB", englishKeyboard.single().single().text)
         assertEquals(
             listOf("video_original", "video_720", "audio", "cover"),
             keyboard.map { DownloadChoiceCallback.parse(requireNotNull(it.single().callbackData))?.optionKey },

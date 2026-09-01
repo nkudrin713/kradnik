@@ -10,6 +10,9 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreference
+import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceRepository
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -45,6 +48,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     private val choiceSessionRepository: DownloadChoiceSessionRepository,
     private val jdbcTemplate: JdbcTemplate,
     private val downloadJobService: DownloadJobService,
+    private val preferenceRepository: TelegramUserPreferenceRepository,
     transactionManager: PlatformTransactionManager,
 ) {
     private val transactionTemplate = TransactionTemplate(transactionManager)
@@ -53,6 +57,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     fun cleanDatabase() {
         choiceSessionRepository.deleteAll()
         repository.deleteAll()
+        preferenceRepository.deleteAll()
     }
 
     @Test
@@ -67,7 +72,8 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                       'lease_token',
                       'lease_expires_at',
                       'next_attempt_at',
-                      'platform'
+                      'platform',
+                      'language'
                   )
             """.trimIndent(),
             Int::class.java,
@@ -77,6 +83,14 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 SELECT COUNT(*)
                 FROM information_schema.tables
                 WHERE table_name = 'request_rate_limit_buckets'
+            """.trimIndent(),
+            Int::class.java,
+        )
+        val preferenceTableCount = jdbcTemplate.queryForObject(
+            """
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_name = 'telegram_user_preferences'
             """.trimIndent(),
             Int::class.java,
         )
@@ -97,7 +111,8 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             Int::class.java,
         )
 
-        assertEquals(5, columnCount)
+        assertEquals(6, columnCount)
+        assertEquals(1, preferenceTableCount)
         assertEquals(0, removedRateLimitTableCount)
         assertEquals(0, removedJobColumnCount)
     }
@@ -128,6 +143,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 telegramUpdateId = 3,
                 telegramRequestMessageId = 4,
                 telegramMenuMessageId = 5,
+                language = BotLanguage.RU,
                 options = listOf(option),
                 cleanupAfter = Instant.now().plusSeconds(60),
             )
@@ -136,7 +152,14 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             job("cover").apply {
                 outputType = OutputType.COVER
                 platform = DownloadPlatform.YOUTUBE
+                language = BotLanguage.RU
             }
+        )
+        val preference = preferenceRepository.saveAndFlush(
+            TelegramUserPreference(
+                telegramUserId = 1,
+                language = BotLanguage.RU,
+            )
         )
 
         val persistedOption = choiceSessionRepository.findById(session.token).orElseThrow().options.single()
@@ -145,6 +168,9 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         assertEquals(DownloadPlatform.YOUTUBE, persistedOption.spec.platform)
         assertEquals(OutputType.COVER, persistedJob.outputType)
         assertEquals(DownloadPlatform.YOUTUBE, persistedJob.platform)
+        assertEquals(BotLanguage.RU, choiceSessionRepository.findById(session.token).orElseThrow().language)
+        assertEquals(BotLanguage.RU, persistedJob.language)
+        assertEquals(BotLanguage.RU, preferenceRepository.findById(preference.telegramUserId).orElseThrow().language)
     }
 
     @Test
@@ -374,7 +400,13 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
 @TestConfiguration
 @EnableAutoConfiguration
-@EntityScan(basePackageClasses = [DownloadJob::class, DownloadChoiceSession::class])
-@EnableJpaRepositories(basePackageClasses = [DownloadJobRepository::class, DownloadChoiceSessionRepository::class])
+@EntityScan(basePackageClasses = [DownloadJob::class, DownloadChoiceSession::class, TelegramUserPreference::class])
+@EnableJpaRepositories(
+    basePackageClasses = [
+        DownloadJobRepository::class,
+        DownloadChoiceSessionRepository::class,
+        TelegramUserPreferenceRepository::class,
+    ]
+)
 @Import(DownloadJobService::class)
 class DownloadJobRepositoryTestApplication

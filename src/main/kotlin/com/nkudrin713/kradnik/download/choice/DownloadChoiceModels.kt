@@ -23,22 +23,6 @@ data class DownloadChoiceOptionSnapshot(
     val spec: DownloadSpec,
 )
 
-object DownloadSizeFormatter {
-    fun format(bytes: Long): String {
-        val value = if (bytes >= BYTES_IN_GIGABYTE) {
-            bytes / BYTES_IN_GIGABYTE
-        } else {
-            bytes / BYTES_IN_MEGABYTE
-        }
-        val unit = if (bytes >= BYTES_IN_GIGABYTE) "ГБ" else "МБ"
-        val pattern = if (value >= 100) "%.0f" else if (value >= 10) "%.1f" else "%.2f"
-        return "$pattern $unit".format(java.util.Locale.forLanguageTag("ru-RU"), value)
-    }
-
-    private const val BYTES_IN_MEGABYTE = 1_000_000.0
-    private const val BYTES_IN_GIGABYTE = 1_000_000_000.0
-}
-
 class DownloadChoicePlanningException(
     val userMessage: String,
     cause: Throwable? = null,

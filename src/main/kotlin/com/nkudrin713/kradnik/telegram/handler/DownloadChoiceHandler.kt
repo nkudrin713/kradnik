@@ -7,6 +7,10 @@ import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.pengrad.telegrambot.model.CallbackQuery
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -21,17 +25,25 @@ class DownloadChoiceHandler(
     private val sessionService: DownloadChoiceSessionService,
     private val telegramDownloadStarter: TelegramDownloadStarter,
     private val telegramSender: TelegramSender,
+    private val preferenceService: TelegramUserPreferenceService,
+    private val messages: TelegramMessages,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     fun handle(callbackQuery: CallbackQuery) {
         val callback = DownloadChoiceCallback.parse(callbackQuery.data().trim()) ?: return
+        val fallbackLanguage = preferenceService.resolveLanguage(callbackQuery.from().id())
         val address = callbackQuery.inlineMessageId()
             ?.let(TelegramMessageAddress::Inline)
             ?: callbackQuery.maybeInaccessibleMessage()?.let {
                 TelegramMessageAddress.Chat(it.chat().id(), it.messageId())
             }
-            ?: return answer(callbackQuery.id(), "Меню недействительно", showAlert = true)
+            ?: return answer(
+                callbackQuery.id(),
+                fallbackLanguage,
+                TelegramMessage.CHOICE_MENU_INVALID,
+                showAlert = true,
+            )
         val selection = sessionService.select(
             SelectDownloadChoiceCommand(
                 token = callback.sessionToken,
@@ -53,11 +65,21 @@ class DownloadChoiceHandler(
             is DownloadChoiceSelection.Unavailable -> answer(callbackQuery.id(), selection.reason, showAlert = true)
             DownloadChoiceSelection.NotOwner -> answer(
                 callbackQuery.id(),
-                "Это меню другого пользователя",
+                fallbackLanguage,
+                TelegramMessage.CHOICE_NOT_OWNER,
                 showAlert = true,
             )
-            DownloadChoiceSelection.AlreadySelected -> answer(callbackQuery.id(), "Загрузка уже выбрана")
-            DownloadChoiceSelection.Invalid -> answer(callbackQuery.id(), "Меню недействительно", showAlert = true)
+            DownloadChoiceSelection.AlreadySelected -> answer(
+                callbackQuery.id(),
+                fallbackLanguage,
+                TelegramMessage.CHOICE_ALREADY_SELECTED,
+            )
+            DownloadChoiceSelection.Invalid -> answer(
+                callbackQuery.id(),
+                fallbackLanguage,
+                TelegramMessage.CHOICE_MENU_INVALID,
+                showAlert = true,
+            )
         }
     }
 
@@ -75,13 +97,21 @@ class DownloadChoiceHandler(
                 telegramRequestMessageId = selection.session.telegramRequestMessageId,
                 messageAddress = address,
                 spec = selection.option.spec,
+                language = selection.session.language,
             )
         } catch (error: Exception) {
             sessionService.release(callback.sessionToken)
             throw error
         }
 
-        answer(callbackQueryId, "Выбрано: ${selection.option.label}")
+        answer(
+            callbackQueryId = callbackQueryId,
+            text = messages.text(
+                selection.session.language,
+                TelegramMessage.CHOICE_SELECTED,
+                selection.option.label,
+            ),
+        )
         if (address is TelegramMessageAddress.Chat) {
             deleteMenuBestEffort(address.chatId, address.messageId)
         }
@@ -89,6 +119,15 @@ class DownloadChoiceHandler(
 
     private fun answer(callbackQueryId: String, text: String, showAlert: Boolean = false) {
         telegramSender.answerCallback(callbackQueryId, text, showAlert)
+    }
+
+    private fun answer(
+        callbackQueryId: String,
+        language: BotLanguage,
+        message: TelegramMessage,
+        showAlert: Boolean = false,
+    ) {
+        answer(callbackQueryId, messages.text(language, message), showAlert)
     }
 
     private fun deleteMenuBestEffort(chatId: Long, messageId: Int) {

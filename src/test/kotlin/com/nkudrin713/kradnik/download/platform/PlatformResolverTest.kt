@@ -29,7 +29,7 @@ class PlatformResolverTest {
         }
 
         assertEquals(
-            "Платформа не поддерживается. Доступные платформы: YouTube, Instagram, VK.",
+            "Unsupported platform",
             exception.message,
         )
     }

@@ -11,6 +11,7 @@ import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.Update
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
@@ -32,12 +33,14 @@ class TelegramUpdateHandler(
     @Value("\${telegram.donation.url:}")
     private val donationUrl: String,
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     fun handle(update: Update) {
         val guestMessage = update.guestMessage()
         val message = update.message()
         when {
             guestMessage?.text() != null -> handleGuestMessage(update, guestMessage)
-            message?.pinnedMessage() != null -> telegramSender.deleteMessage(
+            message?.pinnedMessage() != null -> deletePinnedServiceMessageBestEffort(
                 chatId = message.chat().id(),
                 messageId = message.messageId(),
             )
@@ -145,5 +148,18 @@ class TelegramUpdateHandler(
 
     private fun sendMessage(chatId: Long, language: BotLanguage, message: TelegramMessage) {
         telegramSender.sendMessage(chatId, messages.text(language, message))
+    }
+
+    private fun deletePinnedServiceMessageBestEffort(chatId: Long, messageId: Int) {
+        runCatching {
+            telegramSender.deleteMessage(chatId, messageId)
+        }.onFailure {
+            logger.warn(
+                "Pinned service message deletion failed: chatId={}, messageId={}",
+                chatId,
+                messageId,
+                it,
+            )
+        }
     }
 }

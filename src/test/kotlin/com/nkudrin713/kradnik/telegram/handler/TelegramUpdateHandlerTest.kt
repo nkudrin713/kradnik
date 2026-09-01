@@ -42,6 +42,18 @@ class TelegramUpdateHandlerTest {
     }
 
     @Test
+    fun continuesWhenPinServiceMessageCannotBeDeleted() {
+        val update = updateWithPinnedMessage(chatId = 100, messageId = 200)
+        every { telegramSender.deleteMessage(100, 200) } throws IllegalStateException("deletion failed")
+
+        handler().handle(update)
+
+        verify(exactly = 1) { telegramSender.deleteMessage(100, 200) }
+        verify(exactly = 0) { coordinator.prepare(any()) }
+        verify(exactly = 0) { choiceHandler.handle(any()) }
+    }
+
+    @Test
     fun handlesSimpleCommandsDirectly() {
         every { telegramSender.sendMessage(100, any()) } just runs
         every { preferenceService.selectedLanguage(300) } returns BotLanguage.RU

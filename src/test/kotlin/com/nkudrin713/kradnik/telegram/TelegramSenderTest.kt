@@ -5,6 +5,9 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.SentGuestMessage
@@ -32,9 +35,11 @@ import java.util.UUID
 class TelegramSenderTest {
     private val bot: TelegramBot = mockk()
     private val downloadChoiceView: TelegramDownloadChoiceView = mockk()
+    private val messages = telegramMessages()
     private val sender = TelegramSender(
         apiClient = TelegramApiClient(bot),
         downloadChoiceView = downloadChoiceView,
+        messages = messages,
     )
 
     @Test
@@ -57,7 +62,7 @@ class TelegramSenderTest {
         sender.sendStatus(100, TelegramDownloadStatus.QUEUED) shouldBe 10
 
         val actual = request.captured as SendMessage
-        actual.getParameters()["text"] shouldBe TelegramDownloadStatus.QUEUED.text
+        actual.getParameters()["text"] shouldBe messages.text(BotLanguage.EN, TelegramMessage.STATUS_QUEUED)
     }
 
     @Test
@@ -69,7 +74,7 @@ class TelegramSenderTest {
         }
         every { bot.execute(capture(request)) } returns response
 
-        sender.answerGuestMessage("guest-query", "Анализирую") shouldBe
+        sender.answerGuestMessage("guest-query", "Analyzing") shouldBe
                 TelegramMessageAddress.Inline("inline-message")
 
         val actual = request.captured.shouldBeInstanceOf<AnswerGuestQuery>()
@@ -92,7 +97,7 @@ class TelegramSenderTest {
 
         val actual = request.captured as EditMessageText
         actual.getParameters()["message_id"] shouldBe 10
-        actual.getParameters()["text"] shouldBe TelegramDownloadStatus.ERROR.text
+        actual.getParameters()["text"] shouldBe messages.text(BotLanguage.EN, TelegramMessage.STATUS_ERROR)
     }
 
     @Test
@@ -102,8 +107,8 @@ class TelegramSenderTest {
         val token = UUID.randomUUID()
         val options = listOf(option())
         val mediaInfo = DownloadChoiceMediaInfo("Channel", "Title", 120)
-        every { downloadChoiceView.text(mediaInfo) } returns "choice"
-        every { downloadChoiceView.keyboard(token, options) } returns keyboard
+        every { downloadChoiceView.text(mediaInfo, BotLanguage.EN) } returns "choice"
+        every { downloadChoiceView.keyboard(token, options, BotLanguage.EN) } returns keyboard
         every { bot.execute(capture(request)) } returns okResponse()
 
         sender.editDownloadChoice(
@@ -127,8 +132,8 @@ class TelegramSenderTest {
         val token = UUID.randomUUID()
         val options = listOf(option())
         val mediaInfo = DownloadChoiceMediaInfo("Channel", "Title", 120)
-        every { downloadChoiceView.text(mediaInfo) } returns "choice"
-        every { downloadChoiceView.keyboard(token, options) } returns keyboard
+        every { downloadChoiceView.text(mediaInfo, BotLanguage.EN) } returns "choice"
+        every { downloadChoiceView.keyboard(token, options, BotLanguage.EN) } returns keyboard
         every { bot.execute(capture(request)) } returns okResponse()
 
         sender.editDownloadChoice(

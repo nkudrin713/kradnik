@@ -2,6 +2,9 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.model.request.InlineQueryResultArticle
 import com.pengrad.telegrambot.model.request.ParseMode
@@ -18,21 +21,39 @@ import java.util.UUID
 class TelegramSender(
     private val apiClient: TelegramApiClient,
     private val downloadChoiceView: TelegramDownloadChoiceView,
+    private val messages: TelegramMessages,
 ) {
-    fun sendMessage(chatId: Long, text: String) {
-        sendText(chatId, text)
+    fun sendMessage(
+        chatId: Long,
+        text: String,
+        keyboard: InlineKeyboardMarkup? = null,
+    ) {
+        sendText(chatId, text, keyboard)
     }
 
     fun sendStatus(
         chatId: Long,
         status: TelegramDownloadStatus,
+        language: BotLanguage = BotLanguage.EN,
         replyToMessageId: Int? = null,
     ): Int {
-        return sendText(chatId, status.text, replyToMessageId = replyToMessageId)
+        return sendText(
+            chatId = chatId,
+            text = messages.text(language, status.message),
+            replyToMessageId = replyToMessageId,
+        )
     }
 
-    fun answerGuestMessage(guestQueryId: String, text: String): TelegramMessageAddress.Inline {
-        val result = InlineQueryResultArticle("download", "Крадник", text)
+    fun answerGuestMessage(
+        guestQueryId: String,
+        text: String,
+        language: BotLanguage = BotLanguage.EN,
+    ): TelegramMessageAddress.Inline {
+        val result = InlineQueryResultArticle(
+            "download",
+            messages.text(language, TelegramMessage.BOT_NAME),
+            text,
+        )
         val response = apiClient.execute(AnswerGuestQuery(guestQueryId, result))
         val inlineMessageId = response.result?.inlineMessageId
             ?.takeIf(String::isNotBlank)
@@ -40,13 +61,22 @@ class TelegramSender(
         return TelegramMessageAddress.Inline(inlineMessageId)
     }
 
-    fun editStatus(address: TelegramMessageAddress, status: TelegramDownloadStatus) {
-        editText(address, status.text)
+    fun editStatus(
+        address: TelegramMessageAddress,
+        status: TelegramDownloadStatus,
+        language: BotLanguage = BotLanguage.EN,
+    ) {
+        editText(address, messages.text(language, status.message))
     }
 
-    fun editStatus(chatId: Long, messageId: Int?, status: TelegramDownloadStatus) {
+    fun editStatus(
+        chatId: Long,
+        messageId: Int?,
+        status: TelegramDownloadStatus,
+        language: BotLanguage = BotLanguage.EN,
+    ) {
         messageId ?: return
-        editText(chatId, messageId, status.text)
+        editText(chatId, messageId, messages.text(language, status.message))
     }
 
     fun editDownloadChoice(
@@ -55,12 +85,13 @@ class TelegramSender(
         sessionToken: UUID,
         mediaInfo: DownloadChoiceMediaInfo,
         options: List<DownloadChoiceOptionSnapshot>,
+        language: BotLanguage = BotLanguage.EN,
     ) {
         editText(
             chatId = chatId,
             messageId = messageId,
-            text = downloadChoiceView.text(mediaInfo),
-            keyboard = downloadChoiceView.keyboard(sessionToken, options),
+            text = downloadChoiceView.text(mediaInfo, language),
+            keyboard = downloadChoiceView.keyboard(sessionToken, options, language),
             parseMode = ParseMode.HTML,
         )
     }
@@ -70,17 +101,23 @@ class TelegramSender(
         sessionToken: UUID,
         mediaInfo: DownloadChoiceMediaInfo,
         options: List<DownloadChoiceOptionSnapshot>,
+        language: BotLanguage = BotLanguage.EN,
     ) {
         editText(
             address = address,
-            text = downloadChoiceView.text(mediaInfo),
-            keyboard = downloadChoiceView.keyboard(sessionToken, options),
+            text = downloadChoiceView.text(mediaInfo, language),
+            keyboard = downloadChoiceView.keyboard(sessionToken, options, language),
             parseMode = ParseMode.HTML,
         )
     }
 
-    fun editMessage(chatId: Long, messageId: Int, text: String) {
-        editText(chatId, messageId, text)
+    fun editMessage(
+        chatId: Long,
+        messageId: Int,
+        text: String,
+        keyboard: InlineKeyboardMarkup? = null,
+    ) {
+        editText(chatId, messageId, text, keyboard)
     }
 
     fun editMessage(address: TelegramMessageAddress, text: String) {
@@ -153,13 +190,13 @@ sealed interface TelegramMessageAddress {
     data class Inline(val inlineMessageId: String) : TelegramMessageAddress
 }
 
-enum class TelegramDownloadStatus(val text: String) {
-    ANALYZING("Анализирую варианты… ⏳"),
-    QUEUED("В очереди ⏳"),
-    DOWNLOADING("Скачиваю ⬇️"),
-    UPLOADING("Загружаю в Telegram ⬆️"),
-    REJECTED_TOO_LARGE("Слишком тяжелый файл 🪨 Не справлюсь"),
-    AUTHENTICATION_REQUIRED("Не смогу скачать, сервис требует cookies ⛔"),
-    SOURCE_UNAVAILABLE("Публикация недоступна для скачивания ⛔"),
-    ERROR("Ошибка ⛔"),
+enum class TelegramDownloadStatus(val message: TelegramMessage) {
+    ANALYZING(TelegramMessage.STATUS_ANALYZING),
+    QUEUED(TelegramMessage.STATUS_QUEUED),
+    DOWNLOADING(TelegramMessage.STATUS_DOWNLOADING),
+    UPLOADING(TelegramMessage.STATUS_UPLOADING),
+    REJECTED_TOO_LARGE(TelegramMessage.STATUS_REJECTED_TOO_LARGE),
+    AUTHENTICATION_REQUIRED(TelegramMessage.STATUS_AUTHENTICATION_REQUIRED),
+    SOURCE_UNAVAILABLE(TelegramMessage.STATUS_SOURCE_UNAVAILABLE),
+    ERROR(TelegramMessage.STATUS_ERROR),
 }

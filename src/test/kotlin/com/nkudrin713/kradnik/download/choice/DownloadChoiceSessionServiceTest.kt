@@ -3,6 +3,8 @@ package com.nkudrin713.kradnik.download.choice
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.telegram.localization.telegramMessages
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -19,7 +21,11 @@ import kotlin.test.assertTrue
 
 class DownloadChoiceSessionServiceTest {
     private val repository: DownloadChoiceSessionRepository = mockk()
-    private val service = DownloadChoiceSessionService(repository, Duration.ofMinutes(30))
+    private val service = DownloadChoiceSessionService(
+        repository = repository,
+        messages = telegramMessages(),
+        consumedSessionTtl = Duration.ofMinutes(30),
+    )
 
     @Test
     fun createsSessionWithPlanSnapshot() {
@@ -30,6 +36,7 @@ class DownloadChoiceSessionServiceTest {
         val actual = service.create(createCommand())
 
         assertEquals(300, actual.telegramUserId)
+        assertEquals(BotLanguage.EN, actual.language)
         assertEquals(listOf("video_720"), actual.options.map { it.key })
         assertNotNull(actual.cleanupAfter)
         verify(exactly = 1) { repository.deleteConsumed(any()) }

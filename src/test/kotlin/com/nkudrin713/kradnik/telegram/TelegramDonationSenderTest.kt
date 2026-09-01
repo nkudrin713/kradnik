@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.request.BaseRequest
@@ -16,7 +17,7 @@ import kotlin.test.Test
 
 class TelegramDonationSenderTest {
     private val bot: TelegramBot = mockk()
-    private val sender = TelegramDonationSender(TelegramApiClient(bot))
+    private val sender = TelegramDonationSender(TelegramApiClient(bot), telegramMessages())
 
     @Test
     fun sendsDonationMessage() {
@@ -25,7 +26,13 @@ class TelegramDonationSenderTest {
 
         sender.sendMessage(100, "https://example.com/donate")
 
-        (requests.single() as SendMessage).getParameters().containsKey("reply_markup") shouldBe true
+        val request = requests.single() as SendMessage
+        request.getParameters().containsKey("reply_markup") shouldBe true
+        request.getParameters()["text"] shouldBe "Kradnik remains free.\n\n" +
+                "This is a tip jar for anyone who wants to add some fuel to the project.\n" +
+                "Donations pay for hosting, new features, and the developer’s peace of mind.\n" +
+                "I promise not to spend them on beer or cigarettes.\n\n" +
+                "Thank you for helping the bot stay alive."
     }
 
     @Test

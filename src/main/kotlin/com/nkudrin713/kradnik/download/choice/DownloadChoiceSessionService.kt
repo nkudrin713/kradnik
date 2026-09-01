@@ -1,6 +1,9 @@
 package com.nkudrin713.kradnik.download.choice
 
 import org.springframework.beans.factory.annotation.Value
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
@@ -15,6 +18,7 @@ import java.util.UUID
 @Service
 class DownloadChoiceSessionService(
     private val repository: DownloadChoiceSessionRepository,
+    private val messages: TelegramMessages,
     @Value("\${download.choice-session-ttl:30m}")
     private val consumedSessionTtl: Duration = Duration.ofMinutes(30),
 ) {
@@ -34,6 +38,7 @@ class DownloadChoiceSessionService(
                 telegramRequestMessageId = command.telegramRequestMessageId,
                 telegramMenuMessageId = command.telegramMenuMessageId,
                 telegramInlineMessageId = command.telegramInlineMessageId,
+                language = command.language,
                 options = command.plan.options,
                 cleanupAfter = now.plus(consumedSessionTtl),
             ),
@@ -71,7 +76,8 @@ class DownloadChoiceSessionService(
             ?: return DownloadChoiceSelection.Invalid
         if (!option.available) {
             return DownloadChoiceSelection.Unavailable(
-                reason = option.unavailableReason ?: "Вариант недоступен",
+                reason = option.unavailableReason
+                    ?: messages.text(session.language, TelegramMessage.CHOICE_OPTION_UNAVAILABLE),
             )
         }
 
@@ -101,6 +107,7 @@ data class CreateDownloadChoiceSessionCommand(
     val telegramRequestMessageId: Int,
     val telegramMenuMessageId: Int?,
     val telegramInlineMessageId: String? = null,
+    val language: BotLanguage = BotLanguage.EN,
     val plan: DownloadChoicePlan,
 )
 

@@ -7,6 +7,7 @@ import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -33,14 +34,14 @@ class DownloadJobLifecycleTest {
     fun marksDownloadingAndUploading() {
         val attempt = attempt(job())
         val uploadingJob = job(status = DownloadJobStatus.UPLOADING)
-        every { telegramSender.editStatus(any(), any(), any()) } just runs
+        every { telegramSender.editStatus(any<Long>(), any(), any(), any()) } just runs
         every { downloadJobService.markUploading(attempt) } returns uploadingJob
 
         lifecycle.markDownloading(attempt)
         lifecycle.markUploading(attempt)
 
-        verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.DOWNLOADING) }
-        verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.UPLOADING) }
+        verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.DOWNLOADING, BotLanguage.EN) }
+        verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.UPLOADING, BotLanguage.EN) }
     }
 
     @Test
@@ -48,11 +49,11 @@ class DownloadJobLifecycleTest {
         val attempt = attempt(job(attempts = 2))
         val queuedJob = job(status = DownloadJobStatus.QUEUED)
         every { downloadJobService.retryAt(attempt, "error", now.plusSeconds(30)) } returns queuedJob
-        every { telegramSender.editStatus(any(), any(), any()) } just runs
+        every { telegramSender.editStatus(any<Long>(), any(), any(), any()) } just runs
 
         lifecycle.failOrRetry(attempt, "error")
 
-        verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.QUEUED) }
+        verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.QUEUED, BotLanguage.EN) }
     }
 
     @Test
@@ -61,7 +62,7 @@ class DownloadJobLifecycleTest {
         val retryAfter = Duration.ofSeconds(90)
         val queuedJob = job(status = DownloadJobStatus.QUEUED)
         every { downloadJobService.retryAt(attempt, "error", now.plus(retryAfter)) } returns queuedJob
-        every { telegramSender.editStatus(any(), any(), any()) } just runs
+        every { telegramSender.editStatus(any<Long>(), any(), any(), any()) } just runs
 
         lifecycle.failOrRetry(attempt, "error", retryAfter)
 
@@ -73,26 +74,32 @@ class DownloadJobLifecycleTest {
         val attempt = attempt(job(attempts = 3))
         val failedJob = job(status = DownloadJobStatus.FAILED)
         every { downloadJobService.retryAt(attempt, "error", now.plusSeconds(60)) } returns failedJob
-        every { telegramSender.editStatus(any(), any(), any()) } just runs
+        every { telegramSender.editStatus(any<Long>(), any(), any(), any()) } just runs
 
         lifecycle.failOrRetry(attempt, "error")
 
-        verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.ERROR) }
+        verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.ERROR, BotLanguage.EN) }
     }
 
     @Test
     fun reportsSpecificTerminalStatuses() {
         val attempt = attempt(job())
         every { downloadJobService.markFailed(attempt, any()) } returns job(status = DownloadJobStatus.FAILED)
-        every { telegramSender.editStatus(any(), any(), any()) } just runs
+        every { telegramSender.editStatus(any<Long>(), any(), any(), any()) } just runs
 
         lifecycle.rejectTooLarge(attempt, "too large")
         lifecycle.failSourceUnavailable(attempt, "missing")
         lifecycle.failAuthenticationRequired(attempt, "auth")
 
-        verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.REJECTED_TOO_LARGE) }
-        verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.SOURCE_UNAVAILABLE) }
-        verify { telegramSender.editStatus(100, 10, TelegramDownloadStatus.AUTHENTICATION_REQUIRED) }
+        verify {
+            telegramSender.editStatus(100, 10, TelegramDownloadStatus.REJECTED_TOO_LARGE, BotLanguage.EN)
+        }
+        verify {
+            telegramSender.editStatus(100, 10, TelegramDownloadStatus.SOURCE_UNAVAILABLE, BotLanguage.EN)
+        }
+        verify {
+            telegramSender.editStatus(100, 10, TelegramDownloadStatus.AUTHENTICATION_REQUIRED, BotLanguage.EN)
+        }
     }
 
     @Test
@@ -127,6 +134,7 @@ class DownloadJobLifecycleTest {
             telegramSender.editStatus(
                 TelegramMessageAddress.Inline("inline-message"),
                 TelegramDownloadStatus.DOWNLOADING,
+                BotLanguage.EN,
             )
         } just runs
         every { downloadJobService.markCompleted(attempt, "file-id") } returns completedJob
@@ -138,6 +146,7 @@ class DownloadJobLifecycleTest {
             telegramSender.editStatus(
                 TelegramMessageAddress.Inline("inline-message"),
                 TelegramDownloadStatus.DOWNLOADING,
+                BotLanguage.EN,
             )
         }
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
@@ -146,7 +155,9 @@ class DownloadJobLifecycleTest {
     @Test
     fun ignoresStatusDeliveryErrors() {
         val job = job().apply { telegramStatusMessageId = null }
-        every { telegramSender.editStatus(any(), any(), any()) } throws RuntimeException("Telegram error")
+        every {
+            telegramSender.editStatus(any<Long>(), any(), any(), any())
+        } throws RuntimeException("Telegram error")
         every { downloadJobService.markCompleted(any(), "file-id") } returns job
 
         lifecycle.markDownloading(attempt(job))

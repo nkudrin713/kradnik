@@ -8,6 +8,9 @@ import com.nkudrin713.kradnik.download.limit.AudioUploadPlan
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.springframework.stereotype.Component
@@ -25,20 +28,21 @@ class DownloadChoicePlanner(
     private val downloadEngine: DownloadEngine,
     private val audioUploadPlanner: AudioUploadPlanner,
     private val uploadLimits: TelegramUploadLimits,
+    private val messages: TelegramMessages,
 ) {
-    suspend fun plan(url: String): DownloadChoicePlan {
+    suspend fun plan(url: String, language: BotLanguage = BotLanguage.EN): DownloadChoicePlan {
         val specs = platformResolver.resolve(url)
         val video = specs.video
         val audio = specs.audio
-        val metadata = extractCatalog(video)
+        val metadata = extractCatalog(video, language)
 
         val options = buildList {
-            addAll(videoOptions(video, metadata))
-            audioOption(audio, metadata)?.let(::add)
-            coverOption(video, metadata)?.let(::add)
+            addAll(videoOptions(video, metadata, language))
+            audioOption(audio, metadata, language)?.let(::add)
+            coverOption(video, metadata, language)?.let(::add)
         }
         if (options.isEmpty()) {
-            throw DownloadChoicePlanningException("Не удалось определить доступные варианты")
+            throw DownloadChoicePlanningException(messages.text(language, TelegramMessage.ERROR_NO_OPTIONS))
         }
 
         return DownloadChoicePlan(
@@ -54,20 +58,20 @@ class DownloadChoicePlanner(
         )
     }
 
-    private suspend fun extractCatalog(spec: DownloadSpec): YtDlpMetadataDto {
+    private suspend fun extractCatalog(spec: DownloadSpec, language: BotLanguage): YtDlpMetadataDto {
         return when (val preparation = downloadEngine.prepareCatalog(spec)) {
             is DownloadPreparation.Ready -> preparation.session.metadata
             is DownloadPreparation.NotReady -> throw DownloadChoicePlanningException(
-                "Instagram временно ограничил запросы. Попробуйте позже",
+                messages.text(language, TelegramMessage.ERROR_INSTAGRAM_RATE_LIMITED),
             )
             is DownloadPreparation.RetryableFailure -> throw DownloadChoicePlanningException(
-                "Instagram временно недоступен. Попробуйте позже",
+                messages.text(language, TelegramMessage.ERROR_INSTAGRAM_UNAVAILABLE),
             )
             is DownloadPreparation.SourceUnavailable -> throw DownloadChoicePlanningException(
-                "Публикация недоступна для скачивания",
+                messages.text(language, TelegramMessage.ERROR_SOURCE_UNAVAILABLE),
             )
             is DownloadPreparation.TerminalFailure -> throw DownloadChoicePlanningException(
-                "Не удалось получить данные публикации",
+                messages.text(language, TelegramMessage.ERROR_METADATA_UNAVAILABLE),
             )
         }
     }
@@ -75,19 +79,38 @@ class DownloadChoicePlanner(
     private fun videoOptions(
         spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
+        language: BotLanguage,
     ): List<DownloadChoiceOptionSnapshot> {
         val formats = metadata.formats.orEmpty()
         if (formats.isEmpty()) {
-            return fallbackOriginalOption(spec, metadata)?.let(::listOf).orEmpty()
+            return fallbackOriginalOption(spec, metadata, language)?.let(::listOf).orEmpty()
         }
 
         return buildList {
             val original = selectVideo(formats, metadata, targetHeight = null)
-            original?.let { add(videoOption(spec, VIDEO_ORIGINAL_KEY, "Оригинал", it)) }
+            original?.let {
+                add(
+                    videoOption(
+                        spec = spec,
+                        key = VIDEO_ORIGINAL_KEY,
+                        label = messages.text(language, TelegramMessage.CHOICE_ORIGINAL),
+                        selected = it,
+                        language = language,
+                    )
+                )
+            }
             TARGET_HEIGHTS.forEach { height ->
                 selectVideo(formats, metadata, targetHeight = height)?.let { selected ->
                     if (height != 1080 || selected != original) {
-                        add(videoOption(spec, "video_$height", "${height}p", selected))
+                        add(
+                            videoOption(
+                                spec = spec,
+                                key = "video_$height",
+                                label = "${height}p",
+                                selected = selected,
+                                language = language,
+                            )
+                        )
                     }
                 }
             }
@@ -136,6 +159,7 @@ class DownloadChoicePlanner(
         key: String,
         label: String,
         selected: SelectedMedia,
+        language: BotLanguage,
     ): DownloadChoiceOptionSnapshot {
         val selectedSpec = spec.copy(
             formatSelector = selected.formatSelector,
@@ -147,12 +171,14 @@ class DownloadChoicePlanner(
             label = label,
             sizeBytes = selected.sizeBytes,
             approximateSize = selected.approximateSize,
+            language = language,
         )
     }
 
     private fun fallbackOriginalOption(
         spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
+        language: BotLanguage,
     ): DownloadChoiceOptionSnapshot? {
         val size = metadata.filesize ?: metadata.filesizeApprox ?: return null
         return option(
@@ -160,15 +186,17 @@ class DownloadChoicePlanner(
                 presetName = "${presetPrefix(spec)}_video_original",
             ),
             key = VIDEO_ORIGINAL_KEY,
-            label = "Оригинал",
+            label = messages.text(language, TelegramMessage.CHOICE_ORIGINAL),
             sizeBytes = size,
             approximateSize = metadata.filesize == null,
+            language = language,
         )
     }
 
     private fun audioOption(
         spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
+        language: BotLanguage,
     ): DownloadChoiceOptionSnapshot? {
         val plan = audioUploadPlanner.plan(metadata)
         if (plan !is AudioUploadPlan.Allowed) {
@@ -178,16 +206,18 @@ class DownloadChoicePlanner(
         return option(
             spec = selectedSpec,
             key = AUDIO_KEY,
-            label = "Только звук",
+            label = messages.text(language, TelegramMessage.CHOICE_AUDIO),
             sizeBytes = plan.estimatedSizeBytes,
             approximateSize = true,
             cacheKeySuffix = "audio:${plan.audioQuality}",
+            language = language,
         )
     }
 
     private fun coverOption(
         spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
+        language: BotLanguage,
     ): DownloadChoiceOptionSnapshot? {
         metadata.thumbnail?.takeIf { it.isNotBlank() } ?: return null
         val coverSpec = spec.copy(
@@ -199,10 +229,11 @@ class DownloadChoicePlanner(
         return option(
             spec = coverSpec,
             key = COVER_KEY,
-            label = "Обложка",
+            label = messages.text(language, TelegramMessage.CHOICE_COVER),
             sizeBytes = null,
             approximateSize = false,
             cacheKeySuffix = "cover:v1",
+            language = language,
         )
     }
 
@@ -213,6 +244,7 @@ class DownloadChoicePlanner(
         sizeBytes: Long?,
         approximateSize: Boolean,
         cacheKeySuffix: String = "choice:$key:${spec.presetName}",
+        language: BotLanguage,
     ): DownloadChoiceOptionSnapshot {
         val tooLarge = sizeBytes != null && sizeBytes > uploadLimits.maxUploadBytes
         return DownloadChoiceOptionSnapshot(
@@ -222,7 +254,7 @@ class DownloadChoicePlanner(
             approximateSize = approximateSize,
             available = !tooLarge,
             unavailableReason = if (tooLarge) {
-                "Размер превышает лимит Telegram"
+                messages.text(language, TelegramMessage.ERROR_TOO_LARGE)
             } else {
                 null
             },

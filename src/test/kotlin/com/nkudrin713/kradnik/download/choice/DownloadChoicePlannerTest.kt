@@ -10,6 +10,8 @@ import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import io.mockk.coEvery
@@ -32,6 +34,7 @@ class DownloadChoicePlannerTest {
         downloadEngine = downloadEngine,
         audioUploadPlanner = AudioUploadPlanner(uploadLimits),
         uploadLimits = uploadLimits,
+        messages = telegramMessages(),
     )
 
     @Test
@@ -50,7 +53,7 @@ class DownloadChoicePlannerTest {
             ),
         ))
 
-        val actual = planner.plan(URL)
+        val actual = planner.plan(URL, BotLanguage.RU)
 
         assertEquals(
             listOf("video_original", "video_1080", "video_720", "video_480", "video_360", "audio", "cover"),
@@ -81,7 +84,7 @@ class DownloadChoicePlannerTest {
             ),
         ))
 
-        val actual = planner.plan(URL)
+        val actual = planner.plan(URL, BotLanguage.RU)
 
         assertEquals(listOf("video_original", "video_720", "audio", "cover"), actual.options.map { it.key })
         val original = actual.options.first()
@@ -101,7 +104,7 @@ class DownloadChoicePlannerTest {
             ),
         ))
 
-        val actual = planner.plan(URL)
+        val actual = planner.plan(URL, BotLanguage.RU)
 
         assertEquals(
             listOf("video_original", "video_720", "audio", "cover"),
@@ -122,7 +125,7 @@ class DownloadChoicePlannerTest {
             ),
         ))
 
-        val option = planner.plan(URL).options.first { it.key == "video_original" }
+        val option = planner.plan(URL, BotLanguage.RU).options.first { it.key == "video_original" }
 
         assertEquals(16_500_000, option.sizeBytes)
         assertTrue(option.approximateSize)
@@ -141,7 +144,7 @@ class DownloadChoicePlannerTest {
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
         coEvery { downloadEngine.prepareCatalog(video) } returns prepared(catalog)
 
-        val actual = planner.plan(URL)
+        val actual = planner.plan(URL, BotLanguage.RU)
 
         assertEquals(DownloadPlatform.INSTAGRAM, actual.options.first().spec.platform)
         coVerify(exactly = 1) { downloadEngine.prepareCatalog(video) }

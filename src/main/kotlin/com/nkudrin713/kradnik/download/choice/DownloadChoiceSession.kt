@@ -5,6 +5,8 @@ import jakarta.persistence.Convert
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.BotLanguageConverter
 import java.time.Instant
 import java.util.UUID
 
@@ -37,6 +39,10 @@ class DownloadChoiceSession(
 
     @Column(name = "telegram_inline_message_id")
     var telegramInlineMessageId: String? = null,
+
+    @Convert(converter = BotLanguageConverter::class)
+    @Column(nullable = false)
+    var language: BotLanguage = BotLanguage.EN,
 
     @Convert(converter = DownloadChoiceOptionsJsonConverter::class)
     @Column(name = "options_json", nullable = false)

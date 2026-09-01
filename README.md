@@ -1,30 +1,32 @@
 # Kradnik
 
-Telegram-бот для скачивания публичных видео из YouTube, Instagram и VK. Пользователь отправляет ссылку самому боту или вызывает его в другом диалоге через `@bot link`, выбирает качество видео, звук или обложку и получает файл.
+A Telegram bot for downloading public videos from YouTube, Instagram, and VK. A user sends a link directly to the bot or invokes it in another chat with `@bot link`, selects a video quality, audio, or cover image, and receives the file.
 
-## Что умеет бот
+## Features
 
-- разбирает ссылки YouTube, Instagram и VK;
-- показывает доступные варианты и примерный размер до создания задачи;
-- скачивает видео, аудио и обложки;
-- подготавливает видео под ограничения Telegram с помощью `ffmpeg`;
-- повторно использует уже загруженный в Telegram `file_id`;
-- хранит очередь, попытки, lease и сессии выбора в PostgreSQL;
-- работает как с облачным Telegram Bot API, так и с локальным сервером для файлов до 2 ГБ;
-- очищает временные каталоги и проверяет свободное место перед скачиванием.
+- parses YouTube, Instagram, and VK links;
+- supports English and Russian user interfaces with a persisted per-user language preference;
+- shows available options and estimated sizes before creating a download job;
+- downloads video, audio, and cover images;
+- prepares video for Telegram constraints with `ffmpeg`;
+- reuses a `file_id` that was previously uploaded to Telegram;
+- stores the queue, attempts, leases, choice sessions, and language preferences in PostgreSQL;
+- works with both the cloud Telegram Bot API and a local server for files up to 2 GB;
+- cleans temporary directories and checks free disk space before downloading.
 
-Бот работает только с публичными одиночными публикациями. Плейлисты, закрытый контент и обход авторизации не поддерживаются.
+The bot supports only public single posts. Playlists, private content, and authentication bypasses are not supported.
 
-## Как проходит запрос
+## Request flow
 
 ```text
 TelegramPollingService
   -> TelegramUpdateHandler
-     -> direct message или guest_message
+     -> TelegramLanguageSelector + TelegramUserPreferenceService
+     -> direct message or guest_message
   -> DownloadChoiceCoordinator
   -> DownloadChoicePlanner + DownloadChoiceSessionService
 
-выбор пользователя
+user selection
   -> DownloadChoiceHandler
   -> TelegramDownloadStarter
   -> DownloadJobService
@@ -34,64 +36,69 @@ TelegramPollingService
   -> TelegramFileSender
 ```
 
-Маршрут разделён на две части. До выбора бот определяет платформу, получает каталог форматов и сохраняет меню. После выбора создаётся задача в PostgreSQL; worker забирает её с lease, скачивает файл и отправляет его в Telegram. В guest-режиме статусы, меню и итоговый файл последовательно заменяют одно inline-сообщение.
+On the first `/start`, the bot asks the user to choose English or Russian. The `/language` command opens the same selector later. If no explicit choice is available, the bot defaults to English.
 
-## Где искать код
+The download route is split into two parts. Before selection, the bot resolves the platform, retrieves the format catalog, builds a localized menu, and persists the menu together with its language. After selection, it creates a PostgreSQL job with the same language; a worker claims the job with a lease, downloads the file, and sends it to Telegram. In guest mode, the status, menu, and final file successively replace one inline message.
 
-| Задача | Основные файлы |
+## Code map
+
+| Task | Main files |
 | --- | --- |
-| Приём команд и callback | `telegram/handler/TelegramUpdateHandler.kt`, `DownloadChoiceHandler.kt` |
-| Меню качества, аудио и обложки | `download/choice/DownloadChoicePlanner.kt`, `telegram/TelegramDownloadChoiceView.kt` |
-| Разбор ссылок и параметры платформ | `download/platform/*DownloadHandler.kt` |
-| Скачивание источника | `download/DownloadEngine.kt`, `ytdlp/client/YtDlpService.kt` |
-| Особенности Instagram | `download/instagram/` |
-| Очередь, lease и повторы | `download/service/DownloadJobService.kt`, `download/processing/` |
-| Отправка и лимиты Telegram | `telegram/TelegramMediaSender.kt`, `download/telegram/TelegramFileSender.kt`, `telegram/config/TelegramBotProperties.kt` |
-| Подготовка видео | `download/video/` |
-| Схема базы | `src/main/resources/db/migration/` |
-| Контейнеры и деплой | `docker-compose.yml`, `.github/workflows/`, `scripts/render-deploy-env.sh` |
+| Commands and callback routing | `telegram/handler/TelegramUpdateHandler.kt`, `DownloadChoiceHandler.kt` |
+| Language selection and persistence | `telegram/TelegramLanguageSelector.kt`, `telegram/localization/` |
+| Localized copy | `src/main/resources/i18n/messages_*.properties` |
+| Video quality, audio, and cover menu | `download/choice/DownloadChoicePlanner.kt`, `telegram/TelegramDownloadChoiceView.kt` |
+| Link parsing and platform parameters | `download/platform/*DownloadHandler.kt` |
+| Source downloading | `download/DownloadEngine.kt`, `ytdlp/client/YtDlpService.kt` |
+| Instagram-specific behavior | `download/instagram/` |
+| Queue, leases, and retries | `download/service/DownloadJobService.kt`, `download/processing/` |
+| Telegram delivery and limits | `telegram/TelegramMediaSender.kt`, `download/telegram/TelegramFileSender.kt`, `telegram/config/TelegramBotProperties.kt` |
+| Video preparation | `download/video/` |
+| Database schema | `src/main/resources/db/migration/` |
+| Containers and deployment | `docker-compose.yml`, `.github/workflows/`, `scripts/render-deploy-env.sh` |
 
-Чтобы добавить платформу, достаточно добавить значение в `DownloadPlatform`, реализацию `PlatformDownloadHandler` и тесты поддерживаемых URL. `PlatformResolver` получает обработчики через Spring. Параметры формата, нормализованный URL и cache key задаются в обработчике платформы.
+To add a platform, add a `DownloadPlatform` value, a `PlatformDownloadHandler` implementation, and supported-URL tests. `PlatformResolver` receives the handlers through Spring. The platform handler owns format parameters, the normalized URL, and the cache key.
 
-## Локальный запуск
+## Local development
 
-Нужны Java 21, Docker, `yt-dlp`, `ffmpeg` и токен Telegram-бота.
+Java 21, Docker, `yt-dlp`, `ffmpeg`, and a Telegram bot token are required.
 
 ```bash
 cp .env.example .env
-# заполнить TELEGRAM_BOT_TOKEN в .env
+# Set TELEGRAM_BOT_TOKEN in .env
 docker compose up -d postgres
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
-Проверки:
+Run checks with:
 
 ```bash
 ./gradlew check
 ```
 
-`check` запускает тесты и проверяет суммарное покрытие JaCoCo. Интеграционные тесты используют PostgreSQL через Testcontainers, поэтому Docker должен быть запущен.
+`check` runs the tests and verifies aggregate JaCoCo coverage. Integration tests use PostgreSQL through Testcontainers, so Docker must be running.
 
-## Конфигурация
+## Configuration
 
-Приложение не знает, является инстанс тестовым или production. Окружение передаёт конкретные адреса, токены, лимиты и пути через переменные среды.
+The application does not know whether an instance is test or production. The environment provides concrete addresses, tokens, limits, and paths through environment variables.
 
-Основные группы настроек:
+Main configuration groups:
 
-- `POSTGRES_*` — подключение к PostgreSQL;
-- `TELEGRAM_BOT_*`, `TELEGRAM_MAX_UPLOAD_BYTES` — Telegram API и лимит файла;
-- `TELEGRAM_FILE_STORAGE_CHAT_ID` — приватный чат для получения `file_id` перед выдачей нового файла в guest-режиме;
-- `DOWNLOAD_WORK_DIR`, `DOWNLOAD_*_TIMEOUT` — рабочий каталог и таймауты;
-- `DOWNLOAD_INSTAGRAM_RATE_LIMIT_*` — локальное ограничение запросов Instagram;
-- `YOUTUBE_PO_TOKEN_PROVIDER_URL` — необязательный PO Token Provider для YouTube.
+- `POSTGRES_*` — PostgreSQL connection;
+- `TELEGRAM_BOT_*`, `TELEGRAM_MAX_UPLOAD_BYTES` — Telegram API and file-size limit;
+- `TELEGRAM_FILE_STORAGE_CHAT_ID` — private chat used to obtain a `file_id` before delivering a new file in guest mode;
+- `TELEGRAM_DONATION_PIN_LANGUAGE` — donation channel pin language, `en` by default;
+- `DOWNLOAD_WORK_DIR`, `DOWNLOAD_*_TIMEOUT` — work directory and timeouts;
+- `DOWNLOAD_INSTAGRAM_RATE_LIMIT_*` — local Instagram request limiting;
+- `YOUTUBE_PO_TOKEN_PROVIDER_URL` — optional YouTube PO Token Provider.
 
-Локальный Telegram Bot API определяется по `TELEGRAM_BOT_API_URL` и `TELEGRAM_BOT_FILE_API_URL`. В этом режиме `DOWNLOAD_WORK_DIR` должен указывать на общий с контейнером Bot API volume.
+A local Telegram Bot API is selected through `TELEGRAM_BOT_API_URL` and `TELEGRAM_BOT_FILE_API_URL`. In this mode, `DOWNLOAD_WORK_DIR` must point to a volume shared with the Bot API container.
 
-Для guest-режима нужно включить Guest Mode у бота через BotFather и задать `TELEGRAM_FILE_STORAGE_CHAT_ID`. Бот должен иметь право отправлять файлы в этот приватный чат. Уже закешированные `file_id` используются без промежуточной загрузки.
+Guest mode must be enabled through BotFather, and `TELEGRAM_FILE_STORAGE_CHAT_ID` must be configured. The bot needs permission to send files to that private chat. Cached `file_id` values are used without an intermediate upload.
 
-## Docker и деплой
+## Docker and deployment
 
-Образ содержит приложение, `yt-dlp`, `ffmpeg` и необходимые runtime-зависимости. Для локальной сборки полного стека:
+The image contains the application, `yt-dlp`, `ffmpeg`, and the required runtime dependencies. To build the full stack locally:
 
 ```bash
 ./gradlew bootJar
@@ -101,6 +108,6 @@ docker build -t kradnik:local .
 APP_IMAGE=kradnik:local docker compose up -d
 ```
 
-Compose-профили `telegram-local` и `youtube-pot` включают необязательные сервисы. В GitHub Actions каждый успешный push в `main` разворачивается в test-окружение. Production-релиз помечает Git-тегом `vX.Y.Z` уже проверенный коммит `main` и разворачивает тот же image digest без повторной сборки. Значения окружений остаются в GitHub Environments и server-side `.env`, а не в Kotlin-коде.
+The `telegram-local` and `youtube-pot` Compose profiles enable optional services. In GitHub Actions, every successful push to `main` is deployed to the test environment. A production release tags the already verified `main` commit as `vX.Y.Z` and deploys the same image digest without rebuilding it. Environment values remain in GitHub Environments and server-side `.env` files rather than Kotlin code.
 
-Миграции базы выполняет Flyway. Уже применённые миграции не изменяются; любое изменение схемы добавляется новым файлом.
+Flyway manages database migrations. Applied migrations are never modified; every schema change is added as a new migration file.

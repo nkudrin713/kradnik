@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.choice.SelectDownloadChoiceCommand
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
+import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.pengrad.telegrambot.model.CallbackQuery
 import org.slf4j.LoggerFactory
@@ -13,7 +14,7 @@ import org.springframework.stereotype.Component
 /**
  * Parses a Telegram callback and asks [DownloadChoiceSessionService] to validate ownership and atomically select it.
  * A ready choice is passed to [TelegramDownloadStarter]; enqueue failure releases the session, while success answers
- * the callback and removes the menu through [TelegramSender].
+ * the callback and removes the direct-chat menu through [TelegramSender].
  */
 @Component
 class DownloadChoiceHandler(
@@ -25,23 +26,26 @@ class DownloadChoiceHandler(
 
     fun handle(callbackQuery: CallbackQuery) {
         val callback = DownloadChoiceCallback.parse(callbackQuery.data().trim()) ?: return
-        val message = callbackQuery.maybeInaccessibleMessage()
-        val chatId = message.chat().id()
-        val messageId = message.messageId()
+        val address = callbackQuery.inlineMessageId()
+            ?.let(TelegramMessageAddress::Inline)
+            ?: callbackQuery.maybeInaccessibleMessage()?.let {
+                TelegramMessageAddress.Chat(it.chat().id(), it.messageId())
+            }
+            ?: return answer(callbackQuery.id(), "Меню недействительно", showAlert = true)
         val selection = sessionService.select(
             SelectDownloadChoiceCommand(
                 token = callback.sessionToken,
                 optionKey = callback.optionKey,
                 telegramUserId = callbackQuery.from().id(),
-                telegramChatId = chatId,
-                telegramMenuMessageId = messageId,
+                telegramChatId = (address as? TelegramMessageAddress.Chat)?.chatId,
+                telegramMenuMessageId = (address as? TelegramMessageAddress.Chat)?.messageId,
+                telegramInlineMessageId = (address as? TelegramMessageAddress.Inline)?.inlineMessageId,
             )
         )
 
         when (selection) {
             is DownloadChoiceSelection.Ready -> startDownload(
-                chatId = chatId,
-                messageId = messageId,
+                address = address,
                 callbackQueryId = callbackQuery.id(),
                 callback = callback,
                 selection = selection,
@@ -58,8 +62,7 @@ class DownloadChoiceHandler(
     }
 
     private fun startDownload(
-        chatId: Long,
-        messageId: Int,
+        address: TelegramMessageAddress,
         callbackQueryId: String,
         callback: DownloadChoiceCallback,
         selection: DownloadChoiceSelection.Ready,
@@ -70,6 +73,7 @@ class DownloadChoiceHandler(
                 telegramChatId = selection.session.telegramChatId,
                 telegramUpdateId = selection.session.telegramUpdateId,
                 telegramRequestMessageId = selection.session.telegramRequestMessageId,
+                messageAddress = address,
                 spec = selection.option.spec,
             )
         } catch (error: Exception) {
@@ -78,7 +82,9 @@ class DownloadChoiceHandler(
         }
 
         answer(callbackQueryId, "Выбрано: ${selection.option.label}")
-        deleteMenuBestEffort(chatId, messageId)
+        if (address is TelegramMessageAddress.Chat) {
+            deleteMenuBestEffort(address.chatId, address.messageId)
+        }
     }
 
     private fun answer(callbackQueryId: String, text: String, showAlert: Boolean = false) {

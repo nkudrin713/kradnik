@@ -1,6 +1,6 @@
 # Kradnik
 
-Telegram-бот для скачивания публичных видео из YouTube, Instagram и VK. Пользователь отправляет ссылку, выбирает качество видео, звук или обложку и получает файл ответом на исходное сообщение.
+Telegram-бот для скачивания публичных видео из YouTube, Instagram и VK. Пользователь отправляет ссылку самому боту или вызывает его в другом диалоге через `@bot link`, выбирает качество видео, звук или обложку и получает файл.
 
 ## Что умеет бот
 
@@ -20,6 +20,7 @@ Telegram-бот для скачивания публичных видео из Y
 ```text
 TelegramPollingService
   -> TelegramUpdateHandler
+     -> direct message или guest_message
   -> DownloadChoiceCoordinator
   -> DownloadChoicePlanner + DownloadChoiceSessionService
 
@@ -33,7 +34,7 @@ TelegramPollingService
   -> TelegramFileSender
 ```
 
-Маршрут разделён на две части. До выбора бот определяет платформу, получает каталог форматов и сохраняет меню. После выбора создаётся задача в PostgreSQL; worker забирает её с lease, скачивает файл и отправляет его в Telegram.
+Маршрут разделён на две части. До выбора бот определяет платформу, получает каталог форматов и сохраняет меню. После выбора создаётся задача в PostgreSQL; worker забирает её с lease, скачивает файл и отправляет его в Telegram. В guest-режиме статусы, меню и итоговый файл последовательно заменяют одно inline-сообщение.
 
 ## Где искать код
 
@@ -79,11 +80,14 @@ docker compose up -d postgres
 
 - `POSTGRES_*` — подключение к PostgreSQL;
 - `TELEGRAM_BOT_*`, `TELEGRAM_MAX_UPLOAD_BYTES` — Telegram API и лимит файла;
+- `TELEGRAM_FILE_STORAGE_CHAT_ID` — приватный чат для получения `file_id` перед выдачей нового файла в guest-режиме;
 - `DOWNLOAD_WORK_DIR`, `DOWNLOAD_*_TIMEOUT` — рабочий каталог и таймауты;
 - `DOWNLOAD_INSTAGRAM_RATE_LIMIT_*` — локальное ограничение запросов Instagram;
 - `YOUTUBE_PO_TOKEN_PROVIDER_URL` — необязательный PO Token Provider для YouTube.
 
 Локальный Telegram Bot API определяется по `TELEGRAM_BOT_API_URL` и `TELEGRAM_BOT_FILE_API_URL`. В этом режиме `DOWNLOAD_WORK_DIR` должен указывать на общий с контейнером Bot API volume.
+
+Для guest-режима нужно включить Guest Mode у бота через BotFather и задать `TELEGRAM_FILE_STORAGE_CHAT_ID`. Бот должен иметь право отправлять файлы в этот приватный чат. Уже закешированные `file_id` используются без промежуточной загрузки.
 
 ## Docker и деплой
 

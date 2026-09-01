@@ -71,12 +71,30 @@ class TelegramDownloadStarterTest {
         verify { telegramSender.deleteMessage(100, 500) }
     }
 
-    private fun start(outputType: OutputType) {
+    @Test
+    fun reusesInlineMessageAsJobStatus() {
+        val command = slot<CreateDownloadJobCommand>()
+        val address = TelegramMessageAddress.Inline("inline-message")
+        every { telegramSender.editStatus(address, TelegramDownloadStatus.QUEUED) } just runs
+        every { downloadJobService.createJob(capture(command)) } returns true
+
+        start(OutputType.VIDEO, address)
+
+        assertEquals("inline-message", command.captured.telegramInlineMessageId)
+        assertEquals(null, command.captured.telegramStatusMessageId)
+        verify(exactly = 0) { telegramSender.sendStatus(any(), any(), any()) }
+    }
+
+    private fun start(
+        outputType: OutputType,
+        messageAddress: TelegramMessageAddress = TelegramMessageAddress.Chat(100, 500),
+    ) {
         starter.start(
             telegramUserId = 300,
             telegramChatId = 100,
             telegramUpdateId = 400,
             telegramRequestMessageId = 200,
+            messageAddress = messageAddress,
             spec = spec(outputType),
         )
     }

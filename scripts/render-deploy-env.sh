@@ -95,6 +95,7 @@ printf 'YOUTUBE_PO_TOKEN_PROVIDER_CONTAINER_NAME=%s\n' "$youtube_po_token_provid
 printf 'TELEGRAM_BOT_API_URL=%s\n' "$telegram_bot_api_url"
 printf 'TELEGRAM_BOT_FILE_API_URL=%s\n' "$telegram_bot_file_api_url"
 printf 'TELEGRAM_MAX_UPLOAD_BYTES=%s\n' "$telegram_max_upload_bytes"
+printf 'TELEGRAM_FILE_STORAGE_CHAT_ID=%s\n' "${TELEGRAM_FILE_STORAGE_CHAT_ID:-}"
 printf 'TELEGRAM_CONNECT_TIMEOUT=%s\n' "${TELEGRAM_CONNECT_TIMEOUT:-10s}"
 printf 'TELEGRAM_REQUEST_TIMEOUT=%s\n' "${TELEGRAM_REQUEST_TIMEOUT:-60m}"
 printf 'DOWNLOAD_WORK_DIR=%s\n' "$download_work_dir"

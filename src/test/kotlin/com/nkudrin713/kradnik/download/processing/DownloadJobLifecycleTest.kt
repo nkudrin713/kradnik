@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
+import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import io.mockk.every
 import io.mockk.just
@@ -109,6 +110,37 @@ class DownloadJobLifecycleTest {
         )
 
         verify { telegramSender.deleteMessage(100, 10) }
+    }
+
+    @Test
+    fun editsInlineStatusAndKeepsCompletedGuestMessage() {
+        val inlineJob = job().apply {
+            telegramStatusMessageId = null
+            telegramInlineMessageId = "inline-message"
+        }
+        val attempt = attempt(inlineJob)
+        val completedJob = job(status = DownloadJobStatus.COMPLETED).apply {
+            telegramStatusMessageId = null
+            telegramInlineMessageId = "inline-message"
+        }
+        every {
+            telegramSender.editStatus(
+                TelegramMessageAddress.Inline("inline-message"),
+                TelegramDownloadStatus.DOWNLOADING,
+            )
+        } just runs
+        every { downloadJobService.markCompleted(attempt, "file-id") } returns completedJob
+
+        lifecycle.markDownloading(attempt)
+        lifecycle.complete(attempt, "file-id")
+
+        verify {
+            telegramSender.editStatus(
+                TelegramMessageAddress.Inline("inline-message"),
+                TelegramDownloadStatus.DOWNLOADING,
+            )
+        }
+        verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
     }
 
     @Test

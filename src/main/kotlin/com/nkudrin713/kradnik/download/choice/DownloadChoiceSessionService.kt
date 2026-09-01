@@ -33,6 +33,7 @@ class DownloadChoiceSessionService(
                 telegramUpdateId = command.telegramUpdateId,
                 telegramRequestMessageId = command.telegramRequestMessageId,
                 telegramMenuMessageId = command.telegramMenuMessageId,
+                telegramInlineMessageId = command.telegramInlineMessageId,
                 options = command.plan.options,
                 cleanupAfter = now.plus(consumedSessionTtl),
             ),
@@ -49,10 +50,17 @@ class DownloadChoiceSessionService(
             ?: return DownloadChoiceSelection.Invalid
         val now = Instant.now()
 
-        if (session.telegramUserId != command.telegramUserId || session.telegramChatId != command.telegramChatId) {
+        if (session.telegramUserId != command.telegramUserId) {
             return DownloadChoiceSelection.NotOwner
         }
-        if (session.telegramMenuMessageId != command.telegramMenuMessageId) {
+        val sameMessage = if (command.telegramInlineMessageId != null) {
+            session.telegramInlineMessageId == command.telegramInlineMessageId
+        } else {
+            session.telegramInlineMessageId == null &&
+                    session.telegramChatId == command.telegramChatId &&
+                    session.telegramMenuMessageId == command.telegramMenuMessageId
+        }
+        if (!sameMessage) {
             return DownloadChoiceSelection.Invalid
         }
         if (session.selectedAt != null) {
@@ -91,7 +99,8 @@ data class CreateDownloadChoiceSessionCommand(
     val telegramChatId: Long,
     val telegramUpdateId: Int,
     val telegramRequestMessageId: Int,
-    val telegramMenuMessageId: Int,
+    val telegramMenuMessageId: Int?,
+    val telegramInlineMessageId: String? = null,
     val plan: DownloadChoicePlan,
 )
 
@@ -99,8 +108,9 @@ data class SelectDownloadChoiceCommand(
     val token: UUID,
     val optionKey: String,
     val telegramUserId: Long,
-    val telegramChatId: Long,
-    val telegramMenuMessageId: Int,
+    val telegramChatId: Long?,
+    val telegramMenuMessageId: Int?,
+    val telegramInlineMessageId: String? = null,
 )
 
 sealed interface DownloadChoiceSelection {

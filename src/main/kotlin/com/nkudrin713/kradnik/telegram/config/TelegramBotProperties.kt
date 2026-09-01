@@ -11,6 +11,7 @@ data class TelegramBotProperties(
     val apiUrl: String = CLOUD_API_URL,
     val fileApiUrl: String = CLOUD_FILE_API_URL,
     val maxUploadBytes: Long = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
+    val fileStorageChatId: Long? = null,
     val connectTimeout: Duration = Duration.ofSeconds(10),
     val requestTimeout: Duration = Duration.ofMinutes(60),
 ) {
@@ -20,6 +21,7 @@ data class TelegramBotProperties(
 
     init {
         require(token.isNotBlank()) { "telegram.bot.token must not be blank" }
+        require(fileStorageChatId != 0L) { "telegram.bot.file-storage-chat-id must not be zero" }
         require(maxUploadBytes in 1..TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES) {
             "telegram.bot.max-upload-bytes must be between 1 and ${TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES}"
         }

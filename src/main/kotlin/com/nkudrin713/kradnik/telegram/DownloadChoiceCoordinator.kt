@@ -34,21 +34,26 @@ class DownloadChoiceCoordinator(
     }
 
     fun prepare(command: PrepareDownloadChoiceCommand) {
-        val statusMessageId = telegramSender.sendStatus(
-            chatId = command.telegramChatId,
-            status = TelegramDownloadStatus.ANALYZING,
-            replyToMessageId = command.telegramRequestMessageId,
-        )
+        val messageAddress = command.guestQueryId
+            ?.let { telegramSender.answerGuestMessage(it, TelegramDownloadStatus.ANALYZING.text) }
+            ?: TelegramMessageAddress.Chat(
+                chatId = command.telegramChatId,
+                messageId = telegramSender.sendStatus(
+                    chatId = command.telegramChatId,
+                    status = TelegramDownloadStatus.ANALYZING,
+                    replyToMessageId = command.telegramRequestMessageId,
+                ),
+            )
         executor.submit {
             runBlocking {
-                prepareAsync(command, statusMessageId)
+                prepareAsync(command, messageAddress)
             }
         }
     }
 
     internal suspend fun prepareAsync(
         command: PrepareDownloadChoiceCommand,
-        statusMessageId: Int,
+        messageAddress: TelegramMessageAddress,
     ) {
         try {
             val plan = planner.plan(command.url)
@@ -58,13 +63,13 @@ class DownloadChoiceCoordinator(
                     telegramChatId = command.telegramChatId,
                     telegramUpdateId = command.telegramUpdateId,
                     telegramRequestMessageId = command.telegramRequestMessageId,
-                    telegramMenuMessageId = statusMessageId,
+                    telegramMenuMessageId = (messageAddress as? TelegramMessageAddress.Chat)?.messageId,
+                    telegramInlineMessageId = (messageAddress as? TelegramMessageAddress.Inline)?.inlineMessageId,
                     plan = plan,
                 )
             )
             telegramSender.editDownloadChoice(
-                chatId = command.telegramChatId,
-                messageId = statusMessageId,
+                address = messageAddress,
                 sessionToken = session.token,
                 mediaInfo = plan.mediaInfo,
                 options = session.options,
@@ -77,8 +82,7 @@ class DownloadChoiceCoordinator(
                 error,
             )
             telegramSender.editMessage(
-                chatId = command.telegramChatId,
-                messageId = statusMessageId,
+                address = messageAddress,
                 text = error.userMessage(),
             )
         }
@@ -100,4 +104,5 @@ data class PrepareDownloadChoiceCommand(
     val telegramUpdateId: Int,
     val telegramRequestMessageId: Int,
     val url: String,
+    val guestQueryId: String? = null,
 )

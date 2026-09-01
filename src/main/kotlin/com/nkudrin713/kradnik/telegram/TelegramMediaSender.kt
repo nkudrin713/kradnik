@@ -2,7 +2,11 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
 import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
+import com.pengrad.telegrambot.model.request.InputMediaAudio
+import com.pengrad.telegrambot.model.request.InputMediaDocument
+import com.pengrad.telegrambot.model.request.InputMediaVideo
 import com.pengrad.telegrambot.model.request.ReplyParameters
+import com.pengrad.telegrambot.request.EditMessageMedia
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendDocument
 import com.pengrad.telegrambot.request.SendVideo
@@ -82,6 +86,16 @@ class TelegramMediaSender(
         return video.fileId
     }
 
+    suspend fun editInlineVideo(inlineMessageId: String, fileId: String): String {
+        apiClient.executeIo(
+            EditMessageMedia(
+                inlineMessageId,
+                InputMediaVideo(fileId).supportsStreaming(true),
+            )
+        )
+        return fileId
+    }
+
     suspend fun sendAudio(
         chatId: Long,
         file: Path,
@@ -119,6 +133,21 @@ class TelegramMediaSender(
         return audio.fileId ?: throw TelegramSendException("Telegram audio file_id is empty")
     }
 
+    suspend fun editInlineAudio(
+        inlineMessageId: String,
+        fileId: String,
+        title: String?,
+        performer: String?,
+        durationSeconds: Int?,
+    ): String {
+        val media = InputMediaAudio(fileId)
+        title?.let(media::title)
+        performer?.let(media::performer)
+        durationSeconds?.let(media::duration)
+        apiClient.executeIo(EditMessageMedia(inlineMessageId, media))
+        return fileId
+    }
+
     suspend fun sendDocument(
         chatId: Long,
         file: Path,
@@ -147,6 +176,11 @@ class TelegramMediaSender(
         val document = response.message()?.document()
             ?: throw TelegramSendException("Telegram response does not contain document")
         return document.fileId()
+    }
+
+    suspend fun editInlineDocument(inlineMessageId: String, fileId: String): String {
+        apiClient.executeIo(EditMessageMedia(inlineMessageId, InputMediaDocument(fileId)))
+        return fileId
     }
 
     private suspend fun fileSize(file: Path): Long {

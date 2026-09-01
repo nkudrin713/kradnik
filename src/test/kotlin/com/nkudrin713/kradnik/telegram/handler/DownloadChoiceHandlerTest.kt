@@ -9,6 +9,7 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
+import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.Chat
@@ -41,7 +42,7 @@ class DownloadChoiceHandlerTest {
     fun startsSelectedDownloadAndDeletesMenu() {
         val selection = readySelection()
         every { sessionService.select(any()) } returns selection
-        every { starter.start(any(), any(), any(), any(), any()) } just runs
+        every { starter.start(any(), any(), any(), any(), any(), any()) } just runs
         every { telegramSender.answerCallback("callback-id", "Выбрано: 720p", false) } just runs
         every { telegramSender.deleteMessage(100, 500) } just runs
 
@@ -53,6 +54,7 @@ class DownloadChoiceHandlerTest {
                 telegramChatId = 100,
                 telegramUpdateId = 400,
                 telegramRequestMessageId = 200,
+                messageAddress = TelegramMessageAddress.Chat(100, 500),
                 spec = selection.option.spec,
             )
             telegramSender.deleteMessage(100, 500)
@@ -66,7 +68,32 @@ class DownloadChoiceHandlerTest {
 
         handler.handle(callbackQuery(userId = 301))
 
-        verify(exactly = 0) { starter.start(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { starter.start(any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
+    }
+
+    @Test
+    fun startsInlineDownloadWithoutDeletingGuestMessage() {
+        val selection = readySelection().apply {
+            session.telegramMenuMessageId = null
+            session.telegramInlineMessageId = "inline-message"
+        }
+        every { sessionService.select(any()) } returns selection
+        every { starter.start(any(), any(), any(), any(), any(), any()) } just runs
+        every { telegramSender.answerCallback("callback-id", "Выбрано: 720p", false) } just runs
+
+        handler.handle(callbackQuery(userId = 300, inlineMessageId = "inline-message"))
+
+        verify {
+            starter.start(
+                telegramUserId = 300,
+                telegramChatId = 100,
+                telegramUpdateId = 400,
+                telegramRequestMessageId = 200,
+                messageAddress = TelegramMessageAddress.Inline("inline-message"),
+                spec = selection.option.spec,
+            )
+        }
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
     }
 
@@ -106,6 +133,7 @@ class DownloadChoiceHandlerTest {
     private fun callbackQuery(
         userId: Long,
         callbackData: String = DownloadChoiceCallback.encode(token, "video_720"),
+        inlineMessageId: String? = null,
     ): CallbackQuery {
         val message = mockk<MaybeInaccessibleMessage> {
             every { chat() } returns mockk<Chat> { every { id() } returns 100 }
@@ -115,7 +143,8 @@ class DownloadChoiceHandlerTest {
             every { id() } returns "callback-id"
             every { data() } returns callbackData
             every { from() } returns mockk<User> { every { id() } returns userId }
-            every { maybeInaccessibleMessage() } returns message
+            every { inlineMessageId() } returns inlineMessageId
+            every { maybeInaccessibleMessage() } returns if (inlineMessageId == null) message else null
         }
     }
 

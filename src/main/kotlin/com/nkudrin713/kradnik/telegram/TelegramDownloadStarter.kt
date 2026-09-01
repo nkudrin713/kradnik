@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component
 
 /**
  * Publishes a queued status, versions video cache identity with [TelegramVideoPolicy], and delegates persistence to
- * [DownloadJobService]. If creation fails or the Telegram update already owns a job, the new status message is removed
- * so [DownloadChoiceHandler][com.nkudrin713.kradnik.telegram.handler.DownloadChoiceHandler] leaves no orphaned UI.
+ * [DownloadJobService]. Direct chats receive a new status message; guest downloads reuse their inline message.
+ * Failed or duplicate direct-chat jobs remove the new status so no orphaned UI remains.
  */
 @Component
 class TelegramDownloadStarter(
@@ -25,12 +25,19 @@ class TelegramDownloadStarter(
         telegramChatId: Long,
         telegramUpdateId: Int,
         telegramRequestMessageId: Int,
+        messageAddress: TelegramMessageAddress,
         spec: DownloadSpec,
     ) {
-        val statusMessageId = telegramSender.sendStatus(
-            telegramChatId,
-            TelegramDownloadStatus.QUEUED,
-        )
+        val statusMessageId = when (messageAddress) {
+            is TelegramMessageAddress.Chat -> telegramSender.sendStatus(
+                telegramChatId,
+                TelegramDownloadStatus.QUEUED,
+            )
+            is TelegramMessageAddress.Inline -> {
+                telegramSender.editStatus(messageAddress, TelegramDownloadStatus.QUEUED)
+                null
+            }
+        }
         val jobSpec = spec.copy(
             cacheKey = when (spec.outputType) {
                 OutputType.VIDEO -> TelegramVideoPolicy.versionCacheKey(spec.cacheKey)
@@ -44,16 +51,17 @@ class TelegramDownloadStarter(
             telegramRequestMessageId = telegramRequestMessageId,
             spec = jobSpec,
             telegramStatusMessageId = statusMessageId,
+            telegramInlineMessageId = (messageAddress as? TelegramMessageAddress.Inline)?.inlineMessageId,
         )
         val created = try {
             downloadJobService.createJob(command)
         } catch (error: Exception) {
-            deleteStatusBestEffort(telegramChatId, statusMessageId)
+            statusMessageId?.let { deleteStatusBestEffort(telegramChatId, it) }
             throw error
         }
 
         if (!created) {
-            deleteStatusBestEffort(telegramChatId, statusMessageId)
+            statusMessageId?.let { deleteStatusBestEffort(telegramChatId, it) }
         }
     }
 

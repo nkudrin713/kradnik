@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service
 
 /**
  * Routes updates received by [TelegramPollingService][com.nkudrin713.kradnik.telegram.TelegramPollingService] to
- * command responses, [DownloadChoiceCoordinator] for links, or
+ * command responses, [DownloadChoiceCoordinator] for direct and guest links, or
  * [DownloadChoiceHandler] for callbacks. Pinned-service messages are removed, and unsupported text receives the short
  * link prompt without entering download preparation.
  */
@@ -25,8 +25,10 @@ class TelegramUpdateHandler(
     private val donationUrl: String,
 ) {
     fun handle(update: Update) {
+        val guestMessage = update.guestMessage()
         val message = update.message()
         when {
+            guestMessage?.text() != null -> handleGuestMessage(update, guestMessage)
             message?.pinnedMessage() != null -> telegramSender.deleteMessage(
                 chatId = message.chat().id(),
                 messageId = message.messageId(),
@@ -35,6 +37,34 @@ class TelegramUpdateHandler(
             message?.text() != null -> handleMessage(update, message)
             update.callbackQuery()?.data() != null -> downloadChoiceHandler.handle(update.callbackQuery())
         }
+    }
+
+    private fun handleGuestMessage(update: Update, message: Message) {
+        val guestQueryId = message.guestQueryId() ?: return
+        val url = guestUrl(message.text())
+        if (url == null) {
+            telegramSender.answerGuestMessage(guestQueryId, "Нужна ссылка")
+            return
+        }
+
+        downloadChoiceCoordinator.prepare(
+            PrepareDownloadChoiceCommand(
+                telegramUserId = message.from().id(),
+                telegramChatId = message.chat().id(),
+                telegramUpdateId = update.updateId(),
+                telegramRequestMessageId = message.messageId(),
+                url = url,
+                guestQueryId = guestQueryId,
+            )
+        )
+    }
+
+    private fun guestUrl(text: String): String? {
+        val parts = text.trim().split(Regex("\\s+"))
+        if (parts.size != 2 || !parts[0].startsWith("@")) {
+            return null
+        }
+        return parts[1].takeIf { it.startsWith("http://") || it.startsWith("https://") }
     }
 
     private fun handleMessage(update: Update, message: Message) {

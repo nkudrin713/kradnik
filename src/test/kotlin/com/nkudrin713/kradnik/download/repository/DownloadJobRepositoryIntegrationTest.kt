@@ -153,12 +153,14 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         val availableSession = choiceSessionRepository.saveAndFlush(
             DownloadChoiceSession(
                 telegramUpdateId = 10,
+                telegramMenuMessageId = 20,
                 cleanupAfter = cleanupDeadline,
             )
         )
         val consumedSession = choiceSessionRepository.saveAndFlush(
             DownloadChoiceSession(
                 telegramUpdateId = 11,
+                telegramMenuMessageId = 21,
                 cleanupAfter = cleanupDeadline,
                 selectedAt = cleanupDeadline,
             )

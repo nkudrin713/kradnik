@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.telegram.handler
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCoordinator
 import com.nkudrin713.kradnik.telegram.PrepareDownloadChoiceCommand
 import com.nkudrin713.kradnik.telegram.TelegramDonationSender
+import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.Chat
@@ -92,6 +93,7 @@ class TelegramUpdateHandlerTest {
             every { data() } returns "dl:token:option"
         }
         val update = mockk<Update> {
+            every { guestMessage() } returns null
             every { message() } returns null
             every { callbackQuery() } returns callbackQuery
         }
@@ -100,6 +102,38 @@ class TelegramUpdateHandlerTest {
         handler().handle(update)
 
         verify { choiceHandler.handle(callbackQuery) }
+    }
+
+    @Test
+    fun preparesGuestDownloadFromMentionAndUrl() {
+        every { coordinator.prepare(any()) } just runs
+
+        handler().handle(guestUpdate("@kradnik_bot https://example.com/video"))
+
+        verify {
+            coordinator.prepare(
+                PrepareDownloadChoiceCommand(
+                    telegramUserId = 300,
+                    telegramChatId = 100,
+                    telegramUpdateId = 400,
+                    telegramRequestMessageId = 200,
+                    url = "https://example.com/video",
+                    guestQueryId = "guest-query",
+                )
+            )
+        }
+    }
+
+    @Test
+    fun answersInvalidGuestQueryOnce() {
+        every {
+            telegramSender.answerGuestMessage("guest-query", "Нужна ссылка")
+        } returns TelegramMessageAddress.Inline("inline-message")
+
+        handler().handle(guestUpdate("@kradnik_bot не-ссылка"))
+
+        verify { telegramSender.answerGuestMessage("guest-query", "Нужна ссылка") }
+        verify(exactly = 0) { coordinator.prepare(any()) }
     }
 
     private fun handler(donationUrl: String = ""): TelegramUpdateHandler {
@@ -118,7 +152,10 @@ class TelegramUpdateHandlerTest {
             every { chat() } returns mockk<Chat> { every { id() } returns chatId }
             every { messageId() } returns messageId
         }
-        return mockk { every { message() } returns message }
+        return mockk {
+            every { guestMessage() } returns null
+            every { message() } returns message
+        }
     }
 
     private fun textUpdate(text: String): Update {
@@ -130,7 +167,23 @@ class TelegramUpdateHandlerTest {
             every { from() } returns mockk<User> { every { id() } returns 300 }
         }
         return mockk {
+            every { guestMessage() } returns null
             every { message() } returns message
+            every { updateId() } returns 400
+        }
+    }
+
+    private fun guestUpdate(text: String): Update {
+        val message = mockk<Message> {
+            every { text() } returns text
+            every { guestQueryId() } returns "guest-query"
+            every { chat() } returns mockk<Chat> { every { id() } returns 100 }
+            every { messageId() } returns 200
+            every { from() } returns mockk<User> { every { id() } returns 300 }
+        }
+        return mockk {
+            every { guestMessage() } returns message
+            every { message() } returns null
             every { updateId() } returns 400
         }
     }

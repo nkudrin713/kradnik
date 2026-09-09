@@ -31,6 +31,8 @@ import org.springframework.transaction.support.TransactionTemplate
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
+import java.sql.Timestamp
+import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -94,6 +96,15 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             """.trimIndent(),
             Int::class.java,
         )
+        val choiceSessionRetentionIndexCount = jdbcTemplate.queryForObject(
+            """
+                SELECT COUNT(*)
+                FROM pg_indexes
+                WHERE tablename = 'download_choice_sessions'
+                  AND indexname = 'idx_download_choice_sessions_unselected_created_at'
+            """.trimIndent(),
+            Int::class.java,
+        )
         val removedJobColumnCount = jdbcTemplate.queryForObject(
             """
                 SELECT COUNT(*)
@@ -113,6 +124,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
         assertEquals(6, columnCount)
         assertEquals(1, preferenceTableCount)
+        assertEquals(1, choiceSessionRetentionIndexCount)
         assertEquals(0, removedRateLimitTableCount)
         assertEquals(0, removedJobColumnCount)
     }
@@ -174,31 +186,56 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     }
 
     @Test
-    fun deletesOnlyConsumedChoiceSessionsAfterRetentionDeadline() {
-        val cleanupDeadline = Instant.now().minusSeconds(1)
+    fun deletesExpiredChoiceSessionsBySelectionState() {
+        val now = Instant.now()
+        val expiredDeadline = now.minusSeconds(1)
         val availableSession = choiceSessionRepository.saveAndFlush(
             DownloadChoiceSession(
                 telegramUpdateId = 10,
                 telegramMenuMessageId = 20,
-                cleanupAfter = cleanupDeadline,
+                cleanupAfter = expiredDeadline,
+            )
+        )
+        val expiredUnselectedSession = choiceSessionRepository.saveAndFlush(
+            DownloadChoiceSession(
+                telegramUpdateId = 11,
+                telegramMenuMessageId = 21,
+                cleanupAfter = now.plusSeconds(3600),
             )
         )
         val consumedSession = choiceSessionRepository.saveAndFlush(
             DownloadChoiceSession(
-                telegramUpdateId = 11,
-                telegramMenuMessageId = 21,
-                cleanupAfter = cleanupDeadline,
-                selectedAt = cleanupDeadline,
+                telegramUpdateId = 12,
+                telegramMenuMessageId = 22,
+                cleanupAfter = expiredDeadline,
+                selectedAt = expiredDeadline,
             )
+        )
+        val activeConsumedSession = choiceSessionRepository.saveAndFlush(
+            DownloadChoiceSession(
+                telegramUpdateId = 13,
+                telegramMenuMessageId = 23,
+                cleanupAfter = now.plusSeconds(3600),
+                selectedAt = now,
+            )
+        )
+        jdbcTemplate.update(
+            "UPDATE download_choice_sessions SET created_at = ? WHERE token = ?",
+            Timestamp.from(now.minus(Duration.ofDays(31))),
+            expiredUnselectedSession.token,
         )
 
         val deleted = transactionTemplate.execute {
-            choiceSessionRepository.deleteConsumed(Instant.now())
+            val consumed = choiceSessionRepository.deleteConsumed(now)
+            val unselected = choiceSessionRepository.deleteExpiredUnselected(now.minus(Duration.ofDays(30)))
+            consumed to unselected
         }
 
-        assertEquals(1, deleted)
+        assertEquals(1 to 1, deleted)
         assertEquals(true, choiceSessionRepository.existsById(availableSession.token))
+        assertEquals(false, choiceSessionRepository.existsById(expiredUnselectedSession.token))
         assertEquals(false, choiceSessionRepository.existsById(consumedSession.token))
+        assertEquals(true, choiceSessionRepository.existsById(activeConsumedSession.token))
     }
 
     @Test

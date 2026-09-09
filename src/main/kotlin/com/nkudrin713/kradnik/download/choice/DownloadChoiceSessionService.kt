@@ -1,13 +1,14 @@
 package com.nkudrin713.kradnik.download.choice
 
-import org.springframework.beans.factory.annotation.Value
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Clock
 import java.time.Duration
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -19,17 +20,20 @@ import java.util.UUID
 class DownloadChoiceSessionService(
     private val repository: DownloadChoiceSessionRepository,
     private val messages: TelegramMessages,
+    private val clock: Clock,
     @Value("\${download.choice-session-ttl:30m}")
     private val consumedSessionTtl: Duration = Duration.ofMinutes(30),
+    @Value("\${download.choice-session-max-age:30d}")
+    private val unselectedSessionMaxAge: Duration = Duration.ofDays(30),
 ) {
     init {
         require(consumedSessionTtl.isPositive()) { "download.choice-session-ttl must be positive" }
+        require(unselectedSessionMaxAge.isPositive()) { "download.choice-session-max-age must be positive" }
     }
 
     @Transactional
     fun create(command: CreateDownloadChoiceSessionCommand): DownloadChoiceSession {
-        val now = Instant.now()
-        repository.deleteConsumed(now)
+        val now = clock.instant()
         return repository.save(
             DownloadChoiceSession(
                 telegramUserId = command.telegramUserId,
@@ -53,7 +57,7 @@ class DownloadChoiceSessionService(
     fun select(command: SelectDownloadChoiceCommand): DownloadChoiceSelection {
         val session = repository.findForUpdate(command.token)
             ?: return DownloadChoiceSelection.Invalid
-        val now = Instant.now()
+        val now = clock.instant()
 
         if (session.telegramUserId != command.telegramUserId) {
             return DownloadChoiceSelection.NotOwner
@@ -70,6 +74,10 @@ class DownloadChoiceSessionService(
         }
         if (session.selectedAt != null) {
             return DownloadChoiceSelection.AlreadySelected
+        }
+        val createdAt = session.createdAt ?: return DownloadChoiceSelection.Invalid
+        if (!createdAt.isAfter(now.minus(unselectedSessionMaxAge))) {
+            return DownloadChoiceSelection.Invalid
         }
 
         val option = session.options.firstOrNull { it.key == command.optionKey }
@@ -92,11 +100,19 @@ class DownloadChoiceSessionService(
     /**
      * Makes a selected option available after
      * [TelegramDownloadStarter][com.nkudrin713.kradnik.telegram.TelegramDownloadStarter] fails to enqueue it.
-     * Clearing [DownloadChoiceSession.selectedAt] also keeps the row outside consumed-session cleanup.
+     * Clearing [DownloadChoiceSession.selectedAt] returns the row to the absolute unselected-session lifetime.
      */
     @Transactional
     fun release(token: UUID) {
         repository.findForUpdate(token)?.selectedAt = null
+    }
+
+    @Scheduled(fixedDelayString = "\${download.choice-session-cleanup-delay-ms:600000}")
+    @Transactional
+    fun deleteExpiredSessions() {
+        val now = clock.instant()
+        repository.deleteConsumed(now)
+        repository.deleteExpiredUnselected(now.minus(unselectedSessionMaxAge))
     }
 }
 

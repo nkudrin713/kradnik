@@ -16,6 +16,13 @@ interface DownloadChoiceSessionRepository : JpaRepository<DownloadChoiceSession,
     )
     fun deleteConsumed(cutoff: Instant): Int
 
+    @Modifying
+    @Query(
+        "DELETE FROM DownloadChoiceSession session " +
+            "WHERE session.selectedAt IS NULL AND session.createdAt <= :createdBefore"
+    )
+    fun deleteExpiredUnselected(createdBefore: Instant): Int
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT session FROM DownloadChoiceSession session WHERE session.token = :token")
     fun findForUpdate(token: UUID): DownloadChoiceSession?

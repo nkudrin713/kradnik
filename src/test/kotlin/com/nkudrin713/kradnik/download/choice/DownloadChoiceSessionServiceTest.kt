@@ -9,28 +9,34 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneOffset
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DownloadChoiceSessionServiceTest {
+    private val now = Instant.parse("2026-09-10T12:00:00Z")
+    private val clock = Clock.fixed(now, ZoneOffset.UTC)
     private val repository: DownloadChoiceSessionRepository = mockk()
     private val service = DownloadChoiceSessionService(
         repository = repository,
         messages = telegramMessages(),
+        clock = clock,
         consumedSessionTtl = Duration.ofMinutes(30),
+        unselectedSessionMaxAge = Duration.ofDays(30),
     )
 
     @Test
     fun createsSessionWithPlanSnapshot() {
         val saved = slot<DownloadChoiceSession>()
-        every { repository.deleteConsumed(any()) } returns 2
         every { repository.save(capture(saved)) } answers { saved.captured }
 
         val actual = service.create(createCommand())
@@ -38,8 +44,7 @@ class DownloadChoiceSessionServiceTest {
         assertEquals(300, actual.telegramUserId)
         assertEquals(BotLanguage.EN, actual.language)
         assertEquals(listOf("video_720"), actual.options.map { it.key })
-        assertNotNull(actual.cleanupAfter)
-        verify(exactly = 1) { repository.deleteConsumed(any()) }
+        assertEquals(now.plus(Duration.ofMinutes(30)), actual.cleanupAfter)
     }
 
     @Test
@@ -89,31 +94,66 @@ class DownloadChoiceSessionServiceTest {
         every { repository.findForUpdate(unavailable.token) } returns unavailable
         assertIs<DownloadChoiceSelection.Unavailable>(service.select(selectCommand(unavailable.token)))
 
-        val selected = session().apply { selectedAt = Instant.now() }
+        val selected = session().apply { selectedAt = now }
         every { repository.findForUpdate(selected.token) } returns selected
         assertEquals(DownloadChoiceSelection.AlreadySelected, service.select(selectCommand(selected.token)))
     }
 
     @Test
     fun selectsAvailableOptionAfterRetentionDeadline() {
-        val session = session().apply { cleanupAfter = Instant.now().minusSeconds(1) }
+        val session = session().apply { cleanupAfter = now.minusSeconds(1) }
         every { repository.findForUpdate(session.token) } returns session
 
         val actual = service.select(selectCommand(session.token))
 
         assertIs<DownloadChoiceSelection.Ready>(actual)
         assertNotNull(session.selectedAt)
-        assertTrue(session.cleanupAfter > Instant.now())
+        assertTrue(session.cleanupAfter > now)
+    }
+
+    @Test
+    fun rejectsUnselectedSessionAtAbsoluteMaxAge() {
+        val session = session().apply { createdAt = now.minus(Duration.ofDays(30)) }
+        every { repository.findForUpdate(session.token) } returns session
+
+        val actual = service.select(selectCommand(session.token))
+
+        assertEquals(DownloadChoiceSelection.Invalid, actual)
+        assertNull(session.selectedAt)
     }
 
     @Test
     fun releasesClaimAfterStarterFailure() {
-        val session = session().apply { selectedAt = Instant.now() }
+        val session = session().apply { selectedAt = now }
         every { repository.findForUpdate(session.token) } returns session
 
         service.release(session.token)
 
         assertNull(session.selectedAt)
+    }
+
+    @Test
+    fun deletesExpiredConsumedAndUnselectedSessions() {
+        every { repository.deleteConsumed(now) } returns 2
+        every { repository.deleteExpiredUnselected(now.minus(Duration.ofDays(30))) } returns 3
+
+        service.deleteExpiredSessions()
+
+        verify(exactly = 1) { repository.deleteConsumed(now) }
+        verify(exactly = 1) { repository.deleteExpiredUnselected(now.minus(Duration.ofDays(30))) }
+    }
+
+    @Test
+    fun rejectsNonPositiveUnselectedSessionMaxAge() {
+        assertFailsWith<IllegalArgumentException> {
+            DownloadChoiceSessionService(
+                repository = repository,
+                messages = telegramMessages(),
+                clock = clock,
+                consumedSessionTtl = Duration.ofMinutes(30),
+                unselectedSessionMaxAge = Duration.ZERO,
+            )
+        }
     }
 
     private fun createCommand(): CreateDownloadChoiceSessionCommand {
@@ -149,7 +189,8 @@ class DownloadChoiceSessionServiceTest {
             telegramRequestMessageId = 200,
             telegramMenuMessageId = 500,
             options = listOf(option),
-            cleanupAfter = Instant.now().plusSeconds(60),
+            cleanupAfter = now.plusSeconds(60),
+            createdAt = now.minus(Duration.ofDays(1)),
         )
     }
 

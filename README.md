@@ -80,7 +80,7 @@ Run checks with:
 
 ## Configuration
 
-The application does not know whether an instance is test or production. The environment provides concrete addresses, tokens, limits, and paths through environment variables.
+Runtime configuration provides concrete addresses, tokens, limits, and paths through process environment variables.
 
 Main configuration groups:
 
@@ -108,6 +108,6 @@ docker build -t kradnik:local .
 APP_IMAGE=kradnik:local docker compose up -d
 ```
 
-The `telegram-local` and `youtube-pot` Compose profiles enable optional services. In GitHub Actions, every successful push to `main` is deployed to the test environment. A production release tags the already verified `main` commit as `vX.Y.Z` and deploys the same image digest without rebuilding it. Environment values remain in GitHub Environments and server-side `.env` files rather than Kotlin code.
+The `telegram-local` and `youtube-pot` Compose profiles enable optional services. Merging to `main` runs CI but does not deploy. A manually started release verifies the latest `main` commit, creates an immutable `vX.Y.Z` Git tag, builds an image with the same version tag, and deploys its exact digest to production. Production values remain in the GitHub `production` environment and the server-side `.env` file rather than Kotlin code.
 
 Flyway manages database migrations. Applied migrations are never modified; every schema change is added as a new migration file.

@@ -2,8 +2,7 @@
 
 set -euo pipefail
 
-deploy_environment="${1:?Usage: render-deploy-env.sh <development|production> <app-image>}"
-app_image="${2:?Usage: render-deploy-env.sh <development|production> <app-image>}"
+app_image="${1:?Usage: render-deploy-env.sh <app-image>}"
 
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
 : "${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN is required}"
@@ -42,34 +41,15 @@ else
   youtube_po_token_provider_url=""
 fi
 
-case "$deploy_environment" in
-  production)
-    app_container_name="kradnik-prod-app"
-    postgres_container_name="kradnik-prod-postgres"
-    postgres_db="kradnik_prod"
-    postgres_volume_name="kradnik-prod-postgres-data"
-    postgres_public_port="5434"
-    telegram_bot_api_container_name="kradnik-prod-telegram-bot-api"
-    youtube_po_token_provider_container_name="kradnik-prod-youtube-pot-provider"
-    telegram_bot_api_data_volume_name="kradnik-prod-telegram-bot-api-data"
-    media_work_volume_name="kradnik-prod-media-work"
-    ;;
-  development)
-    app_container_name="kradnik-test-app"
-    postgres_container_name="kradnik-test-postgres"
-    postgres_db="kradnik_test"
-    postgres_volume_name="kradnik-test-postgres-data"
-    postgres_public_port="5433"
-    telegram_bot_api_container_name="kradnik-test-telegram-bot-api"
-    youtube_po_token_provider_container_name="kradnik-test-youtube-pot-provider"
-    telegram_bot_api_data_volume_name="kradnik-test-telegram-bot-api-data"
-    media_work_volume_name="kradnik-test-media-work"
-    ;;
-  *)
-    echo "Unknown deploy environment: $deploy_environment" >&2
-    exit 1
-    ;;
-esac
+app_container_name="kradnik-prod-app"
+postgres_container_name="kradnik-prod-postgres"
+postgres_db="kradnik_prod"
+postgres_volume_name="kradnik-prod-postgres-data"
+postgres_public_port="5434"
+telegram_bot_api_container_name="kradnik-prod-telegram-bot-api"
+youtube_po_token_provider_container_name="kradnik-prod-youtube-pot-provider"
+telegram_bot_api_data_volume_name="kradnik-prod-telegram-bot-api-data"
+media_work_volume_name="kradnik-prod-media-work"
 
 printf 'APP_IMAGE=%s\n' "$app_image"
 printf 'APP_CONTAINER_NAME=%s\n' "$app_container_name"

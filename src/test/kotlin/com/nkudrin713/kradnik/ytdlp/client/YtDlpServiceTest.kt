@@ -397,7 +397,7 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun cloudDownloadKeepsVerticalCompressionSourceUnbounded(@TempDir tempDir: Path) = runTest {
+    fun cloudDownloadUsesWorkspaceLimitWithoutSourceFileLimit(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("video.mp4")
         file.writeText("video")
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
@@ -411,7 +411,7 @@ class YtDlpServiceTest {
         val commandSlot = slot<Command>()
         coVerify { processRunner.run(capture(commandSlot)) }
         assertFalse(commandSlot.captured.args.contains("--max-filesize"))
-        assertEquals(null, commandSlot.captured.maxWorkingDirectoryBytes)
+        assertEquals(536_870_912L, commandSlot.captured.maxWorkingDirectoryBytes)
     }
 
     @Test
@@ -460,7 +460,7 @@ class YtDlpServiceTest {
         )
 
         val exception = assertFailsWith<YtDlpException> {
-            localService.download(testRequest(), tempDir)
+            service.download(testRequest(), tempDir)
         }
 
         assertTrue(exception.message!!.contains("did not print final filepath"))

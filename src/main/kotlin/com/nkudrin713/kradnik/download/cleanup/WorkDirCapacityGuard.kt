@@ -30,6 +30,8 @@ class DefaultWorkDirCapacityGuard(
     private val reserveBytes: Long,
     @Value("\${download.work-dir:/tmp/kradnik-downloads}")
     private val configuredWorkDir: String,
+    @Value("\${download.yt-dlp.cloud-max-workspace-bytes:536870912}")
+    private val cloudMaxWorkspaceBytes: Long = 536_870_912,
 ) : WorkDirCapacityGuard {
     init {
         require(reserveBytes >= 0) { "download.work-dir-reserve-bytes must not be negative" }
@@ -37,12 +39,13 @@ class DefaultWorkDirCapacityGuard(
         require(!uploadLimits.localMode || Path.of(configuredWorkDir).normalize() != Path.of(DEFAULT_WORK_DIR)) {
             "download.work-dir must point to the shared local Bot API volume when local mode is enabled"
         }
+        require(cloudMaxWorkspaceBytes > 0) { "download.yt-dlp.cloud-max-workspace-bytes must be positive" }
     }
 
     override fun ensureDownloadCapacity(workDir: Path) {
         ensureCapacity(
             workDir = workDir,
-            requiredBytes = uploadLimits.maxUploadBytes * DOWNLOAD_CAPACITY_MULTIPLIER + reserveBytes,
+            requiredBytes = maxDownloadWorkspaceBytes() + reserveBytes,
         )
     }
 
@@ -60,6 +63,14 @@ class DefaultWorkDirCapacityGuard(
                 requiredBytes = requiredBytes,
                 usableBytes = usableBytes,
             )
+        }
+    }
+
+    private fun maxDownloadWorkspaceBytes(): Long {
+        return if (uploadLimits.localMode) {
+            uploadLimits.maxUploadBytes * DOWNLOAD_CAPACITY_MULTIPLIER
+        } else {
+            cloudMaxWorkspaceBytes
         }
     }
 

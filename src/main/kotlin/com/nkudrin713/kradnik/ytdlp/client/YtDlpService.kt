@@ -47,7 +47,7 @@ private data class YtDlpCommand(
 
 /**
  * Implements the yt-dlp boundary used by [DownloadEngine][com.nkudrin713.kradnik.download.DownloadEngine].
- * It builds shell-free [Command] arguments for [ProcessRunner], parses metadata JSON, applies configured time and local
+ * It builds shell-free [Command] arguments for [ProcessRunner], parses metadata JSON, applies configured time and
  * workspace limits, classifies authentication failures, and accepts only the final regular file reported by yt-dlp.
  */
 @Service
@@ -62,12 +62,15 @@ class YtDlpService(
     private val metadataTimeout: Duration = Duration.ofSeconds(30),
     @Value("\${download.yt-dlp.download-timeout:30m}")
     private val downloadTimeout: Duration = Duration.ofMinutes(30),
+    @Value("\${download.yt-dlp.cloud-max-workspace-bytes:536870912}")
+    private val cloudMaxWorkspaceBytes: Long = 536_870_912,
 ) {
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
 
     init {
         require(metadataTimeout.isPositive()) { "download.yt-dlp.metadata-timeout must be positive" }
         require(downloadTimeout.isPositive()) { "download.yt-dlp.download-timeout must be positive" }
+        require(cloudMaxWorkspaceBytes > 0) { "download.yt-dlp.cloud-max-workspace-bytes must be positive" }
     }
 
     /** Extracts metadata for [DownloadSpec.formatSelector], including selected-format data used by preflight checks. */
@@ -145,11 +148,7 @@ class YtDlpService(
                 args = args,
                 workingDir = outputDir,
                 timeout = downloadTimeout.toKotlinDuration(),
-                maxWorkingDirectoryBytes = if (uploadLimits.localMode) {
-                    uploadLimits.maxUploadBytes * WORKING_DIRECTORY_LIMIT_MULTIPLIER
-                } else {
-                    null
-                },
+                maxWorkingDirectoryBytes = maxWorkspaceBytes(),
             )
         )
 
@@ -199,6 +198,14 @@ class YtDlpService(
             EXTRACTOR_ARGS,
             "youtubepot-bgutilhttp:base_url=$providerUrl",
         )
+    }
+
+    private fun maxWorkspaceBytes(): Long {
+        return if (uploadLimits.localMode) {
+            uploadLimits.maxUploadBytes * WORKING_DIRECTORY_LIMIT_MULTIPLIER
+        } else {
+            cloudMaxWorkspaceBytes
+        }
     }
 
     private fun handleBaseErrors(result: ProcessExecutionResult) {

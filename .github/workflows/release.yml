@@ -28,12 +28,15 @@ concurrency:
   group: release-main
   cancel-in-progress: false
 
+env:
+  TELEGRAM_BOT_API_COMMIT: adfd7f6a8e990272851777eeb3ae0def4216f161
+  TELEGRAM_BOT_API_IMAGE: ghcr.io/nkudrin713/kradnik-telegram-bot-api:adfd7f6a8e990272851777eeb3ae0def4216f161
+
 jobs:
   release:
     name: Create release tag
     runs-on: ubuntu-latest
     permissions:
-      actions: read
       contents: write
       packages: write
     outputs:
@@ -139,26 +142,23 @@ jobs:
             printf 'tag_exists=%s\n' "$tag_exists"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Verify successful test deploy
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TARGET_SHA: ${{ steps.version.outputs.target_sha }}
+      - name: Set up JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Run tests and build jar
+        run: ./gradlew check bootJar
+
+      - name: Prepare Docker context
         run: |
           set -euo pipefail
-          run_count="$(
-            gh api --method GET \
-              "repos/$GITHUB_REPOSITORY/actions/workflows/deploy.yml/runs" \
-              -f branch=main \
-              -f event=push \
-              -f status=success \
-              -f head_sha="$TARGET_SHA" \
-              -f per_page=1 \
-              --jq '.total_count'
-          )"
-          if [ "$run_count" -lt 1 ]; then
-            echo "No successful main test deploy found for $TARGET_SHA" >&2
-            exit 1
-          fi
+          mkdir -p .deploy
+          cp build/libs/app.jar .deploy/app.jar
 
       - name: Set image name
         run: |
@@ -175,18 +175,50 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
-      - name: Promote tested image
+      - name: Build and push release candidate image
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Check Telegram Bot API image
+        id: telegram_bot_api_image
+        run: |
+          if docker buildx imagetools inspect "$TELEGRAM_BOT_API_IMAGE" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push Telegram Bot API image
+        if: ${{ steps.telegram_bot_api_image.outputs.exists != 'true' }}
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: Dockerfile.telegram-bot-api
+          push: true
+          build-args: TELEGRAM_BOT_API_COMMIT=${{ env.TELEGRAM_BOT_API_COMMIT }}
+          cache-from: type=gha,scope=telegram-bot-api
+          cache-to: type=gha,mode=max,scope=telegram-bot-api
+          tags: ${{ env.TELEGRAM_BOT_API_IMAGE }}
+
+      - name: Create or verify release image
         id: image
         env:
           TARGET_SHA: ${{ steps.version.outputs.target_sha }}
           VERSION: ${{ steps.version.outputs.version }}
+          SOURCE_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
           source_image="$IMAGE_NAME:$TARGET_SHA"
           release_image="$IMAGE_NAME:$VERSION"
-          source_digest="sha256:$(docker buildx imagetools inspect "$source_image" --raw | sha256sum | cut -d' ' -f1)"
+          source_digest="$SOURCE_DIGEST"
           if ! printf '%s\n' "$source_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
-            echo "Could not resolve tested image digest for $source_image" >&2
+            echo "Could not resolve built image digest for $source_image" >&2
             exit 1
           fi
 
@@ -201,13 +233,13 @@ jobs:
           fi
 
           if [ "$release_digest" != "$source_digest" ]; then
-            echo "$release_image does not match tested digest $source_digest" >&2
+            echo "$release_image does not match built digest $source_digest" >&2
             echo "Release digest: $release_digest" >&2
             exit 1
           fi
 
           echo "digest=$release_digest" >> "$GITHUB_OUTPUT"
-          echo "Promoted $source_image to $release_image at $release_digest"
+          echo "Published $source_image as $release_image at $release_digest"
 
       - name: Create or verify tag
         env:
@@ -253,9 +285,9 @@ jobs:
     needs: release
     permissions:
       contents: read
-      packages: write
+      packages: read
     uses: ./.github/workflows/deploy.yml
     with:
-      environment: production
       version: ${{ needs.release.outputs.version }}
+      image_digest: ${{ needs.release.outputs.image_digest }}
     secrets: inherit

@@ -15,6 +15,7 @@ class WorkDirCapacityGuardTest {
             usableBytes = 250,
             reserveBytes = 50,
             workDir = tempDir,
+            cloudMaxWorkspaceBytes = 200,
         )
 
         guard.ensureDownloadCapacity(tempDir)
@@ -38,6 +39,24 @@ class WorkDirCapacityGuardTest {
     }
 
     @Test
+    fun rejectsCloudDownloadWhenCapacityDoesNotIncludeWorkspaceLimitAndReserve(@TempDir tempDir: Path) {
+        val guard = guard(
+            uploadLimit = 100,
+            usableBytes = 549,
+            reserveBytes = 50,
+            workDir = tempDir,
+            cloudMaxWorkspaceBytes = 500,
+        )
+
+        val error = assertFailsWith<InsufficientWorkDirSpaceException> {
+            guard.ensureDownloadCapacity(tempDir)
+        }
+
+        assertEquals(550, error.requiredBytes)
+        assertEquals(549, error.usableBytes)
+    }
+
+    @Test
     fun rejectsDefaultWorkDirInLocalMode() {
         assertFailsWith<IllegalArgumentException> {
             DefaultWorkDirCapacityGuard(
@@ -54,12 +73,14 @@ class WorkDirCapacityGuardTest {
         usableBytes: Long,
         reserveBytes: Long,
         workDir: Path,
+        cloudMaxWorkspaceBytes: Long = uploadLimit * 2,
     ): DefaultWorkDirCapacityGuard {
         return DefaultWorkDirCapacityGuard(
             uploadLimits = TelegramUploadLimits(maxUploadBytes = uploadLimit),
             workDirSpaceProvider = WorkDirSpaceProvider { usableBytes },
             reserveBytes = reserveBytes,
             configuredWorkDir = workDir.toString(),
+            cloudMaxWorkspaceBytes = cloudMaxWorkspaceBytes,
         )
     }
 }

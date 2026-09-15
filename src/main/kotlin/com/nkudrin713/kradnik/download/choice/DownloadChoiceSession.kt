@@ -14,7 +14,7 @@ import java.util.UUID
  * Persists the exact options rendered by
  * [DownloadChoiceCoordinator][com.nkudrin713.kradnik.telegram.DownloadChoiceCoordinator].
  * [DownloadChoiceSessionService] locks the row to validate callback ownership and allow only one active selection;
- * unselected menus remain usable, while consumed rows become eligible for cleanup after [cleanupAfter].
+ * unselected menus have a finite lifetime, while consumed rows become eligible for cleanup after [cleanupAfter].
  */
 @Entity
 @Table(name = "download_choice_sessions")

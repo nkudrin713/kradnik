@@ -49,7 +49,6 @@ class AudioUploadPlannerTest {
     private fun metadata(durationSeconds: Long?): YtDlpMetadataDto {
         return YtDlpMetadataDto(
             title = "title",
-            extractor = "youtube",
             thumbnail = null,
             duration = durationSeconds?.let { BigDecimal.valueOf(it) },
             width = 1920,

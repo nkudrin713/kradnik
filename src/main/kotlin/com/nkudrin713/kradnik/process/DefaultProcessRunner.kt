@@ -72,13 +72,15 @@ class DefaultProcessRunner : ProcessRunner {
                 workingDirectoryLimitExceeded = workingDirectoryLimitExceeded.get(),
             )
         } finally {
-            workingDirectoryMonitor?.cancelAndJoin()
-            terminateProcessTree(process)
-            stdoutDeferred.cancel()
-            stderrDeferred.cancel()
-            runCatching { process.inputStream.close() }
-            runCatching { process.outputStream.close() }
-            runCatching { process.errorStream.close() }
+            withContext(NonCancellable) {
+                workingDirectoryMonitor?.cancelAndJoin()
+                terminateProcessTree(process)
+                stdoutDeferred.cancel()
+                stderrDeferred.cancel()
+                runCatching { process.inputStream.close() }
+                runCatching { process.outputStream.close() }
+                runCatching { process.errorStream.close() }
+            }
         }
     }
 
@@ -99,7 +101,7 @@ class DefaultProcessRunner : ProcessRunner {
                     terminateProcessTree(process)
                     return@launch
                 }
-                delay(WORKING_DIRECTORY_POLL_MS)
+                delay(WORKING_DIRECTORY_POLL_MS.milliseconds)
             }
         }
     }

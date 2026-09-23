@@ -1,8 +1,7 @@
 package com.nkudrin713.kradnik.download.choice
 
 import com.nkudrin713.kradnik.download.DownloadEngine
-import com.nkudrin713.kradnik.download.DownloadPreparation
-import com.nkudrin713.kradnik.download.PreparedDownloadSession
+import com.nkudrin713.kradnik.download.PreparedDownload
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
@@ -42,7 +41,7 @@ class DownloadChoicePlannerTest {
         val video = resolved(OutputType.VIDEO)
         val audio = resolved(OutputType.AUDIO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
-        coEvery { downloadEngine.prepareCatalog(video) } returns prepared(metadata(
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
             formats = listOf(
                 videoFormat("v1440", 1440, 600_000_000),
                 videoFormat("v1080", 1080, 400_000_000),
@@ -68,15 +67,15 @@ class DownloadChoicePlannerTest {
         assertEquals(OutputType.COVER, actual.options.last().spec.outputType)
         assertEquals(DownloadPlatform.YOUTUBE, actual.options.last().spec.platform)
         assertEquals(actual.options.size, actual.options.map { it.spec.cacheKey }.distinct().size)
-        assertEquals(DownloadChoiceMediaInfo("Channel", "Title", 120), actual.mediaInfo)
-        coVerify(exactly = 1) { downloadEngine.prepareCatalog(video) }
+        assertEquals(DownloadChoiceMediaInfo(title = "Title", durationSeconds = 120), actual.mediaInfo)
+        coVerify(exactly = 1) { downloadEngine.prepare(video, catalog = true) }
     }
 
     @Test
     fun omitsUnavailableResolutionAndMarksOversizedOriginalUnavailable() = runTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
-        coEvery { downloadEngine.prepareCatalog(video) } returns prepared(metadata(
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
             formats = listOf(
                 videoFormat("v1440", 1440, 1_990_000_000),
                 videoFormat("v720", 720, 200_000_000),
@@ -96,7 +95,7 @@ class DownloadChoicePlannerTest {
     fun omits1080WhenItDuplicatesOriginal() = runTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
-        coEvery { downloadEngine.prepareCatalog(video) } returns prepared(metadata(
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
             formats = listOf(
                 videoFormat("v1080", 1080, 400_000_000),
                 videoFormat("v720", 720, 250_000_000),
@@ -118,7 +117,7 @@ class DownloadChoicePlannerTest {
     fun usesApproximateBitrateSizeWhenFormatSizeIsMissing() = runTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
-        coEvery { downloadEngine.prepareCatalog(video) } returns prepared(metadata(
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
             formats = listOf(
                 videoFormat("v720", 720, size = null, bitrate = 1_000),
                 audioFormat("a1", size = null, bitrate = 100),
@@ -142,12 +141,12 @@ class DownloadChoicePlannerTest {
             ),
         )
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
-        coEvery { downloadEngine.prepareCatalog(video) } returns prepared(catalog)
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(catalog)
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
         assertEquals(DownloadPlatform.INSTAGRAM, actual.options.first().spec.platform)
-        coVerify(exactly = 1) { downloadEngine.prepareCatalog(video) }
+        coVerify(exactly = 1) { downloadEngine.prepare(video, catalog = true) }
     }
 
     private fun resolved(outputType: OutputType): DownloadSpec {
@@ -179,12 +178,7 @@ class DownloadChoicePlannerTest {
         )
     }
 
-    private fun prepared(metadata: YtDlpMetadataDto): DownloadPreparation.Ready {
-        val session: PreparedDownloadSession = mockk {
-            every { this@mockk.metadata } returns metadata
-        }
-        return DownloadPreparation.Ready(session)
-    }
+    private fun prepared(metadata: YtDlpMetadataDto) = PreparedDownload(metadata)
 
     private fun videoFormat(
         id: String,
@@ -239,7 +233,6 @@ class DownloadChoicePlannerTest {
     private fun metadata(formats: List<YtDlpFormatDto>): YtDlpMetadataDto {
         return YtDlpMetadataDto(
             title = "Title",
-            extractor = "youtube",
             thumbnail = "https://i.ytimg.com/vi/id/maxresdefault.jpg",
             duration = BigDecimal.valueOf(120),
             width = null,

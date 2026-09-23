@@ -105,7 +105,7 @@ class ProcessRunnerTest {
     }
 
     @Test
-    fun `cancellation terminates process tree`() = runBlocking {
+    fun `cancellation terminates process tree with workspace monitor`() = runBlocking {
         val rootPidFile = tempDir.resolve("root.pid")
         val childPidFile = tempDir.resolve("child.pid")
         val execution = async {
@@ -121,6 +121,7 @@ class ProcessRunnerTest {
                     ),
                     workingDir = tempDir,
                     timeout = 60.seconds,
+                    maxWorkingDirectoryBytes = 1_000_000,
                 )
             )
         }

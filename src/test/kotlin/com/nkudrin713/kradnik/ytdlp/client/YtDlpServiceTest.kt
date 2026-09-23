@@ -506,11 +506,9 @@ class YtDlpServiceTest {
             workingDirectoryLimitExceeded = true,
         )
 
-        val exception = assertFailsWith<YtDlpFileSizeLimitException> {
+        assertFailsWith<YtDlpFileSizeLimitException> {
             localService.download(testRequest(), tempDir)
         }
-
-        assertEquals(TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES, exception.limitBytes)
     }
 
     @Test

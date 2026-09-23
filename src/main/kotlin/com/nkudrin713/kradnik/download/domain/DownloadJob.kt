@@ -14,16 +14,12 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import jakarta.persistence.Transient
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.Instant
-import java.util.UUID
 
-/**
- * Persists the resolved download request and its mutable queue, lease, retry, and Telegram delivery state.
- * [DownloadJobService][com.nkudrin713.kradnik.download.service.DownloadJobService] owns state transitions, while
- * [DownloadJobProcessor][com.nkudrin713.kradnik.download.processing.DownloadJobProcessor] executes the snapshot.
- */
+/** Persistent request and queue state. Audio metadata is local to one processing call. */
 @Entity
 @Table(name = "download_jobs")
 class DownloadJob(
@@ -68,16 +64,13 @@ class DownloadJob(
 	@Column(nullable = false)
 	var status: DownloadJobStatus = DownloadJobStatus.QUEUED,
 
-	@Column(nullable = false)
-	var attempts: Int = 0,
-
-	@Column(name = "source_duration_seconds")
+	@Transient
 	var sourceDurationSeconds: Int? = null,
 
-	@Column(name = "source_audio_title")
+	@Transient
 	var sourceAudioTitle: String? = null,
 
-	@Column(name = "source_audio_performer")
+	@Transient
 	var sourceAudioPerformer: String? = null,
 
 	@Column(name = "download_preset", nullable = false)
@@ -113,14 +106,8 @@ class DownloadJob(
 	@Column(name = "completed_at")
 	var completedAt: Instant? = null,
 
-	@Column(name = "next_attempt_at", nullable = false)
-	var nextAttemptAt: Instant = Instant.EPOCH,
-
-	@Column(name = "lease_token")
-	var leaseToken: UUID? = null,
-
-	@Column(name = "lease_expires_at")
-	var leaseExpiresAt: Instant? = null,
+	@Column(name = "started_at")
+	var startedAt: Instant? = null,
 ) {
 	fun requiredId(): Long = requireNotNull(id)
 }

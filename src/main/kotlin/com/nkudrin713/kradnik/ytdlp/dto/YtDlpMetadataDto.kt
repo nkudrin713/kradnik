@@ -7,7 +7,6 @@ import java.math.BigDecimal
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class YtDlpMetadataDto(
     val title: String?,
-    val extractor: String?,
     val thumbnail: String?,
     val duration: BigDecimal?,
     val width: Int?,

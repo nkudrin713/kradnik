@@ -164,7 +164,7 @@ class DownloadChoiceSessionServiceTest {
             telegramRequestMessageId = 200,
             telegramMenuMessageId = 500,
             plan = DownloadChoicePlan(
-                mediaInfo = DownloadChoiceMediaInfo("Channel", "Title", 120),
+                mediaInfo = DownloadChoiceMediaInfo(title = "Title", durationSeconds = 120),
                 options = listOf(option()),
             ),
         )

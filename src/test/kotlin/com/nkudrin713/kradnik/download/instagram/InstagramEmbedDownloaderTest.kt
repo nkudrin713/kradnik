@@ -32,7 +32,6 @@ class InstagramEmbedDownloaderTest {
 
         assertEquals("ABC_123", prepared.shortcode)
         assertEquals(URI.create(MEDIA_URL), prepared.mediaUri)
-        assertEquals("instagram:embed", prepared.metadata.extractor)
         assertEquals(BigDecimal("12.5"), prepared.metadata.duration)
         assertEquals(720, prepared.metadata.width)
         assertEquals(1280, prepared.metadata.height)

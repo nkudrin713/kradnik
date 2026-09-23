@@ -11,10 +11,14 @@ import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import jakarta.annotation.PreDestroy
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
-import java.util.concurrent.Executors
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /**
  * Moves catalog extraction off [TelegramPollingService]'s listener thread after publishing an analyzing status.
@@ -29,13 +33,22 @@ class DownloadChoiceCoordinator(
     private val messages: TelegramMessages,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
-    private val executor = Executors.newFixedThreadPool(2) { task ->
-        Thread(task, "download-choice-worker").apply { isDaemon = true }
-    }
+    private val executor = ThreadPoolExecutor(
+        2, 2, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(32),
+        { task -> Thread(task, "download-choice-worker") },
+        ThreadPoolExecutor.AbortPolicy(),
+    )
 
     @PreDestroy
     fun shutdown() {
-        executor.shutdown()
+        executor.shutdownNow()
+        try {
+            if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+                logger.warn("Metadata workers did not stop within 30 seconds")
+            }
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
     }
 
     fun prepare(command: PrepareDownloadChoiceCommand) {
@@ -56,10 +69,15 @@ class DownloadChoiceCoordinator(
                     replyToMessageId = command.telegramRequestMessageId,
                 ),
             )
-        executor.submit {
-            runBlocking {
-                prepareAsync(command, messageAddress)
+        try {
+            executor.execute {
+                runBlocking { prepareAsync(command, messageAddress) }
             }
+        } catch (error: RejectedExecutionException) {
+            telegramSender.editMessage(
+                address = messageAddress,
+                text = messages.text(command.language, TelegramMessage.ERROR_CHOICE_PREPARATION),
+            )
         }
     }
 
@@ -88,6 +106,8 @@ class DownloadChoiceCoordinator(
                 options = session.options,
                 language = session.language,
             )
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             logger.warn(
                 "Download choice preparation failed: chatId={}, updateId={}",

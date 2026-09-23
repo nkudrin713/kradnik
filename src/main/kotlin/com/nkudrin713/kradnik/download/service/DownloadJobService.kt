@@ -4,24 +4,12 @@ import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import kotlinx.coroutines.CancellationException
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.Instant
-import java.util.UUID
 
-/**
- * Owns transactional [DownloadJob] creation, claiming, lease renewal, retry, and completion transitions through
- * [DownloadJobRepository]. Mutations of claimed jobs require the matching [ClaimedDownloadJob.leaseToken], preventing
- * a stale [DownloadQueueWorker][com.nkudrin713.kradnik.download.processing.DownloadQueueWorker] from overwriting a new attempt.
- */
+/** Short database transactions; external calls always happen after these methods return. */
 @Service
-class DownloadJobService(
-	private val downloadJobRepository: DownloadJobRepository,
-) {
-	private val logger = LoggerFactory.getLogger(javaClass)
-
+class DownloadJobService(private val downloadJobRepository: DownloadJobRepository) {
 	/** Locks a Telegram update identity and persists at most one [DownloadJob] for a non-null update ID. */
 	@Transactional
 	fun createJob(command: CreateDownloadJobCommand): Boolean {
@@ -55,241 +43,31 @@ class DownloadJobService(
 		return true
 	}
 
-	/** Atomically claims the oldest eligible job and returns its snapshot paired with [leaseToken]. */
-	@Transactional
-	fun claimNextQueuedJob(
-		leaseToken: UUID,
-		leaseDurationMs: Long,
-	): ClaimedDownloadJob? {
-		val job = downloadJobRepository.claimNextQueuedJob(
-			maxAttempts = MAX_ATTEMPTS,
-			leaseToken = leaseToken,
-			leaseDurationMs = leaseDurationMs,
-		) ?: return null
-		return ClaimedDownloadJob(job, leaseToken)
-	}
 
-	@Transactional
-	fun renewLease(
-		jobId: Long,
-		leaseToken: UUID,
-		leaseDurationMs: Long,
-	): Boolean {
-		return downloadJobRepository.renewLease(jobId, leaseToken, leaseDurationMs) == 1
-	}
+    @Transactional
+    fun claimNextQueuedJob(): DownloadJob? = downloadJobRepository.claimNextQueuedJob()
 
-	/** Requeues expired in-progress jobs below the attempt limit and marks exhausted [DownloadJob] rows as failed. */
-	@Transactional
-	fun recoverExpiredLeases() {
-		val requeued = downloadJobRepository.requeueStaleInProgressJobs(
-			maxAttempts = MAX_ATTEMPTS,
-		)
-		val failed = downloadJobRepository.failStaleInProgressJobs(
-			maxAttempts = MAX_ATTEMPTS,
-		)
+    /** Called once before workers start. The previous application instance must already be stopped. */
+    @Transactional
+    fun recoverInterruptedJobs(): Int = downloadJobRepository.requeueProcessingJobs()
 
-		if (requeued > 0 || failed > 0) {
-			logger.warn(
-				"Recovered stale download jobs: requeued={}, failed={}",
-				requeued,
-				failed,
-			)
-		}
+    @Transactional(readOnly = true)
+    fun findCachedJob(job: DownloadJob): DownloadJob? =
+        downloadJobRepository.findCachedCompletedJob(job.cacheKey)
 
-	}
+    @Transactional
+    fun markCompleted(job: DownloadJob, telegramFileId: String) {
+        check(downloadJobRepository.complete(job.requiredId(), telegramFileId) == 1) {
+            "Job is no longer processing: ${job.id}"
+        }
+    }
 
-	@Transactional(readOnly = true)
-	fun findCachedJob(job: DownloadJob): DownloadJob? {
-		return downloadJobRepository
-			.findCachedCompletedJob(
-				cacheKey = job.cacheKey,
-			)
-	}
-
-	@Transactional(readOnly = true)
-	fun ownsLease(jobId: Long, leaseToken: UUID): Boolean {
-		return downloadJobRepository.existsByIdAndLeaseToken(jobId, leaseToken)
-	}
-
-	@Transactional
-	fun markAudioMetadata(
-		attempt: ClaimedDownloadJob,
-		durationSeconds: Int?,
-		title: String,
-		performer: String,
-	): DownloadJob {
-		val jobId = attempt.requiredId()
-		return requireOwned(
-			downloadJobRepository.updateOwnedMetadata(
-				jobId = jobId,
-				leaseToken = attempt.leaseToken,
-				sourceDurationSeconds = durationSeconds,
-				sourceAudioTitle = title,
-				sourceAudioPerformer = performer,
-			),
-			attempt,
-		)
-	}
-
-	@Transactional
-	fun markUploading(attempt: ClaimedDownloadJob): DownloadJob {
-		return requireOwned(
-			downloadJobRepository.markOwnedUploading(
-				jobId = attempt.requiredId(),
-				leaseToken = attempt.leaseToken,
-			),
-			attempt,
-		)
-	}
-
-	@Transactional
-	fun markCompleted(
-		attempt: ClaimedDownloadJob,
-		telegramFileId: String,
-	): DownloadJob {
-		val jobId = attempt.requiredId()
-		val updatedJob = requireOwned(
-			downloadJobRepository.markOwnedCompleted(
-				jobId = jobId,
-				leaseToken = attempt.leaseToken,
-				telegramFileId = telegramFileId,
-			),
-			attempt,
-		)
-
-		logger.info("CHAT[{}] JOB[{}] done", updatedJob.telegramChatId, jobId)
-
-		return updatedJob
-	}
-
-	@Transactional
-	fun retryAt(
-		attempt: ClaimedDownloadJob,
-		errorMessage: String,
-		retryAt: Instant,
-	): DownloadJob {
-		return resolveFailure(attempt, errorMessage, retryAt)
-	}
-
-	/** Releases the owned lease and requeues at [retryAt] without consuming an attempt because no source request was made. */
-	@Transactional
-	fun deferBeforeAttempt(
-		attempt: ClaimedDownloadJob,
-		retryAt: Instant,
-		reason: String,
-	): DownloadJob {
-		val jobId = attempt.requiredId()
-		val storedReason = reason.take(MAX_ERROR_LENGTH)
-		val updatedJob = requireOwned(
-			downloadJobRepository.deferOwnedJob(
-				jobId = jobId,
-				leaseToken = attempt.leaseToken,
-				reason = storedReason,
-				nextAttemptAt = retryAt,
-			),
-			attempt,
-		)
-
-		logger.info(
-			"CHAT[{}] JOB[{}] deferred before request: retryAt={}",
-			updatedJob.telegramChatId,
-			jobId,
-			retryAt,
-		)
-
-		return updatedJob
-	}
-
-	private fun resolveFailure(
-		attempt: ClaimedDownloadJob,
-		errorMessage: String,
-		retryAt: Instant,
-	): DownloadJob {
-		val job = attempt.job
-		val storedError = errorMessage.take(MAX_ERROR_LENGTH)
-		val updatedJob = if (job.attempts >= MAX_ATTEMPTS) {
-			downloadJobRepository.failOwnedJob(
-				jobId = attempt.requiredId(),
-				leaseToken = attempt.leaseToken,
-				errorMessage = storedError,
-			)
-		} else {
-			downloadJobRepository.requeueOwnedJob(
-				jobId = attempt.requiredId(),
-				leaseToken = attempt.leaseToken,
-				errorMessage = storedError,
-				nextAttemptAt = retryAt,
-			)
-		}
-		val resolvedJob = requireOwned(updatedJob, attempt)
-
-		logger.warn(
-			"CHAT[{}] JOB[{}] failed: status={}, attempts={}, error={}",
-			resolvedJob.telegramChatId,
-			requireNotNull(resolvedJob.id),
-			resolvedJob.status,
-			resolvedJob.attempts,
-			resolvedJob.errorMessage,
-		)
-
-		return resolvedJob
-	}
-
-	@Transactional
-	fun markFailed(
-		attempt: ClaimedDownloadJob,
-		errorMessage: String,
-	): DownloadJob {
-		val jobId = attempt.requiredId()
-		val storedError = errorMessage.take(MAX_ERROR_LENGTH)
-		val updatedJob = requireOwned(
-			downloadJobRepository.failOwnedJob(
-				jobId = jobId,
-				leaseToken = attempt.leaseToken,
-				errorMessage = storedError,
-			),
-			attempt,
-		)
-
-		logger.warn(
-			"CHAT[{}] JOB[{}] failed: status={}, attempts={}, error={}",
-			updatedJob.telegramChatId,
-			jobId,
-			updatedJob.status,
-			updatedJob.attempts,
-			updatedJob.errorMessage,
-		)
-
-		return updatedJob
-	}
-
-	private fun requireOwned(updatedJob: DownloadJob?, attempt: ClaimedDownloadJob): DownloadJob {
-		return updatedJob ?: throw DownloadJobLeaseLostException(attempt.requiredId())
-	}
-
-	private companion object {
-		private const val MAX_ATTEMPTS = 3
-		private const val MAX_ERROR_LENGTH = 1000
-	}
-}
-
-/**
- * Signals that a claimed [DownloadJob] no longer belongs to the current worker.
- * As a [CancellationException], it stops [DownloadJobProcessor][com.nkudrin713.kradnik.download.processing.DownloadJobProcessor]
- * without persisting a stale retry or failure transition.
- */
-class DownloadJobLeaseLostException(jobId: Long) :
-	CancellationException("Download job lease lost: $jobId")
-
-/**
- * Pairs a [DownloadJob] snapshot with the token required by [DownloadJobService] for lease-owned mutations.
- * The pair is created when the queue claims a job and remains scoped to that processing attempt.
- */
-data class ClaimedDownloadJob(
-	val job: DownloadJob,
-	val leaseToken: UUID,
-) {
-	fun requiredId(): Long = requireNotNull(job.id)
+    @Transactional
+    fun markFailed(job: DownloadJob, errorMessage: String) {
+        check(downloadJobRepository.fail(job.requiredId(), errorMessage.take(1000)) == 1) {
+            "Job is no longer processing: ${job.id}"
+        }
+    }
 }
 
 data class CreateDownloadJobCommand(

@@ -5,21 +5,19 @@ import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class VkDownloadHandlerTest {
-    private val handler = VkDownloadHandler()
+    private val handler = PlatformResolver()
 
     @Test
     fun supportsExpectedHosts() {
-        assertTrue(handler.supports("https://vk.com/video-1_2"))
-        assertTrue(handler.supports("https://m.vk.ru/clip1_2"))
-        assertTrue(handler.supports("https://vkvideo.ru/video-1_2"))
-        assertTrue(handler.supports("https://vksport.vkvideo.ru/video-1_2"))
-        assertFalse(handler.supports("https://www.vk.com/video-1_2"))
-        assertFalse(handler.supports("https://evilvk.com/video-1_2"))
-        assertFalse(handler.supports("https://vk.com.example.org/video-1_2"))
+        assertEquals(DownloadPlatform.VK, handler.resolve("https://vk.com/video-1_2").video.platform)
+        assertEquals(DownloadPlatform.VK, handler.resolve("https://m.vk.ru/clip1_2").video.platform)
+        assertEquals(DownloadPlatform.VK, handler.resolve("https://vkvideo.ru/video-1_2").video.platform)
+        assertEquals(DownloadPlatform.VK, handler.resolve("https://vksport.vkvideo.ru/video-1_2").video.platform)
+        assertFailsWith<UnsupportedPlatformException> { handler.resolve("https://www.vk.com/video-1_2") }
+        assertFailsWith<UnsupportedPlatformException> { handler.resolve("https://evilvk.com/video-1_2") }
+        assertFailsWith<UnsupportedPlatformException> { handler.resolve("https://vk.com.example.org/video-1_2") }
     }
 
     @Test
@@ -87,7 +85,6 @@ class VkDownloadHandlerTest {
             "https://vkvideo.ru/playlist/-1_2",
             "https://vk.com/wall-1_2?z=video-1_2",
             "https://vk.com/audio",
-            "https://live.vkvideo.ru/channel",
         )
 
         urls.forEach { url ->

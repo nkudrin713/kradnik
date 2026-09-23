@@ -1,7 +1,6 @@
 package com.nkudrin713.kradnik.download.service
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
-import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
@@ -10,13 +9,10 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
-import java.time.Instant
-import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class DownloadJobServiceTest {
@@ -63,188 +59,16 @@ class DownloadJobServiceTest {
     }
 
     @Test
-    fun marksCompleted() {
-        val job = job()
-        val attempt = attempt(job)
-        val storedJob = job().apply {
-            status = DownloadJobStatus.COMPLETED
-            telegramFileId = "file-id"
-            completedAt = Instant.parse("2026-01-01T00:00:00Z")
-        }
-        every {
-            repository.markOwnedCompleted(1, LEASE_TOKEN, "file-id")
-        } returns storedJob
-
-        val actual = service.markCompleted(
-            attempt = attempt,
-            telegramFileId = "file-id",
-        )
-
-        assertEquals(DownloadJobStatus.COMPLETED, actual.status)
-        assertEquals("file-id", actual.telegramFileId)
-        assertNotNull(actual.completedAt)
+    fun failsWithBoundedDiagnostic() {
+        every { repository.fail(1, any()) } returns 1
+        service.markFailed(job(), "x".repeat(2000))
+        verify { repository.fail(1, "x".repeat(1000)) }
     }
 
     @Test
-    fun retriesFailedJobWhenAttemptsRemain() {
-        val job = job(attempts = 1)
-        val retryAt = Instant.parse("2026-01-01T01:00:00Z")
-        val storedJob = job(attempts = 1).apply {
-            status = DownloadJobStatus.QUEUED
-            nextAttemptAt = retryAt
-            errorMessage = "failure"
-        }
-        every { repository.requeueOwnedJob(1, LEASE_TOKEN, "failure", retryAt) } returns storedJob
-
-        val actual = service.retryAt(attempt(job), "failure", retryAt)
-
-        assertEquals(DownloadJobStatus.QUEUED, actual.status)
-        assertEquals(retryAt, actual.nextAttemptAt)
-        assertEquals("failure", actual.errorMessage)
-    }
-
-    @Test
-    fun failsJobWhenAttemptsExhausted() {
-        val job = job(attempts = 3)
-        val retryAt = Instant.parse("2026-01-01T01:00:00Z")
-        val storedJob = job(attempts = 3).apply {
-            status = DownloadJobStatus.FAILED
-            errorMessage = "failure"
-            completedAt = retryAt
-        }
-        every { repository.failOwnedJob(1, LEASE_TOKEN, "failure") } returns storedJob
-
-        val actual = service.retryAt(attempt(job), "failure", retryAt)
-
-        assertEquals(DownloadJobStatus.FAILED, actual.status)
-        assertEquals("failure", actual.errorMessage)
-        assertNotNull(actual.completedAt)
-    }
-
-    @Test
-    fun defersWithoutConsumingAttempt() {
-        val retryAt = Instant.parse("2026-01-01T01:00:00Z")
-        val job = job(attempts = 1)
-        val storedJob = job(attempts = 0).apply {
-            status = DownloadJobStatus.QUEUED
-            nextAttemptAt = retryAt
-            errorMessage = "rate limited"
-        }
-        every { repository.deferOwnedJob(1, LEASE_TOKEN, "rate limited", retryAt) } returns storedJob
-
-        val actual = service.deferBeforeAttempt(attempt(job), retryAt, "rate limited")
-
-        assertEquals(DownloadJobStatus.QUEUED, actual.status)
-        assertEquals(0, actual.attempts)
-        assertEquals(retryAt, actual.nextAttemptAt)
-        assertEquals("rate limited", actual.errorMessage)
-    }
-
-    @Test
-    fun marksAudioMetadata() {
-        val job = job()
-        every {
-            repository.updateOwnedMetadata(
-                1,
-                LEASE_TOKEN,
-                120,
-                "audio title",
-                "artist",
-            )
-        } returns job().apply {
-            sourceDurationSeconds = 120
-            sourceAudioTitle = "audio title"
-            sourceAudioPerformer = "artist"
-        }
-
-        val actual = service.markAudioMetadata(
-            attempt = attempt(job),
-            durationSeconds = 120,
-            title = "audio title",
-            performer = "artist",
-        )
-
-        assertEquals(120, actual.sourceDurationSeconds)
-        assertEquals("audio title", actual.sourceAudioTitle)
-        assertEquals("artist", actual.sourceAudioPerformer)
-    }
-
-    @Test
-    fun marksUploading() {
-        val job = job()
-        every { repository.markOwnedUploading(1, LEASE_TOKEN) } returns job().apply {
-            status = DownloadJobStatus.UPLOADING
-        }
-
-        val actual = service.markUploading(attempt(job))
-
-        assertEquals(DownloadJobStatus.UPLOADING, actual.status)
-    }
-
-    @Test
-    fun marksFailed() {
-        val job = job()
-        every { repository.failOwnedJob(1, LEASE_TOKEN, "failure") } returns job().apply {
-            status = DownloadJobStatus.FAILED
-            errorMessage = "failure"
-            completedAt = Instant.parse("2026-01-01T00:00:00Z")
-        }
-
-        val actual = service.markFailed(attempt(job), "failure")
-
-        assertEquals(DownloadJobStatus.FAILED, actual.status)
-        assertEquals("failure", actual.errorMessage)
-        assertNotNull(actual.completedAt)
-    }
-
-    @Test
-    fun rejectsStateChangeAfterLeaseIsLost() {
-        every { repository.markOwnedUploading(1, LEASE_TOKEN) } returns null
-
-        assertFailsWith<DownloadJobLeaseLostException> {
-            service.markUploading(attempt(job()))
-        }
-    }
-
-    @Test
-    fun findsCachedJob() {
-        val job = job().apply { cacheKey = "cache-key" }
-        val cachedJob = job()
-        every { repository.findCachedCompletedJob("cache-key") } returns cachedJob
-
-        val actual = service.findCachedJob(job)
-
-        assertEquals(cachedJob, actual)
-    }
-
-    @Test
-    fun claimsNextQueuedJob() {
-        val job = job()
-        every { repository.claimNextQueuedJob(3, LEASE_TOKEN, 300_000) } returns job
-
-        val actual = service.claimNextQueuedJob(LEASE_TOKEN, 300_000)
-
-        assertEquals(ClaimedDownloadJob(job, LEASE_TOKEN), actual)
-    }
-
-    @Test
-    fun renewsOwnedLease() {
-        every { repository.renewLease(1, LEASE_TOKEN, 300_000) } returns 1
-
-        val renewed = service.renewLease(1, LEASE_TOKEN, 300_000)
-
-        assertTrue(renewed)
-    }
-
-    @Test
-    fun recoversExpiredLeases() {
-        every { repository.requeueStaleInProgressJobs(3) } returns 2
-        every { repository.failStaleInProgressJobs(3) } returns 1
-
-        service.recoverExpiredLeases()
-
-        verify { repository.requeueStaleInProgressJobs(3) }
-        verify { repository.failStaleInProgressJobs(3) }
+    fun doesNotOverwriteTerminalJob() {
+        every { repository.complete(1, "file") } returns 0
+        assertFailsWith<IllegalStateException> { service.markCompleted(job(), "file") }
     }
 
     private fun command(): CreateDownloadJobCommand {
@@ -267,18 +91,11 @@ class DownloadJobServiceTest {
         )
     }
 
-    private fun job(attempts: Int = 0): DownloadJob {
+    private fun job(): DownloadJob {
         return DownloadJob(
             id = 1,
             telegramChatId = 2,
-            attempts = attempts,
         )
     }
 
-    private fun attempt(job: DownloadJob): ClaimedDownloadJob =
-        ClaimedDownloadJob(job, LEASE_TOKEN)
-
-    private companion object {
-        val LEASE_TOKEN: UUID = UUID.fromString("00000000-0000-0000-0000-000000000001")
-    }
 }

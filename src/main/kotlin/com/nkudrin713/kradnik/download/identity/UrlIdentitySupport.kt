@@ -20,20 +20,6 @@ internal fun parseUrlOrNull(url: String): URI? {
     return runCatching { URI(url) }.getOrNull()
 }
 
-internal fun normalizeGeneric(uri: URI): String {
-    val scheme = uri.scheme.lowercase()
-    val host = uri.host.lowercase()
-    val port = when {
-        uri.port == -1 -> ""
-        scheme == "http" && uri.port == 80 -> ""
-        scheme == "https" && uri.port == 443 -> ""
-        else -> ":${uri.port}"
-    }
-    val path = uri.rawPath?.takeIf { it.isNotBlank() } ?: ""
-    val query = normalizedQuery(uri)
-    return "$scheme://$host$port$path$query"
-}
-
 internal fun extractQueryParameter(uri: URI, name: String): String? {
     return uri.rawQuery
         ?.split("&")
@@ -47,30 +33,3 @@ internal fun extractQueryParameter(uri: URI, name: String): String? {
 internal fun URI.pathSegments(): List<String> {
     return path.trim('/').split('/').filter { it.isNotBlank() }
 }
-
-private fun normalizedQuery(uri: URI): String {
-    val query = uri.rawQuery ?: return ""
-    val kept = query.split("&")
-        .filter { it.isNotBlank() }
-        .filterNot { parameter -> TRACKING_PARAMETERS.contains(parameter.substringBefore("=").lowercase()) }
-        .sorted()
-    return if (kept.isEmpty()) "" else kept.joinToString(prefix = "?", separator = "&")
-}
-
-private val TRACKING_PARAMETERS = setOf(
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_content",
-    "utm_term",
-    "fbclid",
-    "gclid",
-    "yclid",
-    "igshid",
-    "si",
-    "feature",
-    "ab_channel",
-    "pp",
-    "embeds_referring_euri",
-    "embeds_referring_origin",
-)

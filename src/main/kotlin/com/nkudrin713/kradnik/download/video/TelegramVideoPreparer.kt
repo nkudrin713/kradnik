@@ -1,6 +1,5 @@
 package com.nkudrin713.kradnik.download.video
 
-import com.nkudrin713.kradnik.download.cleanup.WorkDirCapacityGuard
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -18,7 +17,7 @@ import kotlin.time.toKotlinDuration
 
 /**
  * Probes downloaded media with [VideoMetadataProbe] and applies [TelegramVideoPolicy] before upload.
- * Incompatible video is transcoded through [ProcessRunner] after [WorkDirCapacityGuard] reserves disk space, then
+ * Incompatible video is transcoded through [ProcessRunner] and then
  * probed and evaluated again; only a second accepted result is returned to
  * [DownloadJobProcessor][com.nkudrin713.kradnik.download.processing.DownloadJobProcessor].
  */
@@ -27,7 +26,6 @@ class TelegramVideoPreparer(
     private val processRunner: ProcessRunner,
     private val videoMetadataProbe: VideoMetadataProbe,
     private val videoPolicy: TelegramVideoPolicy,
-    private val workDirCapacityGuard: WorkDirCapacityGuard,
     @Value("\${download.video.ffmpeg-timeout:20m}")
     private val ffmpegTimeout: JavaDuration = JavaDuration.ofMinutes(20),
 ) {
@@ -79,7 +77,6 @@ class TelegramVideoPreparer(
             sourceMetadata.height,
         )
 
-        workDirCapacityGuard.ensureTranscodeCapacity(outputDir)
         val preparedFile = outputDir.resolve("telegram-video.mp4")
         transcodeForTelegram(file.file, preparedFile)
 
@@ -165,7 +162,7 @@ private data class FfmpegCommand(
     override val executable: String = "ffmpeg",
 ) : Command
 
-class VideoTooLargeException(val sizeBytes: Long) :
+class VideoTooLargeException(sizeBytes: Long) :
     RuntimeException(
         "Video is too large for Telegram upload: sizeMb=${
             String.format(Locale.US, "%.2f", sizeBytes / (1024.0 * 1024.0))

@@ -1,67 +1,63 @@
 # Kradnik
 
-A Telegram bot for downloading public videos from YouTube, Instagram, and VK. A user sends a link directly to the bot or invokes it in another chat with `@bot link`, selects a video quality, audio, or cover image, and receives the file.
-
-## Features
-
-- parses YouTube, Instagram, and VK links;
-- supports English and Russian user interfaces with a persisted per-user language preference;
-- shows available options and estimated sizes before creating a download job;
-- downloads video, audio, and cover images;
-- prepares video for Telegram constraints with `ffmpeg`;
-- reuses a `file_id` that was previously uploaded to Telegram;
-- stores the queue, attempts, leases, choice sessions, and language preferences in PostgreSQL;
-- works with both the cloud Telegram Bot API and a local server for files up to 2 GB;
-- cleans temporary directories and checks free disk space before downloading.
-
-The bot supports only public single posts. Playlists, private content, and authentication bypasses are not supported.
+A Telegram bot for downloading public videos from YouTube, Instagram, and VK. Send a link directly or invoke the bot in another chat with `@bot link`, choose video quality, audio, or a cover image, and receive the file. English and Russian interfaces, Telegram file reuse, and cloud/local Bot API delivery are supported. Playlists, private content, and authentication bypasses are not supported.
 
 ## Request flow
 
 ```text
-TelegramPollingService
-  -> TelegramUpdateHandler
-     -> TelegramLanguageSelector + TelegramUserPreferenceService
-     -> direct message or guest_message
-  -> DownloadChoiceCoordinator
-  -> DownloadChoicePlanner + DownloadChoiceSessionService
+TelegramPollingService -> TelegramUpdateHandler
+  -> DownloadChoiceCoordinator: retrieve metadata and show the format menu
+  -> DownloadChoiceHandler: accept the user's selection
+  -> TelegramDownloadStarter -> DownloadJobService: persist QUEUED job
 
-user selection
-  -> DownloadChoiceHandler
-  -> TelegramDownloadStarter
-  -> DownloadJobService
-  -> DownloadQueueWorker
-  -> DownloadJobProcessor
-  -> DownloadEngine
-  -> TelegramFileSender
+DownloadQueueWorker: one loop per worker thread
+  -> DownloadJobService.claimNextQueuedJob(): QUEUED -> PROCESSING
+  -> DownloadJobProcessor.process():
+       cached Telegram file, or:
+       DownloadEngine.prepare() -> size check -> DownloadEngine.download()
+       -> optional TelegramVideoPreparer -> TelegramFileSender.send()
+       -> COMPLETED / FAILED
+       -> finally: delete the job's directory
 ```
 
-On the first `/start`, the bot asks the user to choose English or Russian. The `/language` command opens the same selector later. If no explicit choice is available, the bot defaults to English.
+Metadata is needed before enqueueing because it determines the available formats and estimated sizes. Two metadata threads serve this step, with at most 32 pending requests; overload returns the existing preparation error. The download queue contains only accepted selections. Menu snapshots and ownership are stored in PostgreSQL so callbacks still work after a restart; language preferences are stored per user.
 
-The download route is split into two parts. Before selection, the bot resolves the platform, retrieves the format catalog, builds a localized menu, and persists the menu together with its language. After selection, it creates a PostgreSQL job with the same language; a worker claims the job with a lease, downloads the file, and sends it to Telegram. In guest mode, the status, menu, and final file successively replace one inline message.
+## Concurrency
+
+The application is designed to run as a single instance. Download concurrency is handled by an internal fixed-size worker pool, configured by `download.workers` (`DOWNLOAD_WORKERS`, default **3**). Each of its N long-lived loops claims one job, processes it completely, and only then claims another; pending downloads remain in PostgreSQL, never in an executor queue. Claim uses a short transaction with `FOR UPDATE SKIP LOCKED` and `UPDATE ... RETURNING`, so two threads cannot claim the same queued row. Downloading and uploading happen outside the transaction; an idle worker polls every second and a failed iteration does not stop the loop. Existing suspend-based process/HTTP adapters run behind a `runBlocking` bridge; they do not create additional download jobs.
+
+States are `QUEUED`, `PROCESSING`, `COMPLETED`, and `FAILED`. Upload progress is a Telegram message, not another database state. Ordinary failures become `FAILED` without automatic job retry; the user can submit the link again. On startup, abandoned job directories are removed and `PROCESSING` jobs return to `QUEUED` before workers start. Shutdown interrupts the loops and cancels external I/O, then waits up to 30 seconds for workers to stop.
+
+**Restart limitation:** delivery is at least once across crashes. A crash after Telegram accepted a file but before `COMPLETED` was committed can produce a duplicate message after restart. Never overlap application instances, including during deployment: startup recovery assumes the old process has stopped. If a database outage prevents persisting a terminal state, the failure is logged and startup recovery handles the remaining `PROCESSING` row.
 
 ## Code map
 
-| Task | Main files |
-| --- | --- |
-| Commands and callback routing | `telegram/handler/TelegramUpdateHandler.kt`, `DownloadChoiceHandler.kt` |
-| Language selection and persistence | `telegram/TelegramLanguageSelector.kt`, `telegram/localization/` |
-| Localized copy | `src/main/resources/i18n/messages_*.properties` |
-| Video quality, audio, and cover menu | `download/choice/DownloadChoicePlanner.kt`, `telegram/TelegramDownloadChoiceView.kt` |
-| Link parsing and platform parameters | `download/platform/*DownloadHandler.kt` |
-| Source downloading | `download/DownloadEngine.kt`, `ytdlp/client/YtDlpService.kt` |
-| Instagram-specific behavior | `download/instagram/` |
-| Queue, leases, and retries | `download/service/DownloadJobService.kt`, `download/processing/` |
-| Telegram delivery and limits | `telegram/TelegramMediaSender.kt`, `download/telegram/TelegramFileSender.kt`, `telegram/config/TelegramBotProperties.kt` |
-| Video preparation | `download/video/` |
-| Database schema | `src/main/resources/db/migration/` |
-| Containers and deployment | `docker-compose.yml`, `.github/workflows/`, `scripts/render-deploy-env.sh` |
+Paths below are relative to `src/main/kotlin/com/nkudrin713/kradnik/`.
 
-To add a platform, add a `DownloadPlatform` value, a `PlatformDownloadHandler` implementation, and supported-URL tests. `PlatformResolver` receives the handlers through Spring. The platform handler owns format parameters, the normalized URL, and the cache key.
+| Component | Responsibility |
+| --- | --- |
+| `telegram/handler/TelegramUpdateHandler.kt` | Commands, link input, and callbacks |
+| `download/platform/PlatformResolver.kt` | URL validation, normalization, and explicit routing for three sources |
+| `download/choice/DownloadChoicePlanner.kt` | Format and size options for the menu |
+| `telegram/DownloadChoiceCoordinator.kt` | Bounded metadata execution and menu publication |
+| `download/service/DownloadJobService.kt` | Enqueue, claim, completion, failure, and startup recovery transactions |
+| `download/repository/DownloadJobRepository.kt` | Queue SQL and reusable Telegram file lookup |
+| `download/processing/DownloadQueueWorker.kt` | Fixed-size pool and polling loops |
+| `download/processing/DownloadJobProcessor.kt` | Linear download-to-delivery scenario and cleanup |
+| `download/DownloadEngine.kt` | Explicit yt-dlp, Instagram embed, and cover download branches |
+| `ytdlp/client/YtDlpService.kt`, `process/DefaultProcessRunner.kt` | External commands, deadlines, bounded diagnostics, process-tree termination |
+| `download/telegram/TelegramFileSender.kt`, `telegram/TelegramApiClient.kt` | Direct/guest media delivery and cancellation of Telegram uploads |
+| `download/video/` | Probe and normalize incompatible video for Telegram |
+
+Audio metadata stays local to a processing call. Persistent state consists of `download_jobs`, `download_choice_sessions`, and `telegram_user_preferences`; Flyway manages all schema changes. The HTTP clients are shared; request objects, media metadata, processes, and numeric job directories are per job. There is no shared mutable collection of running jobs.
+
+## Technologies
+
+Kotlin/JVM, Java 21 executors, Spring Boot, Spring Data JPA, PostgreSQL, Flyway, yt-dlp, ffmpeg/ffprobe, Telegram Bot API, Docker Compose, JUnit/MockK, and Testcontainers. Coroutines remain inside existing external-I/O adapters for cancellation and process stream handling.
 
 ## Local development
 
-Java 21, Docker, `yt-dlp`, `ffmpeg`, and a Telegram bot token are required.
+Java 21, Docker, yt-dlp, ffmpeg, and a Telegram bot token are required.
 
 ```bash
 cp .env.example .env
@@ -70,35 +66,27 @@ docker compose up -d postgres
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
-Run checks with:
-
 ```bash
-./gradlew check
+./gradlew check bootJar
 ```
 
-`check` runs the tests and verifies aggregate JaCoCo coverage. Integration tests use PostgreSQL through Testcontainers, so Docker must be running.
+`check` runs tests and verifies aggregate JaCoCo coverage. PostgreSQL integration tests use Testcontainers and are skipped if Docker is unavailable; a successful build with skipped tests is not database verification.
 
 ## Configuration
 
-Runtime configuration provides concrete addresses, tokens, limits, and paths through process environment variables.
+- `POSTGRES_*`: database connection.
+- `TELEGRAM_BOT_*`, `TELEGRAM_MAX_UPLOAD_BYTES`: Telegram endpoints and file-size limit.
+- `TELEGRAM_FILE_STORAGE_CHAT_ID`: private storage chat needed for a fresh guest-mode upload.
+- `DOWNLOAD_WORKERS`: maximum concurrently processing download jobs, default 3.
+- `DOWNLOAD_WORK_DIR`: dedicated writable media directory; each job has its own subdirectory.
+- `DOWNLOAD_*_TIMEOUT`: bounded external-process and HTTP execution.
+- `DOWNLOAD_YT_DLP_CLOUD_MAX_WORKSPACE_BYTES`: per-process cloud download workspace cap.
+- `DOWNLOAD_CHOICE_SESSION_*`: menu retention.
+- `YOUTUBE_PO_TOKEN_PROVIDER_URL`: optional YouTube PO Token Provider.
 
-Main configuration groups:
-
-- `POSTGRES_*` — PostgreSQL connection;
-- `TELEGRAM_BOT_*`, `TELEGRAM_MAX_UPLOAD_BYTES` — Telegram API and file-size limit;
-- `TELEGRAM_FILE_STORAGE_CHAT_ID` — private chat used to obtain a `file_id` before delivering a new file in guest mode;
-- `TELEGRAM_DONATION_PIN_LANGUAGE` — donation channel pin language, `en` by default;
-- `DOWNLOAD_WORK_DIR`, `DOWNLOAD_*_TIMEOUT` — work directory and timeouts;
-- `DOWNLOAD_INSTAGRAM_RATE_LIMIT_*` — local Instagram request limiting;
-- `YOUTUBE_PO_TOKEN_PROVIDER_URL` — optional YouTube PO Token Provider.
-
-A local Telegram Bot API is selected through `TELEGRAM_BOT_API_URL` and `TELEGRAM_BOT_FILE_API_URL`. In this mode, `DOWNLOAD_WORK_DIR` must point to a volume shared with the Bot API container.
-
-Guest mode must be enabled through BotFather, and `TELEGRAM_FILE_STORAGE_CHAT_ID` must be configured. The bot needs permission to send files to that private chat. Cached `file_id` values are used without an intermediate upload.
+Local Bot API endpoints require a media volume shared with the application. Set `DOWNLOAD_WORK_DIR` to that shared path. Guest mode also requires BotFather enablement and permission to send files to the configured storage chat. Cached `file_id` values need no intermediate upload. `/language` changes the persisted user language; donation configuration remains in the environment.
 
 ## Docker and deployment
-
-The image contains the application, `yt-dlp`, `ffmpeg`, and the required runtime dependencies. To build the full stack locally:
 
 ```bash
 ./gradlew bootJar
@@ -108,6 +96,8 @@ docker build -t kradnik:local .
 APP_IMAGE=kradnik:local docker compose up -d
 ```
 
-The `telegram-local` and `youtube-pot` Compose profiles enable optional services. Merging to `main` runs CI but does not deploy. A manually started release verifies the latest `main` commit, creates an immutable `vX.Y.Z` Git tag, builds an image with the same version tag, and deploys its exact digest to production. Production values remain in the GitHub `production` environment and the server-side `.env` file rather than Kotlin code.
+The image contains yt-dlp, ffmpeg, and runtime dependencies. Compose profiles `telegram-local` and `youtube-pot` enable optional services. Configuration is rendered by `scripts/render-deploy-env.sh`; `DOWNLOAD_WORKERS` is also exposed as a GitHub production environment variable. Merging to `main` does not deploy; a manual release builds and deploys an immutable version and exact image digest.
 
-Flyway manages database migrations. Applied migrations are never modified; every schema change is added as a new migration file.
+Migration `V26` removes lease/retry fields, transient audio metadata columns, and the `uploading` state. It preserves jobs and converts old in-progress rows to `queued`. Stop the old application before running the new version; do not run mixed versions or roll back only the application after this migration. Existing migrations remain unchanged.
+
+See [architecture decisions and interview walkthrough](docs/architecture-refactor.md) for the refactoring rationale and concurrency questions.

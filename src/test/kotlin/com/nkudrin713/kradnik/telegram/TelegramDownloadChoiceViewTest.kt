@@ -19,7 +19,6 @@ class TelegramDownloadChoiceViewTest {
     fun createsPreformattedEscapedTitleAndNonClickableDuration() {
         val actual = view.text(
             DownloadChoiceMediaInfo(
-                channelName = "Channel <official>",
                 title = "Title & more",
                 durationSeconds = 3_723,
             ),
@@ -39,7 +38,6 @@ class TelegramDownloadChoiceViewTest {
     fun usesFallbackWhenTitleIsMissing() {
         val actual = view.text(
             DownloadChoiceMediaInfo(
-                channelName = "Channel",
                 title = null,
                 durationSeconds = null,
             ),

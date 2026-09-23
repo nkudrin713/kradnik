@@ -3,13 +3,11 @@ package com.nkudrin713.kradnik.telegram
 import com.nkudrin713.kradnik.download.video.VideoMetadata
 import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
 import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
-import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.Audio
 import com.pengrad.telegrambot.model.Document
 import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.Video
 import com.pengrad.telegrambot.model.request.ReplyParameters
-import com.pengrad.telegrambot.request.BaseRequest
 import com.pengrad.telegrambot.request.EditMessageMedia
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendDocument
@@ -29,10 +27,10 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 
 class TelegramMediaSenderTest {
-    private val bot: TelegramBot = mockk()
+    private val apiClient: TelegramApiClient = mockk()
     private val videoMetadataProbe: VideoMetadataProbe = mockk()
     private val sender = TelegramMediaSender(
-        apiClient = TelegramApiClient(bot),
+        apiClient = apiClient,
         videoMetadataProbe = videoMetadataProbe,
         properties = TelegramBotProperties(token = "test-token"),
     )
@@ -41,9 +39,9 @@ class TelegramMediaSenderTest {
     fun sendsVideoWithMetadata(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("video.mp4")
         file.writeText("video")
-        val request = slot<BaseRequest<*, *>>()
+        val request = slot<SendVideo>()
         coEvery { videoMetadataProbe.probe(file) } returns VideoMetadata(1920, 1080, "1:1", "16:9")
-        every { bot.execute(capture(request)) } returns sendResponse(video = video("video-id", 456))
+        coEvery { apiClient.executeIo(capture(request), any()) } returns sendResponse(video = video("video-id", 456))
 
         val result = sender.sendVideo(
             chatId = 100,
@@ -60,8 +58,8 @@ class TelegramMediaSenderTest {
 
     @Test
     fun sendsCachedVideo() = runTest {
-        val request = slot<BaseRequest<*, *>>()
-        every { bot.execute(capture(request)) } returns sendResponse(video = video("video-id", 456))
+        val request = slot<SendVideo>()
+        coEvery { apiClient.executeIo(capture(request), any()) } returns sendResponse(video = video("video-id", 456))
 
         val result = sender.sendCachedVideo(
             chatId = 100,
@@ -77,8 +75,8 @@ class TelegramMediaSenderTest {
 
     @Test
     fun editsInlineVideoByFileId() = runTest {
-        val request = slot<BaseRequest<*, *>>()
-        every { bot.execute(capture(request)) } returns okResponse()
+        val request = slot<EditMessageMedia>()
+        coEvery { apiClient.executeIo(capture(request), any()) } returns okResponse()
 
         sender.editInlineVideo("inline-message", "video-id") shouldBe "video-id"
 
@@ -90,8 +88,8 @@ class TelegramMediaSenderTest {
     fun sendsAudioWithMetadata(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("audio.mp3")
         file.writeText("audio")
-        val request = slot<BaseRequest<*, *>>()
-        every { bot.execute(capture(request)) } returns sendResponse(audio = audio("audio-id", 456))
+        val request = slot<SendAudio>()
+        coEvery { apiClient.executeIo(capture(request), any()) } returns sendResponse(audio = audio("audio-id", 456))
 
         val result = sender.sendAudio(
             chatId = 100,
@@ -112,8 +110,8 @@ class TelegramMediaSenderTest {
 
     @Test
     fun sendsCachedAudio() = runTest {
-        val request = slot<BaseRequest<*, *>>()
-        every { bot.execute(capture(request)) } returns sendResponse(audio = audio("audio-id", 456))
+        val request = slot<SendAudio>()
+        coEvery { apiClient.executeIo(capture(request), any()) } returns sendResponse(audio = audio("audio-id", 456))
 
         val result = sender.sendCachedAudio(
             chatId = 100,
@@ -129,8 +127,8 @@ class TelegramMediaSenderTest {
 
     @Test
     fun editsInlineAudioByFileId() = runTest {
-        val request = slot<BaseRequest<*, *>>()
-        every { bot.execute(capture(request)) } returns okResponse()
+        val request = slot<EditMessageMedia>()
+        coEvery { apiClient.executeIo(capture(request), any()) } returns okResponse()
 
         sender.editInlineAudio("inline-message", "audio-id", "title", "artist", 120) shouldBe "audio-id"
 
@@ -142,8 +140,8 @@ class TelegramMediaSenderTest {
     fun sendsCoverAsDocument(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("cover.jpg")
         file.writeText("cover")
-        val request = slot<BaseRequest<*, *>>()
-        every { bot.execute(capture(request)) } returns sendResponse(document = document("cover-id", 456))
+        val request = slot<SendDocument>()
+        coEvery { apiClient.executeIo(capture(request), any()) } returns sendResponse(document = document("cover-id", 456))
 
         val result = sender.sendDocument(100, file, replyToMessageId = 200)
 
@@ -154,8 +152,8 @@ class TelegramMediaSenderTest {
 
     @Test
     fun sendsCachedCoverDocument() = runTest {
-        val request = slot<BaseRequest<*, *>>()
-        every { bot.execute(capture(request)) } returns sendResponse(document = document("cover-id", 456))
+        val request = slot<SendDocument>()
+        coEvery { apiClient.executeIo(capture(request), any()) } returns sendResponse(document = document("cover-id", 456))
 
         val result = sender.sendCachedDocument(100, "cached-id", replyToMessageId = 200)
 
@@ -166,8 +164,8 @@ class TelegramMediaSenderTest {
 
     @Test
     fun editsInlineDocumentByFileId() = runTest {
-        val request = slot<BaseRequest<*, *>>()
-        every { bot.execute(capture(request)) } returns okResponse()
+        val request = slot<EditMessageMedia>()
+        coEvery { apiClient.executeIo(capture(request), any()) } returns okResponse()
 
         sender.editInlineDocument("inline-message", "document-id") shouldBe "document-id"
 
@@ -179,11 +177,11 @@ class TelegramMediaSenderTest {
     fun sendsLocalFilesByUri(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("media file.mp4")
         file.writeText("video")
-        val request = slot<BaseRequest<*, *>>()
+        val request = slot<SendVideo>()
         coEvery { videoMetadataProbe.probe(file) } returns VideoMetadata(1920, 1080, "1:1", "16:9")
-        every { bot.execute(capture(request)) } returns sendResponse(video = video("video-id", 456))
+        coEvery { apiClient.executeIo(capture(request), any()) } returns sendResponse(video = video("video-id", 456))
         val localSender = TelegramMediaSender(
-            apiClient = TelegramApiClient(bot),
+            apiClient = apiClient,
             videoMetadataProbe = videoMetadataProbe,
             properties = TelegramBotProperties(
                 token = "test-token",
@@ -203,10 +201,10 @@ class TelegramMediaSenderTest {
     fun sendsLocalAudioByUri(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("audio file.mp3")
         file.writeText("audio")
-        val request = slot<BaseRequest<*, *>>()
-        every { bot.execute(capture(request)) } returns sendResponse(audio = audio("audio-id", 456))
+        val request = slot<SendAudio>()
+        coEvery { apiClient.executeIo(capture(request), any()) } returns sendResponse(audio = audio("audio-id", 456))
         val localSender = TelegramMediaSender(
-            apiClient = TelegramApiClient(bot),
+            apiClient = apiClient,
             videoMetadataProbe = videoMetadataProbe,
             properties = TelegramBotProperties(
                 token = "test-token",

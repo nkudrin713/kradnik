@@ -10,7 +10,6 @@ import java.net.InetSocketAddress
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -87,11 +86,10 @@ class JdkInstagramHttpClientTest {
             TelegramUploadLimits(maxUploadBytes = 3, localMode = true)
         )
 
-        val error = assertFailsWith<InstagramMediaTooLargeException> {
+        assertFailsWith<InstagramMediaTooLargeException> {
             limitedClient.download(baseUri.resolve("/large-video"), outputFile)
         }
 
-        assertEquals(body.size.toLong(), error.sizeBytes)
         assertEquals(false, Files.exists(outputFile))
     }
 
@@ -127,8 +125,7 @@ class JdkInstagramHttpClientTest {
             client.getText(baseUri.resolve("/failed"))
         }
 
-        assertEquals(InstagramRequestStage.EMBED, error.stage)
+        assertEquals("Instagram embed request failed: status=429", error.message)
         assertEquals(429, error.statusCode)
-        assertEquals(Duration.ofSeconds(60), error.retryAfter)
     }
 }

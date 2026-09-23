@@ -189,7 +189,7 @@ class TelegramFileSenderTest {
             unconfiguredSender.send(job, DownloadedFile(tempDir.resolve("cover.jpg"), sizeBytes = 123))
         }
 
-        assertEquals(TelegramSendFailureKind.TERMINAL, error.kind)
+        assertEquals(TelegramSendFailureKind.OTHER, error.kind)
     }
 
     private fun job(outputType: OutputType): DownloadJob {

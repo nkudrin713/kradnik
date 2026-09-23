@@ -14,7 +14,7 @@ import java.nio.file.Path
 /**
  * Uses [InstagramHttpClient] to extract metadata and an optional direct video URL from a public embed payload.
  * Direct media is accepted only from HTTPS Instagram CDN origins and is returned with the metadata as
- * [InstagramPreparedDownload] so [InstagramDownloader] can choose direct download or yt-dlp fallback.
+ * [InstagramPreparedDownload] so [DownloadEngine][com.nkudrin713.kradnik.download.DownloadEngine] can choose direct download or yt-dlp fallback.
  */
 @Service
 class InstagramEmbedDownloader(
@@ -46,7 +46,6 @@ class InstagramEmbedDownloader(
             mediaUri = mediaUri,
             metadata = YtDlpMetadataDto(
                 title = "Instagram $shortcode",
-                extractor = "instagram:embed",
                 thumbnail = context.findFirstText(DISPLAY_URL, THUMBNAIL_URL),
                 duration = context.findFirstDecimal(VIDEO_DURATION),
                 width = context.findFirstInt(ORIGINAL_WIDTH, WIDTH),

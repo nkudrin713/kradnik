@@ -8,7 +8,6 @@ data class DownloadChoicePlan(
 )
 
 data class DownloadChoiceMediaInfo(
-    val channelName: String?,
     val title: String?,
     val durationSeconds: Long?,
 )

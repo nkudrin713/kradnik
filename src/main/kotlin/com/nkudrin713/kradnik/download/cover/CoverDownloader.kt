@@ -3,7 +3,7 @@ package com.nkudrin713.kradnik.download.cover
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
 import org.springframework.stereotype.Component
 import java.net.URI
 import java.net.http.HttpClient
@@ -28,7 +28,7 @@ class CoverDownloader(
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build()
 
-    suspend fun download(url: String, outputDir: Path): DownloadedFile = withContext(Dispatchers.IO) {
+    suspend fun download(url: String, outputDir: Path): DownloadedFile = runInterruptible(Dispatchers.IO) {
         val uri = runCatching { URI.create(url) }
             .getOrElse { throw CoverDownloadException("Cover URL is invalid") }
         if (uri.scheme != "https" && uri.scheme != "http") {
@@ -58,7 +58,7 @@ class CoverDownloader(
         val contentLength = response.headers().firstValueAsLong("Content-Length").orElse(-1L)
         if (contentLength > maxCoverBytes) {
             response.body().close()
-            throw CoverTooLargeException(contentLength)
+            throw CoverTooLargeException()
         }
 
         val outputFile = outputDir.resolve("cover.$extension")
@@ -72,7 +72,7 @@ class CoverDownloader(
                         if (count < 0) break
                         downloadedBytes += count
                         if (downloadedBytes > maxCoverBytes) {
-                            throw CoverTooLargeException(downloadedBytes)
+                            throw CoverTooLargeException()
                         }
                         output.write(buffer, 0, count)
                     }
@@ -105,5 +105,5 @@ class CoverDownloader(
 
 open class CoverDownloadException(message: String) : RuntimeException(message)
 
-class CoverTooLargeException(val sizeBytes: Long) :
+class CoverTooLargeException :
     CoverDownloadException("Cover exceeds the upload limit")

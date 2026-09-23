@@ -5,7 +5,6 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
 import com.nkudrin713.kradnik.telegram.TelegramSendException
-import com.nkudrin713.kradnik.telegram.TelegramSendFailureKind
 import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
 import org.springframework.stereotype.Component
 
@@ -80,7 +79,6 @@ class TelegramFileSender(
         val storageChatId = properties.fileStorageChatId ?: throw TelegramSendException(
             errorCode = null,
             description = "telegram.bot.file-storage-chat-id is not configured",
-            kind = TelegramSendFailureKind.TERMINAL,
         )
         return when (job.outputType) {
             OutputType.VIDEO -> telegramMediaSender.sendVideo(storageChatId, file.file)

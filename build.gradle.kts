@@ -88,7 +88,6 @@ val jacocoExcludedClasses = listOf(
 	"**/*Result.class",
 	"**/*Result\$*.class",
 	"**/*Status.class",
-	"**/PlatformDownloadHandler.class",
 	"**/ProcessRunner.class",
 	"**/TelegramUploadLimits.class",
 	"**/WorkDirCleaner.class",

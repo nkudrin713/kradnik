@@ -3,7 +3,7 @@ package com.nkudrin713.kradnik.download.instagram
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
 import org.springframework.beans.factory.annotation.Value
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -15,9 +15,6 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
-import java.time.Instant
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * Defines the HTTP operations used by [InstagramEmbedDownloader] for public embed metadata and direct media.
@@ -36,7 +33,7 @@ interface InstagramHttpClient {
 
 /**
  * Implements [InstagramHttpClient] with JDK HTTP calls on the IO dispatcher.
- * It validates response status and video content type, parses Retry-After for [InstagramRateLimiter], and removes
+ * It validates response status and video content type and removes
  * partial files on failure; local Bot API mode stops the stream as soon as [TelegramUploadLimits] is exceeded.
  */
 @Component
@@ -59,7 +56,7 @@ class JdkInstagramHttpClient(
         require(downloadTimeout.isPositive()) { "download.instagram.download-timeout must be positive" }
     }
 
-    override suspend fun getText(uri: URI): String = withContext(Dispatchers.IO) {
+    override suspend fun getText(uri: URI): String = runInterruptible(Dispatchers.IO) {
         val request = HttpRequest.newBuilder(uri)
             .timeout(metadataTimeout)
             .header("Accept", "text/html")
@@ -75,7 +72,6 @@ class JdkInstagramHttpClient(
             throw InstagramHttpException(
                 stage = InstagramRequestStage.EMBED,
                 statusCode = response.statusCode(),
-                retryAfter = parseRetryAfter(response),
             )
         }
 
@@ -89,7 +85,7 @@ class JdkInstagramHttpClient(
         response.body()
     }
 
-    override suspend fun contentLength(uri: URI): Long? = withContext(Dispatchers.IO) {
+    override suspend fun contentLength(uri: URI): Long? = runInterruptible(Dispatchers.IO) {
         val request = HttpRequest.newBuilder(uri)
             .timeout(metadataTimeout)
             .header("Accept", "video/*")
@@ -98,7 +94,7 @@ class JdkInstagramHttpClient(
             .build()
         val response = httpClient.send(request, HttpResponse.BodyHandlers.discarding())
         if (response.statusCode() !in SUCCESS_STATUS_CODES) {
-            return@withContext null
+            return@runInterruptible null
         }
         response.headers().firstValueAsLong("Content-Length")
             .orElse(-1L)
@@ -108,7 +104,7 @@ class JdkInstagramHttpClient(
     override suspend fun download(
         uri: URI,
         outputFile: Path,
-    ): DownloadedFile = withContext(Dispatchers.IO) {
+    ): DownloadedFile = runInterruptible(Dispatchers.IO) {
         val request = HttpRequest.newBuilder(uri)
             .timeout(downloadTimeout)
             .header("Accept", "video/*")
@@ -125,7 +121,6 @@ class JdkInstagramHttpClient(
             throw InstagramHttpException(
                 stage = InstagramRequestStage.MEDIA,
                 statusCode = response.statusCode(),
-                retryAfter = parseRetryAfter(response),
             )
         }
 
@@ -140,7 +135,7 @@ class JdkInstagramHttpClient(
         val contentLength = response.headers().firstValueAsLong("Content-Length").orElse(-1)
         if (uploadLimits.localMode && contentLength > uploadLimits.maxUploadBytes) {
             response.body().close()
-            throw InstagramMediaTooLargeException(contentLength)
+            throw InstagramMediaTooLargeException()
         }
 
         logger.info(
@@ -162,7 +157,7 @@ class JdkInstagramHttpClient(
                         }
                         downloadedBytes += count
                         if (uploadLimits.localMode && downloadedBytes > uploadLimits.maxUploadBytes) {
-                            throw InstagramMediaTooLargeException(downloadedBytes)
+                            throw InstagramMediaTooLargeException()
                         }
                         output.write(buffer, 0, count)
                     }
@@ -179,18 +174,6 @@ class JdkInstagramHttpClient(
         )
     }
 
-    private fun parseRetryAfter(response: HttpResponse<*>): Duration? {
-        val value = response.headers().firstValue("Retry-After").orElse(null) ?: return null
-        value.toLongOrNull()?.let { seconds ->
-            return Duration.ofSeconds(seconds.coerceAtLeast(0))
-        }
-
-        return runCatching {
-            val retryAt = ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()
-            Duration.between(Instant.now(), retryAt).coerceAtLeast(Duration.ZERO)
-        }.getOrNull()
-    }
-
     private companion object {
         private val CONNECT_TIMEOUT = Duration.ofSeconds(10)
         private val SUCCESS_STATUS_CODES = 200..299
@@ -205,10 +188,9 @@ enum class InstagramRequestStage {
 }
 
 class InstagramHttpException(
-    val stage: InstagramRequestStage,
+    stage: InstagramRequestStage,
     val statusCode: Int,
-    val retryAfter: Duration?,
 ) : InstagramEmbedException("Instagram ${stage.name.lowercase()} request failed: status=$statusCode")
 
-class InstagramMediaTooLargeException(val sizeBytes: Long) :
+class InstagramMediaTooLargeException :
     InstagramEmbedException("Instagram media exceeds Telegram upload limit")

@@ -1,55 +1,96 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
-import com.nkudrin713.kradnik.download.service.ClaimedDownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import io.mockk.coVerify
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
-import java.util.UUID
-import kotlin.test.Test
+import io.mockk.verifyOrder
+import org.junit.jupiter.api.Test
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class DownloadQueueWorkerTest {
-    private val downloadJobService: DownloadJobService = mockk()
-    private val downloadJobProcessor: DownloadJobProcessor = mockk()
+    private val jobs = mockk<DownloadJobService>(relaxed = true)
+    private val processor = mockk<DownloadJobProcessor>()
+    private val cleaner = mockk<WorkDirCleaner>(relaxed = true)
 
     @Test
-    fun processesClaimedJob() {
-        val job = DownloadJob(id = 1)
-        val attempt = attempt(job)
-        every { downloadJobService.recoverExpiredLeases() } returns Unit
-        every { downloadJobService.claimNextQueuedJob(any(), any()) } returns attempt
-        coEveryProcess(attempt)
-
-        worker().processNextJob()
-
-        verify { downloadJobService.claimNextQueuedJob(any(), any()) }
-        coVerify { downloadJobProcessor.process(attempt) }
+    fun threeJobsRunTogetherAndRemainingJobsStayInDatabaseUntilCapacityIsFree() {
+        val queue = ConcurrentLinkedQueue((1L..100L).map { DownloadJob(id = it) })
+        val started = CountDownLatch(3)
+        val fourth = CountDownLatch(1)
+        val finish = Semaphore(0)
+        val active = AtomicInteger()
+        val maximum = AtomicInteger()
+        val claimed = AtomicInteger()
+        val seen = ConcurrentHashMap.newKeySet<Long>()
+        every { jobs.claimNextQueuedJob() } answers {
+            claimed.incrementAndGet()
+            queue.poll()
+        }
+        coEvery { processor.process(any()) } coAnswers {
+            val job = firstArg<DownloadJob>()
+            assertTrue(seen.add(job.requiredId()))
+            val current = active.incrementAndGet()
+            maximum.accumulateAndGet(current, ::maxOf)
+            started.countDown()
+            if (seen.size >= 4) fourth.countDown()
+            try {
+                finish.acquire()
+            } finally {
+                active.decrementAndGet()
+            }
+        }
+        val worker = DownloadQueueWorker(jobs, processor, cleaner, workers = 3, pollDelayMs = 1)
+        try {
+            worker.start()
+            assertTrue(started.await(10, TimeUnit.SECONDS))
+            assertEquals(3, active.get())
+            assertEquals(3, claimed.get())
+            assertEquals(97, queue.size)
+            finish.release()
+            assertTrue(fourth.await(10, TimeUnit.SECONDS))
+            assertEquals(96, queue.size)
+            assertEquals(3, maximum.get())
+        } finally {
+            worker.shutdown()
+        }
+        assertEquals(0, active.get())
+        verifyOrder {
+            cleaner.cleanInterruptedJobs()
+            jobs.recoverInterruptedJobs()
+            jobs.claimNextQueuedJob()
+        }
     }
 
     @Test
-    fun returnsWhenQueueIsEmpty() {
-        every { downloadJobService.recoverExpiredLeases() } returns Unit
-        every { downloadJobService.claimNextQueuedJob(any(), any()) } returns null
-
-        worker().processNextJob()
-
-        verify { downloadJobService.claimNextQueuedJob(any(), any()) }
+    fun failedIterationDoesNotKillWorkerAndStartupRecoveryRunsFirst() {
+        val calls = AtomicInteger()
+        every { jobs.claimNextQueuedJob() } answers {
+            when (calls.incrementAndGet()) {
+                1 -> throw IllegalStateException("database temporarily unavailable")
+                2 -> DownloadJob(id = 1)
+                3 -> DownloadJob(id = 2)
+                else -> null
+            }
+        }
+        val processed = CountDownLatch(1)
+        coEvery { processor.process(match { it.id == 1L }) } throws IllegalStateException("unexpected failure")
+        coEvery { processor.process(match { it.id == 2L }) } coAnswers { processed.countDown() }
+        val worker = DownloadQueueWorker(jobs, processor, cleaner, workers = 1, pollDelayMs = 1)
+        try {
+            worker.start()
+            assertTrue(processed.await(10, TimeUnit.SECONDS))
+        } finally {
+            worker.shutdown()
+        }
     }
-
-    private fun worker(): DownloadQueueWorker {
-        return DownloadQueueWorker(
-            downloadJobService = downloadJobService,
-            downloadJobProcessor = downloadJobProcessor,
-            workerLeaseDurationMs = 1000,
-        )
-    }
-
-    private fun coEveryProcess(attempt: ClaimedDownloadJob) {
-        io.mockk.coEvery { downloadJobProcessor.process(attempt) } returns Unit
-    }
-
-    private fun attempt(job: DownloadJob): ClaimedDownloadJob =
-        ClaimedDownloadJob(job, UUID.randomUUID())
 }

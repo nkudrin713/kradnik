@@ -1,78 +1,80 @@
 package com.nkudrin713.kradnik.download.processing
 
-import com.nkudrin713.kradnik.download.service.DownloadJobLeaseLostException
+import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import jakarta.annotation.PostConstruct
+import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.runBlocking
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
-import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
-import java.util.UUID
-import kotlin.math.max
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
-/**
- * Uses [DownloadJobService] to recover expired leases and atomically claim at most one queued job per scheduled tick.
- * A heartbeat renews the claim while [DownloadJobProcessor] runs; losing ownership cancels the current attempt so
- * another worker can safely recover it later.
- */
+/** N long-lived loops: each claims only when free, so waiting jobs remain in PostgreSQL. */
 @Component
-@ConditionalOnProperty(
-    name = ["download.worker.enabled"],
-    havingValue = "true",
-    matchIfMissing = true,
-)
+@ConditionalOnProperty(name = ["download.worker.enabled"], havingValue = "true", matchIfMissing = true)
 class DownloadQueueWorker(
     private val downloadJobService: DownloadJobService,
     private val downloadJobProcessor: DownloadJobProcessor,
-    @Value("\${download.worker-lease-duration-ms:300000}")
-    private val workerLeaseDurationMs: Long,
+    private val workDirCleaner: WorkDirCleaner,
+    @Value("\${download.workers:3}") private val workers: Int,
+    @Value("\${download.worker-delay-ms:1000}") private val pollDelayMs: Long = 1000,
 ) {
     init {
-        require(workerLeaseDurationMs > 0) { "download.worker-lease-duration-ms must be positive" }
+        require(workers > 0) { "download.workers must be positive" }
+        require(pollDelayMs > 0) { "download.worker-delay-ms must be positive" }
     }
 
-    @Scheduled(fixedDelayString = "\${download.worker-delay-ms:1000}")
-    fun processNextJob() {
-        recoverExpiredLeases()
+    private val logger = LoggerFactory.getLogger(javaClass)
+    private val executor = Executors.newFixedThreadPool(workers) { task ->
+        Thread(task, "download-worker")
+    }
 
-        val leaseToken = UUID.randomUUID()
-        val attempt = downloadJobService.claimNextQueuedJob(
-            leaseToken = leaseToken,
-            leaseDurationMs = workerLeaseDurationMs,
-        ) ?: return
+    @PostConstruct
+    fun start() {
+        workDirCleaner.cleanInterruptedJobs()
+        val recovered = downloadJobService.recoverInterruptedJobs()
+        logger.info("Starting {} download workers; recovered {} interrupted jobs", workers, recovered)
+        repeat(workers) { executor.execute(::work) }
+    }
 
-        runBlocking {
-            val heartbeat = launch(Dispatchers.IO) {
-                while (isActive) {
-                    delay(heartbeatIntervalMs())
-                    val renewed = downloadJobService.renewLease(
-                        jobId = attempt.requiredId(),
-                        leaseToken = leaseToken,
-                        leaseDurationMs = workerLeaseDurationMs,
-                    )
-                    if (!renewed) {
-                        throw DownloadJobLeaseLostException(attempt.requiredId())
-                    }
-                }
-            }
+    private fun work() {
+        while (!executor.isShutdown && !Thread.currentThread().isInterrupted) {
             try {
-                downloadJobProcessor.process(attempt)
-            } finally {
-                heartbeat.cancelAndJoin()
+                val job = downloadJobService.claimNextQueuedJob()
+                if (job == null) {
+                    Thread.sleep(pollDelayMs)
+                } else {
+                    // Blocking bridge to the existing suspend-based external I/O adapters.
+                    runBlocking { downloadJobProcessor.process(job) }
+                }
+            } catch (error: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return
+            } catch (error: Exception) {
+                logger.error("Download worker iteration failed", error)
+                try {
+                    Thread.sleep(pollDelayMs)
+                } catch (interrupted: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return
+                }
             }
         }
     }
 
-    private fun recoverExpiredLeases() {
-        downloadJobService.recoverExpiredLeases()
-    }
-
-    private fun heartbeatIntervalMs(): Long {
-        return max(1, workerLeaseDurationMs / 3)
+    @PreDestroy
+    fun shutdown() {
+        // Interrupts polling and runBlocking; process adapters terminate child processes in finally.
+        executor.shutdownNow()
+        try {
+            if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+                logger.warn("Download workers did not stop within 30 seconds")
+            }
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
     }
 }

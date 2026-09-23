@@ -153,10 +153,10 @@ class YtDlpService(
         )
 
         if (result.workingDirectoryLimitExceeded) {
-            throw YtDlpFileSizeLimitException(uploadLimits.maxUploadBytes)
+            throw YtDlpFileSizeLimitException()
         }
         if (uploadLimits.localMode && result.diagnosticOutput.lowercase().contains("max-filesize")) {
-            throw YtDlpFileSizeLimitException(uploadLimits.maxUploadBytes)
+            throw YtDlpFileSizeLimitException()
         }
         handleBaseErrors(result)
         val file = getDownloadedFile(result.stdout)
@@ -243,5 +243,5 @@ open class YtDlpException(message: String) : RuntimeException(message)
 
 class YtDlpAuthenticationRequiredException(message: String) : YtDlpException(message)
 
-class YtDlpFileSizeLimitException(val limitBytes: Long) :
+class YtDlpFileSizeLimitException :
     YtDlpException("yt-dlp working directory exceeded safe size limit")

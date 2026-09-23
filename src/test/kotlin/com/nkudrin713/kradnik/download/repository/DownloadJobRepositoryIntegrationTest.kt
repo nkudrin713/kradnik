@@ -36,7 +36,6 @@ import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
-import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
@@ -63,70 +62,13 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     }
 
     @Test
-    fun appliesFlywayMigrationsIncludingProcessingLease() {
-        val columnCount = jdbcTemplate.queryForObject(
-            """
-                SELECT COUNT(*)
-                FROM information_schema.columns
-                WHERE table_name = 'download_jobs'
-                  AND column_name IN (
-                      'telegram_update_id',
-                      'lease_token',
-                      'lease_expires_at',
-                      'next_attempt_at',
-                      'platform',
-                      'language'
-                  )
-            """.trimIndent(),
-            Int::class.java,
-        )
-        val removedRateLimitTableCount = jdbcTemplate.queryForObject(
-            """
-                SELECT COUNT(*)
-                FROM information_schema.tables
-                WHERE table_name = 'request_rate_limit_buckets'
-            """.trimIndent(),
-            Int::class.java,
-        )
-        val preferenceTableCount = jdbcTemplate.queryForObject(
-            """
-                SELECT COUNT(*)
-                FROM information_schema.tables
-                WHERE table_name = 'telegram_user_preferences'
-            """.trimIndent(),
-            Int::class.java,
-        )
-        val choiceSessionRetentionIndexCount = jdbcTemplate.queryForObject(
-            """
-                SELECT COUNT(*)
-                FROM pg_indexes
-                WHERE tablename = 'download_choice_sessions'
-                  AND indexname = 'idx_download_choice_sessions_unselected_created_at'
-            """.trimIndent(),
-            Int::class.java,
-        )
-        val removedJobColumnCount = jdbcTemplate.queryForObject(
-            """
-                SELECT COUNT(*)
-                FROM information_schema.columns
-                WHERE table_name = 'download_jobs'
-                  AND column_name IN (
-                      'source_title',
-                      'source_extractor',
-                      'telegram_file_size',
-                      'processing_started_at',
-                      'uploading_started_at',
-                      'downloaded_at'
-                  )
-            """.trimIndent(),
-            Int::class.java,
-        )
-
-        assertEquals(6, columnCount)
-        assertEquals(1, preferenceTableCount)
-        assertEquals(1, choiceSessionRetentionIndexCount)
-        assertEquals(0, removedRateLimitTableCount)
-        assertEquals(0, removedJobColumnCount)
+    fun migrationRemovesLeaseRetryAndTransientMetadataColumns() {
+        val count = jdbcTemplate.queryForObject("""
+            SELECT count(*) FROM information_schema.columns WHERE table_name = 'download_jobs'
+            AND column_name IN ('lease_token', 'lease_expires_at', 'attempts', 'next_attempt_at',
+                'source_audio_title', 'source_audio_performer', 'source_duration_seconds')
+        """, Int::class.java)
+        assertEquals(0, count)
     }
 
     @Test
@@ -239,25 +181,6 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     }
 
     @Test
-    fun doesNotClaimJobBeforeNextAttemptTime() {
-        val future = repository.saveAndFlush(
-            job("future").apply {
-                nextAttemptAt = Instant.now().plusSeconds(3600)
-            }
-        )
-        val due = repository.saveAndFlush(
-            job("due").apply {
-                nextAttemptAt = Instant.now().minusSeconds(1)
-            }
-        )
-
-        val claimed = claimNextJob()
-
-        assertEquals(due.id, claimed.id)
-        assertEquals(DownloadJobStatus.QUEUED, repository.findById(future.id!!).orElseThrow().status)
-    }
-
-    @Test
     fun createsOnlyOneJobForConcurrentTelegramUpdate() {
         val command = CreateDownloadJobCommand(
             telegramUserId = 1,
@@ -292,33 +215,6 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     }
 
     @Test
-    fun rejectsStateTransitionFromStaleLeaseOwner() {
-        val saved = repository.saveAndFlush(job("lease-fencing"))
-        val staleToken = UUID.randomUUID()
-        val currentToken = UUID.randomUUID()
-        jdbcTemplate.update(
-            """
-                UPDATE download_jobs
-                SET status = 'processing', lease_token = ?, lease_expires_at = now() + INTERVAL '5 minutes'
-                WHERE id = ?
-            """.trimIndent(),
-            currentToken,
-            saved.id,
-        )
-
-        val staleUpdate = transactionTemplate.execute {
-            repository.markOwnedUploading(requireNotNull(saved.id), staleToken)
-        }
-        val ownedUpdate = transactionTemplate.execute {
-            repository.markOwnedUploading(requireNotNull(saved.id), currentToken)
-        }
-
-        assertNull(staleUpdate)
-        assertEquals(DownloadJobStatus.UPLOADING, ownedUpdate?.status)
-        assertEquals(DownloadJobStatus.UPLOADING, repository.findById(saved.id!!).orElseThrow().status)
-    }
-
-    @Test
     fun claimsDifferentJobsConcurrently() {
         repository.saveAllAndFlush(listOf(job("first"), job("second")))
         val executor = Executors.newFixedThreadPool(2)
@@ -338,39 +234,6 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         assertNotNull(claimed[1])
         assertNotEquals(claimed[0].id, claimed[1].id)
         assertEquals(setOf(DownloadJobStatus.PROCESSING), claimed.map { it.status }.toSet())
-        assertEquals(setOf(1), claimed.map { it.attempts }.toSet())
-    }
-
-    @Test
-    fun recoversStaleJobsAccordingToAttemptCount() {
-        val retryable = repository.saveAndFlush(job("retryable"))
-        val exhausted = repository.saveAndFlush(job("exhausted"))
-        jdbcTemplate.update(
-            """
-                UPDATE download_jobs
-                SET status = 'processing', attempts = 1,
-                    lease_token = gen_random_uuid(), lease_expires_at = now() - INTERVAL '2 hours'
-                WHERE id = ?
-            """.trimIndent(),
-            retryable.id,
-        )
-        jdbcTemplate.update(
-            """
-                UPDATE download_jobs
-                SET status = 'uploading', attempts = 3,
-                    lease_token = gen_random_uuid(), lease_expires_at = now() - INTERVAL '2 hours'
-                WHERE id = ?
-            """.trimIndent(),
-            exhausted.id,
-        )
-
-        transactionTemplate.executeWithoutResult {
-            repository.requeueStaleInProgressJobs(3)
-            repository.failStaleInProgressJobs(3)
-        }
-
-        assertEquals(DownloadJobStatus.QUEUED, repository.findById(retryable.id!!).orElseThrow().status)
-        assertEquals(DownloadJobStatus.FAILED, repository.findById(exhausted.id!!).orElseThrow().status)
     }
 
     @Test
@@ -396,17 +259,41 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         assertNotEquals(older.id, cached?.id)
     }
 
-    private fun claimNextJob(): DownloadJob {
-        return requireNotNull(
-            transactionTemplate.execute {
-                repository.claimNextQueuedJob(
-                    maxAttempts = 3,
-                    leaseToken = UUID.randomUUID(),
-                    leaseDurationMs = 3_600_000,
-                )
+    @Test
+    fun oneJobCanOnlyBeClaimedOnceUnderContention() {
+        repository.saveAndFlush(job("one"))
+        val barrier = java.util.concurrent.CyclicBarrier(8)
+        val pool = Executors.newFixedThreadPool(8)
+        try {
+            val futures = (1..8).map {
+                pool.submit(Callable {
+                    barrier.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                    downloadJobService.claimNextQueuedJob()
+                })
             }
-        )
+            assertEquals(1, futures.map { it.get(10, java.util.concurrent.TimeUnit.SECONDS) }.count { it != null })
+        } finally {
+            pool.shutdownNow()
+        }
     }
+
+    @Test
+    fun completesAndFailsInShortTransactionsAndRecoversOnlyProcessing() {
+        repository.saveAllAndFlush(listOf(job("complete"), job("fail"), job("interrupted")))
+        val completed = claimNextJob()
+        val failed = claimNextJob()
+        val interrupted = claimNextJob()
+        assertNotNull(completed.startedAt)
+        downloadJobService.markCompleted(completed, "file")
+        downloadJobService.markFailed(failed, "source failed")
+        assertEquals(1, downloadJobService.recoverInterruptedJobs())
+        assertEquals(DownloadJobStatus.COMPLETED, repository.findById(completed.requiredId()).orElseThrow().status)
+        assertEquals(DownloadJobStatus.FAILED, repository.findById(failed.requiredId()).orElseThrow().status)
+        assertEquals(interrupted.id, claimNextJob().id)
+        assertNull(downloadJobService.claimNextQueuedJob())
+    }
+
+    private fun claimNextJob(): DownloadJob = requireNotNull(downloadJobService.claimNextQueuedJob())
 
     private fun job(cacheKey: String): DownloadJob {
         return DownloadJob(

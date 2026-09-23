@@ -8,7 +8,8 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import java.time.Duration
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancelAndJoin
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
@@ -27,22 +28,17 @@ class TelegramApiClientTest {
     }
 
     @Test
-    fun classifiesRateLimitAsRetryable() = runTest {
-        val parameters: ResponseParameters = mockk {
-            every { retryAfter() } returns 17
-        }
+    fun classifiesRateLimitAsOther() = runTest {
         every { bot.execute(any<SendMessage>()) } returns failedResponse(
             errorCode = 429,
             description = "Too Many Requests",
-            parameters = parameters,
         )
 
         val error = assertFailsWith<TelegramSendException> {
-            client.executeIo(SendMessage(100, "text"))
+            client.execute(SendMessage(100, "text"))
         }
 
-        error.kind shouldBe TelegramSendFailureKind.RETRYABLE
-        error.retryAfter shouldBe Duration.ofSeconds(17)
+        error.kind shouldBe TelegramSendFailureKind.OTHER
     }
 
     @Test
@@ -57,20 +53,41 @@ class TelegramApiClientTest {
     }
 
     @Test
-    fun classifiesPermanentFailureAsTerminal() {
+    fun classifiesPermanentFailureAsOther() {
         every { bot.execute(any<SendMessage>()) } returns failedResponse(403, "Forbidden")
 
         val error = assertFailsWith<TelegramSendException> {
             client.execute(SendMessage(100, "text"))
         }
 
-        error.kind shouldBe TelegramSendFailureKind.TERMINAL
+        error.kind shouldBe TelegramSendFailureKind.OTHER
         error.message shouldBe "Telegram send failed: code=403, description=Forbidden"
     }
 
     @Test
-    fun classifiesMalformedSuccessfulResponseAsRetryable() {
-        TelegramSendException("Telegram response does not contain message").kind shouldBe TelegramSendFailureKind.RETRYABLE
+    fun classifiesMalformedSuccessfulResponseAsOther() {
+        TelegramSendException("Telegram response does not contain message").kind shouldBe TelegramSendFailureKind.OTHER
+    }
+
+    @Test
+    fun mediaRequestReturnsCallbackResponse() = runTest {
+        val response: SendResponse = mockk { every { isOk } returns true }
+        every { bot.execute(any<SendMessage>(), any()) } answers {
+            secondArg<com.pengrad.telegrambot.Callback<SendMessage, SendResponse>>()
+                .onResponse(firstArg(), response)
+            mockk(relaxed = true)
+        }
+        client.executeIo(SendMessage(100, "text")) shouldBe response
+    }
+
+    @Test
+    fun cancellingWorkerCancelsTelegramUpload() = runTest {
+        val call = mockk<com.pengrad.telegrambot.Cancellable>(relaxed = true)
+        every { bot.execute(any<SendMessage>(), any()) } returns call
+        val job = launch { client.executeIo(SendMessage(100, "text")) }
+        testScheduler.runCurrent()
+        job.cancelAndJoin()
+        io.mockk.verify(exactly = 1) { call.cancel() }
     }
 
     private fun failedResponse(

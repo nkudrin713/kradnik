@@ -1,7 +1,9 @@
 package com.nkudrin713.kradnik.download.choice
 
 import com.nkudrin713.kradnik.download.DownloadEngine
-import com.nkudrin713.kradnik.download.DownloadPreparation
+import com.nkudrin713.kradnik.download.instagram.InstagramContentUnavailableException
+import com.nkudrin713.kradnik.download.instagram.InstagramHttpException
+import com.nkudrin713.kradnik.download.instagram.InstagramEmbedException
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlan
@@ -47,7 +49,6 @@ class DownloadChoicePlanner(
 
         return DownloadChoicePlan(
             mediaInfo = DownloadChoiceMediaInfo(
-                channelName = metadata.channel ?: metadata.uploader,
                 title = metadata.title,
                 durationSeconds = metadata.duration
                     ?.takeIf { it >= BigDecimal.ZERO }
@@ -59,20 +60,19 @@ class DownloadChoicePlanner(
     }
 
     private suspend fun extractCatalog(spec: DownloadSpec, language: BotLanguage): YtDlpMetadataDto {
-        return when (val preparation = downloadEngine.prepareCatalog(spec)) {
-            is DownloadPreparation.Ready -> preparation.session.metadata
-            is DownloadPreparation.NotReady -> throw DownloadChoicePlanningException(
-                messages.text(language, TelegramMessage.ERROR_INSTAGRAM_RATE_LIMITED),
-            )
-            is DownloadPreparation.RetryableFailure -> throw DownloadChoicePlanningException(
-                messages.text(language, TelegramMessage.ERROR_INSTAGRAM_UNAVAILABLE),
-            )
-            is DownloadPreparation.SourceUnavailable -> throw DownloadChoicePlanningException(
-                messages.text(language, TelegramMessage.ERROR_SOURCE_UNAVAILABLE),
-            )
-            is DownloadPreparation.TerminalFailure -> throw DownloadChoicePlanningException(
-                messages.text(language, TelegramMessage.ERROR_METADATA_UNAVAILABLE),
-            )
+        try {
+            return downloadEngine.prepare(spec, catalog = true).metadata
+        } catch (error: InstagramContentUnavailableException) {
+            throw DownloadChoicePlanningException(messages.text(language, TelegramMessage.ERROR_SOURCE_UNAVAILABLE))
+        } catch (error: InstagramHttpException) {
+            val message = if (error.statusCode == 403 || error.statusCode == 429) {
+                TelegramMessage.ERROR_INSTAGRAM_RATE_LIMITED
+            } else {
+                TelegramMessage.ERROR_INSTAGRAM_UNAVAILABLE
+            }
+            throw DownloadChoicePlanningException(messages.text(language, message))
+        } catch (error: InstagramEmbedException) {
+            throw DownloadChoicePlanningException(messages.text(language, TelegramMessage.ERROR_METADATA_UNAVAILABLE))
         }
     }
 

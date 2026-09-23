@@ -13,7 +13,6 @@ import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.SentGuestMessage
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
-import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.AnswerCallbackQuery
 import com.pengrad.telegrambot.request.AnswerGuestQuery
 import com.pengrad.telegrambot.request.BaseRequest
@@ -106,7 +105,7 @@ class TelegramSenderTest {
         val request = slot<BaseRequest<*, *>>()
         val token = UUID.randomUUID()
         val options = listOf(option())
-        val mediaInfo = DownloadChoiceMediaInfo("Channel", "Title", 120)
+        val mediaInfo = DownloadChoiceMediaInfo(title = "Title", durationSeconds = 120)
         every { downloadChoiceView.text(mediaInfo, BotLanguage.EN) } returns "choice"
         every { downloadChoiceView.keyboard(token, options, BotLanguage.EN) } returns keyboard
         every { bot.execute(capture(request)) } returns okResponse()
@@ -131,7 +130,7 @@ class TelegramSenderTest {
         val request = slot<BaseRequest<*, *>>()
         val token = UUID.randomUUID()
         val options = listOf(option())
-        val mediaInfo = DownloadChoiceMediaInfo("Channel", "Title", 120)
+        val mediaInfo = DownloadChoiceMediaInfo(title = "Title", durationSeconds = 120)
         every { downloadChoiceView.text(mediaInfo, BotLanguage.EN) } returns "choice"
         every { downloadChoiceView.keyboard(token, options, BotLanguage.EN) } returns keyboard
         every { bot.execute(capture(request)) } returns okResponse()

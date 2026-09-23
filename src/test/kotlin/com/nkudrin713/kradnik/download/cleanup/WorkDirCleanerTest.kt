@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class WorkDirCleanerTest {
-    private val cleaner = DefaultWorkDirCleaner()
+
 
     @Test
     fun deletesDirectoryRecursively(@TempDir tempDir: Path) {
@@ -17,7 +17,7 @@ class WorkDirCleanerTest {
         val nestedDir = workDir.resolve("nested").createDirectories()
         nestedDir.resolve("file.txt").writeText("content")
 
-        cleaner.deleteRecursively(workDir)
+        WorkDirCleaner(tempDir.toString()).deleteRecursively(workDir)
 
         assertEquals(false, workDir.exists())
     }
@@ -26,8 +26,18 @@ class WorkDirCleanerTest {
     fun ignoresMissingDirectory(@TempDir tempDir: Path) {
         val missingDir = tempDir.resolve("missing")
 
-        cleaner.deleteRecursively(missingDir)
+        WorkDirCleaner(tempDir.toString()).deleteRecursively(missingDir)
 
         assertEquals(false, missingDir.exists())
+    }
+    @Test
+    fun startupRemovesOnlyJobDirectories(@TempDir root: Path) {
+        val cleaner = WorkDirCleaner(root.toString())
+        val job = cleaner.create(12)
+        job.resolve("partial.mp4").writeText("partial")
+        root.resolve("keep.txt").writeText("keep")
+        cleaner.cleanInterruptedJobs()
+        assertEquals(false, job.exists())
+        assertEquals(true, root.resolve("keep.txt").exists())
     }
 }

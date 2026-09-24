@@ -1,64 +1,79 @@
 # Kradnik
 
-A Telegram bot for downloading public media from YouTube, Instagram, and VK. Send a link directly or invoke the bot in another chat with `@bot link`, choose video quality, audio, a cover image, or every image from a static Instagram post, and receive the media. Instagram carousels are sent directly as Telegram photo albums. English and Russian interfaces, Telegram file reuse, and cloud/local Bot API delivery are supported. Source playlists, private content, and authentication bypasses are not supported.
+Kradnik retrieves public media from YouTube, Instagram, and VK and delivers it directly in Telegram.
+
+It supports:
+
+- video quality selection, audio-only downloads, and cover images;
+- every photo from a static Instagram post or carousel, sent as Telegram photo albums;
+- direct chats and inline guest mode; Instagram photo sets are available only in direct chats;
+- English and Russian interfaces;
+- Telegram `file_id` reuse and cloud or local Bot API delivery.
+
+Source playlists, private content, and authentication bypasses are not supported.
 
 ## Request flow
 
-```text
-TelegramPollingService -> TelegramUpdateHandler
-  -> DownloadChoiceCoordinator: retrieve metadata and show the format menu
-  -> DownloadChoiceHandler: accept the user's selection
-  -> TelegramDownloadStarter -> DownloadJobService: persist QUEUED job
+![Kradnik request flow](docs/request-flow.svg)
 
-DownloadQueueWorker: one loop per worker thread
-  -> DownloadJobService.claimNextQueuedJob(): QUEUED -> PROCESSING
-  -> DownloadJobProcessor.process():
-       cached Telegram file, or:
-       DownloadEngine.prepare() -> size check -> DownloadEngine.download()
-       -> optional TelegramVideoPreparer -> TelegramFileSender.send()
-       -> COMPLETED / FAILED
-       -> finally: delete the job's directory
-```
+- Metadata is loaded before enqueueing to build the available format menu and estimate sizes.
+- Metadata work uses 2 threads and accepts at most 32 pending requests.
+- Instagram videos keep the video/audio menu; static posts expose one option for all images in post order.
+- Menu snapshots, ownership, and language preferences are stored in PostgreSQL, so callbacks survive restarts.
 
-Metadata is needed before enqueueing because it determines the available formats and estimated sizes. Instagram video posts keep the existing video/audio menu; static posts expose one option that sends every image in post order. Two metadata threads serve this step, with at most 32 pending requests; overload returns the existing preparation error. The download queue contains only accepted selections. Menu snapshots and ownership are stored in PostgreSQL so callbacks still work after a restart; language preferences are stored per user.
+## Queue and lifecycle
 
-## Concurrency
-
-The application is designed to run as a single instance. Download concurrency is handled by an internal fixed-size worker pool, configured by `download.workers` (`DOWNLOAD_WORKERS`, default **3**). Each of its N long-lived loops claims one job, processes it completely, and only then claims another; pending downloads remain in PostgreSQL, never in an executor queue. Claim uses a short transaction with `FOR UPDATE SKIP LOCKED` and `UPDATE ... RETURNING`, so two threads cannot claim the same queued row. Downloading and uploading happen outside the transaction; an idle worker polls every second and a failed iteration does not stop the loop. Existing suspend-based process/HTTP adapters run behind a `runBlocking` bridge; they do not create additional download jobs.
-
-States are `QUEUED`, `PROCESSING`, `COMPLETED`, and `FAILED`. Upload progress is a Telegram message, not another database state. Ordinary failures become `FAILED` without automatic job retry; the user can submit the link again. On startup, abandoned job directories are removed and `PROCESSING` jobs return to `QUEUED` before workers start. Shutdown interrupts the loops and cancels external I/O, then waits up to 30 seconds for workers to stop.
-
-**Restart limitation:** delivery is at least once across crashes. A crash after Telegram accepted a file but before `COMPLETED` was committed can produce a duplicate message after restart. Never overlap application instances, including during deployment: startup recovery assumes the old process has stopped. If a database outage prevents persisting a terminal state, the failure is logged and startup recovery handles the remaining `PROCESSING` row.
+- The application runs as a single instance.
+- `DOWNLOAD_WORKERS` controls the number of worker loops; the default is 3.
+- Pending jobs stay in PostgreSQL. Workers claim them with `FOR UPDATE SKIP LOCKED` and `UPDATE ... RETURNING`.
+- Claiming and state changes use short transactions; download and Telegram upload I/O run outside them.
+- Job states are `QUEUED`, `PROCESSING`, `COMPLETED`, and `FAILED`.
+- Failures are terminal; users can submit the link again.
+- Startup removes abandoned work directories and returns `PROCESSING` jobs to `QUEUED`.
+- Shutdown cancels external I/O and waits up to 30 seconds for workers.
+- Delivery is at least once across crashes.
+- A crash after Telegram accepts a file but before `COMPLETED` can produce a duplicate message.
+- Overlapping application instances are not supported.
 
 ## Code map
 
-Paths below are relative to `src/main/kotlin/com/nkudrin713/kradnik/`.
+Paths are relative to `src/main/kotlin/com/nkudrin713/kradnik/`.
 
 | Component | Responsibility |
 | --- | --- |
-| `telegram/handler/TelegramUpdateHandler.kt` | Commands, link input, and callbacks |
-| `download/platform/PlatformResolver.kt` | URL validation, normalization, and explicit routing for three sources |
-| `download/choice/DownloadChoicePlanner.kt` | Format and size options for the menu |
+| `telegram/handler/TelegramUpdateHandler.kt` | Commands, links, and callbacks |
+| `download/platform/PlatformResolver.kt` | URL validation, normalization, and source routing |
+| `download/choice/DownloadChoicePlanner.kt` | Format and size menu options |
 | `telegram/DownloadChoiceCoordinator.kt` | Bounded metadata execution and menu publication |
-| `download/service/DownloadJobService.kt` | Enqueue, claim, completion, failure, and startup recovery transactions |
+| `download/service/DownloadJobService.kt` | Enqueue, claim, completion, failure, and startup recovery |
 | `download/repository/DownloadJobRepository.kt` | Queue SQL and reusable Telegram file lookup |
-| `download/processing/DownloadQueueWorker.kt` | Fixed-size pool and polling loops |
-| `download/processing/DownloadJobProcessor.kt` | Linear download-to-delivery scenario and cleanup |
-| `download/DownloadEngine.kt` | Explicit yt-dlp, Instagram video/image, and cover download branches |
-| `download/instagram/InstagramEmbedDownloader.kt` | Instagram video metadata plus static post/carousel image extraction and download |
-| `ytdlp/client/YtDlpService.kt`, `process/DefaultProcessRunner.kt` | External commands, deadlines, bounded diagnostics, process-tree termination |
-| `download/telegram/TelegramFileSender.kt`, `telegram/TelegramMediaSender.kt` | Direct/guest media delivery, reusable files, and Telegram photo albums |
-| `download/video/` | Probe and normalize incompatible video for Telegram |
+| `download/processing/DownloadQueueWorker.kt` | Worker pool and polling loops |
+| `download/processing/DownloadJobProcessor.kt` | Download-to-delivery flow and cleanup |
+| `download/DownloadEngine.kt` | yt-dlp, Instagram video/image, and cover branches |
+| `download/instagram/InstagramEmbedDownloader.kt` | Instagram metadata and media download |
+| `ytdlp/client/YtDlpService.kt`, `process/DefaultProcessRunner.kt` | External commands, timeouts, diagnostics, and process termination |
+| `download/telegram/TelegramFileSender.kt`, `telegram/TelegramMediaSender.kt` | Telegram delivery, cached files, and photo albums |
+| `download/video/` | Video probing and Telegram compatibility normalization |
 
-Audio metadata stays local to a processing call. Persistent state consists of `download_jobs`, `download_choice_sessions`, and `telegram_user_preferences`; Flyway manages all schema changes. The HTTP clients are shared; request objects, media metadata, processes, and numeric job directories are per job. There is no shared mutable collection of running jobs.
+Runtime ownership:
 
-## Technologies
+- PostgreSQL stores jobs, choice sessions, and user language preferences.
+- Flyway owns schema changes.
+- HTTP clients are shared; metadata, processes, and work directories belong to one job.
+- Running jobs are not tracked in a shared mutable collection.
 
-Kotlin/JVM, Java 21 executors, Spring Boot, Spring Data JPA, PostgreSQL, Flyway, yt-dlp, ffmpeg/ffprobe, Telegram Bot API, Docker Compose, JUnit/MockK, and Testcontainers. Coroutines remain inside existing external-I/O adapters for cancellation and process stream handling.
+## Stack
+
+- Application: Kotlin, Spring Boot, Spring Data JPA, Java 21 executors.
+- Storage: PostgreSQL and Flyway.
+- Media: yt-dlp, ffmpeg, and ffprobe.
+- Delivery: Telegram Bot API and Docker Compose.
+- Tests: JUnit, MockK, JaCoCo, and Testcontainers.
+- I/O model: coroutines remain inside external adapters for cancellation and process stream handling.
 
 ## Local development
 
-Java 21, Docker, yt-dlp, ffmpeg, and a Telegram bot token are required.
+Requirements: Java 21, Docker, yt-dlp, ffmpeg, and a Telegram bot token.
 
 ```bash
 cp .env.example .env
@@ -67,27 +82,36 @@ docker compose up -d postgres
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
+Run the complete verification:
+
 ```bash
 ./gradlew check bootJar
 ```
 
-`check` runs tests and verifies aggregate JaCoCo coverage. PostgreSQL integration tests use Testcontainers and are skipped if Docker is unavailable; a successful build with skipped tests is not database verification.
+- `check` runs tests and verifies aggregate JaCoCo coverage.
+- PostgreSQL integration tests use Testcontainers and are skipped when Docker is unavailable.
+- A successful build with skipped Testcontainers tests is not database verification.
 
 ## Configuration
 
 - `POSTGRES_*`: database connection.
 - `TELEGRAM_BOT_*`, `TELEGRAM_MAX_UPLOAD_BYTES`: Telegram endpoints and file-size limit.
-- `TELEGRAM_FILE_STORAGE_CHAT_ID`: private storage chat needed for a fresh guest-mode upload.
-- `DOWNLOAD_WORKERS`: maximum concurrently processing download jobs, default 3.
-- `DOWNLOAD_WORK_DIR`: dedicated writable media directory; each job has its own subdirectory.
-- `DOWNLOAD_*_TIMEOUT`: bounded external-process and HTTP execution.
+- `TELEGRAM_FILE_STORAGE_CHAT_ID`: private storage chat for fresh guest-mode uploads.
+- `DOWNLOAD_WORKERS`: concurrent download jobs; default 3.
+- `DOWNLOAD_WORK_DIR`: writable media directory with one subdirectory per job.
+- `DOWNLOAD_*_TIMEOUT`: external-process and HTTP timeouts.
 - `DOWNLOAD_YT_DLP_CLOUD_MAX_WORKSPACE_BYTES`: per-process cloud download workspace cap.
 - `DOWNLOAD_CHOICE_SESSION_*`: menu retention.
 - `YOUTUBE_PO_TOKEN_PROVIDER_URL`: optional YouTube PO Token Provider.
 
-Local Bot API endpoints require a media volume shared with the application. Set `DOWNLOAD_WORK_DIR` to that shared path. Guest mode also requires BotFather enablement and permission to send files to the configured storage chat. Cached `file_id` values need no intermediate upload. `/language` changes the persisted user language; donation configuration remains in the environment.
+Operational notes:
 
-## Docker and deployment
+- Local Bot API endpoints require a media volume shared with the application; point `DOWNLOAD_WORK_DIR` to it.
+- Guest mode requires BotFather enablement and permission to use the configured storage chat.
+- Cached `file_id` values do not need an intermediate upload.
+- `/language` changes the persisted user language.
+
+## Docker and releases
 
 ```bash
 ./gradlew bootJar
@@ -97,8 +121,11 @@ docker build -t kradnik:local .
 APP_IMAGE=kradnik:local docker compose up -d
 ```
 
-The image contains yt-dlp, ffmpeg, and runtime dependencies. Compose profiles `telegram-local` and `youtube-pot` enable optional services. Configuration is rendered by `scripts/render-deploy-env.sh`; `DOWNLOAD_WORKERS` is also exposed as a GitHub production environment variable. Merging to `main` does not deploy; a manual release builds and deploys an immutable version and exact image digest.
+- The image includes yt-dlp, ffmpeg, and runtime dependencies.
+- Compose profiles `telegram-local` and `youtube-pot` enable optional services.
+- `scripts/render-deploy-env.sh` renders production configuration.
+- Merging to `main` does not deploy. A manual release builds and deploys an immutable version and image digest.
+- Migration `V26` requires the old application to be stopped; mixed versions and application-only rollback are unsafe.
+- Applied Flyway migrations are immutable.
 
-Migration `V26` removes lease/retry fields, transient audio metadata columns, and the `uploading` state. It preserves jobs and converts old in-progress rows to `queued`. Stop the old application before running the new version; do not run mixed versions or roll back only the application after this migration. Existing migrations remain unchanged.
-
-See [architecture decisions and interview walkthrough](docs/architecture-refactor.md) for the refactoring rationale and concurrency questions.
+See [architecture decisions and interview walkthrough](docs/architecture-refactor.md) for design rationale and concurrency questions.

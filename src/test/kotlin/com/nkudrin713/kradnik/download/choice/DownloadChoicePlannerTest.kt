@@ -61,6 +61,7 @@ class DownloadChoicePlannerTest {
             actual.options.map { it.key },
         )
         val original = actual.options.first()
+        assertEquals("Оригинал · 1440p", original.label)
         assertEquals("v1440+a1", original.spec.formatSelector)
         assertEquals(620_000_000, original.sizeBytes)
         assertFalse(original.approximateSize)
@@ -94,13 +95,13 @@ class DownloadChoicePlannerTest {
     }
 
     @Test
-    fun omits1080WhenItDuplicatesOriginal() = runTest {
+    fun omitsNamedQualityWhenItDuplicatesOriginal() = runTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
         coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
             formats = listOf(
-                videoFormat("v1080", 1080, 400_000_000),
                 videoFormat("v720", 720, 250_000_000),
+                videoFormat("v480", 480, 150_000_000),
                 audioFormat("a1", 20_000_000),
             ),
         ))
@@ -108,11 +109,11 @@ class DownloadChoicePlannerTest {
         val actual = planner.plan(URL, BotLanguage.RU)
 
         assertEquals(
-            listOf("video_original", "video_720", "audio", "cover"),
+            listOf("video_original", "video_480", "audio", "cover"),
             actual.options.map { it.key },
         )
-        assertEquals("Оригинал", actual.options.first().label)
-        assertEquals("v1080+a1", actual.options.first().spec.formatSelector)
+        assertEquals("Оригинал · 720p", actual.options.first().label)
+        assertEquals("v720+a1", actual.options.first().spec.formatSelector)
     }
 
     @Test
@@ -149,6 +150,41 @@ class DownloadChoicePlannerTest {
 
         assertEquals(DownloadPlatform.INSTAGRAM, actual.options.first().spec.platform)
         coVerify(exactly = 1) { downloadEngine.prepare(video, catalog = true) }
+    }
+
+    @Test
+    fun offersOriginalForInstagramVideoWithoutDirectUrlOrKnownSize() = runTest {
+        val video = resolved(OutputType.VIDEO).withInstagramPlatform()
+        val audio = resolved(OutputType.AUDIO).withInstagramPlatform()
+        val metadata = metadata(formats = emptyList()).copy(width = 720, height = 1280)
+        val instagram = InstagramPreparedDownload(
+            shortcode = "ABC_123",
+            mediaUri = null,
+            metadata = metadata,
+        )
+        every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns PreparedDownload(metadata, instagram)
+
+        val actual = planner.plan(URL, BotLanguage.RU)
+
+        assertEquals(listOf("video_original", "audio", "cover"), actual.options.map { it.key })
+        val original = actual.options.first()
+        assertEquals("Оригинал · 1280p", original.label)
+        assertEquals(null, original.sizeBytes)
+        assertTrue(original.available)
+        assertEquals(OutputType.VIDEO, original.spec.outputType)
+    }
+
+    @Test
+    fun omitsUnknownSizeFallbackOutsideInstagram() = runTest {
+        val video = resolved(OutputType.VIDEO)
+        val audio = resolved(OutputType.AUDIO)
+        every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(formats = emptyList()))
+
+        val actual = planner.plan(URL, BotLanguage.RU)
+
+        assertEquals(listOf("audio", "cover"), actual.options.map { it.key })
     }
 
     @Test

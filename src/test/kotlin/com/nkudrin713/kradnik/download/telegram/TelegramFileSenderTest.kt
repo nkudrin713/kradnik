@@ -90,6 +90,20 @@ class TelegramFileSenderTest {
     }
 
     @Test
+    fun sendsImageGroupAndEncodesEveryFileId(@TempDir tempDir: Path) = runTest {
+        val first = tempDir.resolve("01.jpg")
+        val second = tempDir.resolve("02.jpg")
+        val file = DownloadedFile(first, sizeBytes = 123, additionalFiles = listOf(second))
+        coEvery {
+            telegramMediaSender.sendPhotos(100, listOf(first, second), replyToMessageId = 200)
+        } returns listOf("photo-1", "photo-2")
+
+        val actual = sender.send(job(OutputType.IMAGES), file)
+
+        assertEquals("photo-group:[\"photo-1\",\"photo-2\"]", actual)
+    }
+
+    @Test
     fun sendsCachedVideo() = runTest {
         coEvery {
             telegramMediaSender.sendCachedVideo(
@@ -143,6 +157,33 @@ class TelegramFileSenderTest {
 
         assertEquals("cover-id", actual)
         coVerify { telegramMediaSender.sendCachedDocument(100, "cached-id", replyToMessageId = 200) }
+    }
+
+    @Test
+    fun sendsCachedImageGroup() = runTest {
+        coEvery {
+            telegramMediaSender.sendCachedPhotos(
+                chatId = 100,
+                fileIds = listOf("cached-1", "cached-2"),
+                replyToMessageId = 200,
+            )
+        } returns listOf("photo-1", "photo-2")
+
+        val actual = sender.sendCached(
+            job(OutputType.IMAGES),
+            "photo-group:[\"cached-1\",\"cached-2\"]",
+        )
+
+        assertEquals("photo-group:[\"photo-1\",\"photo-2\"]", actual)
+    }
+
+    @Test
+    fun rejectsImageGroupInInlineMode(@TempDir tempDir: Path) = runTest {
+        val job = job(OutputType.IMAGES).apply { telegramInlineMessageId = "inline-message" }
+
+        assertFailsWith<TelegramSendException> {
+            sender.send(job, DownloadedFile(tempDir.resolve("01.jpg"), sizeBytes = 123))
+        }
     }
 
     @Test

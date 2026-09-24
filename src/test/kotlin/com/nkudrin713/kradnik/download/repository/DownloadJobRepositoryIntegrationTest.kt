@@ -72,7 +72,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     }
 
     @Test
-    fun persistsDownloadChoiceSessionAndCoverOutputType() {
+    fun persistsDownloadChoiceSessionAndDerivedOutputTypes() {
         val option = DownloadChoiceOptionSnapshot(
             key = "cover",
             label = "Скачать обложку",
@@ -109,6 +109,13 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 language = BotLanguage.RU
             }
         )
+        val imageJob = repository.saveAndFlush(
+            job("images").apply {
+                outputType = OutputType.IMAGES
+                platform = DownloadPlatform.INSTAGRAM
+                language = BotLanguage.RU
+            }
+        )
         val preference = preferenceRepository.saveAndFlush(
             TelegramUserPreference(
                 telegramUserId = 1,
@@ -118,10 +125,13 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
         val persistedOption = choiceSessionRepository.findById(session.token).orElseThrow().options.single()
         val persistedJob = repository.findById(requireNotNull(coverJob.id)).orElseThrow()
+        val persistedImageJob = repository.findById(requireNotNull(imageJob.id)).orElseThrow()
         assertEquals(OutputType.COVER, persistedOption.spec.outputType)
         assertEquals(DownloadPlatform.YOUTUBE, persistedOption.spec.platform)
         assertEquals(OutputType.COVER, persistedJob.outputType)
         assertEquals(DownloadPlatform.YOUTUBE, persistedJob.platform)
+        assertEquals(OutputType.IMAGES, persistedImageJob.outputType)
+        assertEquals(DownloadPlatform.INSTAGRAM, persistedImageJob.platform)
         assertEquals(BotLanguage.RU, choiceSessionRepository.findById(session.token).orElseThrow().language)
         assertEquals(BotLanguage.RU, persistedJob.language)
         assertEquals(BotLanguage.RU, preferenceRepository.findById(preference.telegramUserId).orElseThrow().language)

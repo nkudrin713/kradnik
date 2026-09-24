@@ -71,6 +71,51 @@ class InstagramEmbedDownloader(
         return preparedDownload
     }
 
+    fun prepareImages(
+        spec: DownloadSpec,
+        metadata: YtDlpMetadataDto,
+    ): InstagramPreparedDownload? {
+        val entries = metadata.entries.orEmpty()
+        val imageUris = if (entries.isNotEmpty()) {
+            if (entries.any { it.formats.orEmpty().isNotEmpty() }) {
+                return null
+            }
+            entries.map { entry ->
+                val imageUrl = entry.bestImageUrl() ?: return null
+                parseMediaUri(imageUrl)
+            }
+        } else {
+            if (metadata.formats.orEmpty().isNotEmpty()) {
+                return null
+            }
+            listOfNotNull(metadata.bestImageUrl()?.let(::parseMediaUri))
+        }.distinct()
+        if (imageUris.isEmpty() || imageUris.size > MAX_IMAGE_COUNT) {
+            return null
+        }
+
+        val shortcode = parseInstagramMediaUrl(spec.originalUrl)?.shortcode ?: return null
+        return InstagramPreparedDownload(
+            shortcode = shortcode,
+            mediaUri = null,
+            imageUris = imageUris,
+            metadata = metadata.copy(
+                thumbnail = imageUris.first().toString(),
+                duration = null,
+                width = null,
+                height = null,
+                filesize = null,
+                filesizeApprox = null,
+                track = null,
+                artist = null,
+                requestedFormats = null,
+                formats = null,
+                thumbnails = null,
+                entries = null,
+            ),
+        )
+    }
+
     suspend fun download(
         preparedDownload: InstagramPreparedDownload,
         outputDir: Path,
@@ -89,6 +134,38 @@ class InstagramEmbedDownloader(
             downloadedFile.sizeBytes,
         )
         return downloadedFile
+    }
+
+    suspend fun downloadImages(
+        preparedDownload: InstagramPreparedDownload,
+        outputDir: Path,
+    ): DownloadedFile {
+        val imageUris = preparedDownload.imageUris
+        require(imageUris.isNotEmpty()) { "Instagram prepared download does not contain image URLs" }
+        val files = imageUris.mapIndexed { index, uri ->
+            httpClient.downloadImage(
+                uri = uri,
+                outputFile = outputDir.resolve(
+                    "instagram-${preparedDownload.shortcode}-${(index + 1).toString().padStart(2, '0')}.jpg"
+                ),
+            )
+        }
+        val totalSize = files.fold(0L) { total, file -> Math.addExact(total, file.sizeBytes) }
+        logger.info(
+            "Instagram images downloaded: shortcode={}, count={}, totalSizeBytes={}",
+            preparedDownload.shortcode,
+            files.size,
+            totalSize,
+        )
+        return DownloadedFile(
+            file = files.first().file,
+            sizeBytes = totalSize,
+            additionalFiles = files.drop(1).map(DownloadedFile::file),
+        )
+    }
+
+    private fun YtDlpMetadataDto.bestImageUrl(): String? {
+        return thumbnails.orEmpty().asReversed().firstNotNullOfOrNull { it.url?.takeIf(String::isNotBlank) }
     }
 
     private fun extractContext(html: String): JsonNode {
@@ -203,12 +280,14 @@ class InstagramEmbedDownloader(
         private const val DISPLAY_URL = "display_url"
         private const val THUMBNAIL_URL = "thumbnail_url"
         private const val USERNAME = "username"
+        private const val MAX_IMAGE_COUNT = 20
     }
 }
 
 data class InstagramPreparedDownload(
     val shortcode: String,
     val mediaUri: URI?,
+    val imageUris: List<URI> = emptyList(),
     val metadata: YtDlpMetadataDto,
 )
 

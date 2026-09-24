@@ -5,9 +5,11 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.instagram.InstagramEmbedDownloader
+import com.nkudrin713.kradnik.download.instagram.InstagramEmbedException
 import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
+import com.nkudrin713.kradnik.ytdlp.client.YtDlpException
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import org.springframework.stereotype.Component
 import java.nio.file.Path
@@ -21,8 +23,7 @@ class DownloadEngine(
 ) {
     suspend fun prepare(spec: DownloadSpec, catalog: Boolean = false): PreparedDownload {
         if (spec.platform == DownloadPlatform.INSTAGRAM) {
-            val instagram = instagramDownloader.prepare(spec)
-            return PreparedDownload(metadata = instagram.metadata, instagram = instagram)
+            return prepareInstagram(spec)
         }
         val metadata = if (catalog || spec.outputType == OutputType.COVER) {
             ytDlpService.extractCatalogMetadata(spec)
@@ -39,11 +40,29 @@ class DownloadEngine(
             return coverDownloader.download(thumbnail, outputDir)
         }
         val instagram = prepared.instagram
-        return if (spec.outputType == OutputType.VIDEO && instagram?.mediaUri != null) {
-            instagramDownloader.download(instagram, outputDir)
-        } else {
-            ytDlpService.download(spec, outputDir)
+        return when {
+            spec.outputType == OutputType.IMAGES && instagram != null -> {
+                instagramDownloader.downloadImages(instagram, outputDir)
+            }
+            spec.outputType == OutputType.VIDEO && instagram?.mediaUri != null -> {
+                instagramDownloader.download(instagram, outputDir)
+            }
+            else -> ytDlpService.download(spec, outputDir)
         }
+    }
+
+    private suspend fun prepareInstagram(spec: DownloadSpec): PreparedDownload {
+        val instagram = try {
+            instagramDownloader.prepare(spec)
+        } catch (embedError: InstagramEmbedException) {
+            val metadata = try {
+                ytDlpService.extractInstagramImageMetadata(spec)
+            } catch (_: YtDlpException) {
+                throw embedError
+            }
+            instagramDownloader.prepareImages(spec, metadata) ?: throw embedError
+        }
+        return PreparedDownload(metadata = instagram.metadata, instagram = instagram)
     }
 }
 

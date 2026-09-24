@@ -1,5 +1,7 @@
 package com.nkudrin713.kradnik.download.telegram
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
@@ -18,6 +20,8 @@ class TelegramFileSender(
     private val telegramMediaSender: TelegramMediaSender,
     private val properties: TelegramBotProperties,
 ) {
+    private val objectMapper = jacksonObjectMapper()
+
     suspend fun send(job: DownloadJob, file: DownloadedFile): String {
         val inlineMessageId = job.telegramInlineMessageId
         if (inlineMessageId != null) {
@@ -43,6 +47,13 @@ class TelegramFileSender(
                 chatId = job.telegramChatId,
                 file = file.file,
                 replyToMessageId = job.telegramRequestMessageId,
+            )
+            OutputType.IMAGES -> encodePhotoIds(
+                telegramMediaSender.sendPhotos(
+                    chatId = job.telegramChatId,
+                    files = file.files,
+                    replyToMessageId = job.telegramRequestMessageId,
+                )
             )
         }
     }
@@ -72,6 +83,13 @@ class TelegramFileSender(
                 fileId = fileId,
                 replyToMessageId = job.telegramRequestMessageId,
             )
+            OutputType.IMAGES -> encodePhotoIds(
+                telegramMediaSender.sendCachedPhotos(
+                    chatId = job.telegramChatId,
+                    fileIds = decodePhotoIds(fileId),
+                    replyToMessageId = job.telegramRequestMessageId,
+                )
+            )
         }
     }
 
@@ -90,6 +108,7 @@ class TelegramFileSender(
                 durationSeconds = job.sourceDurationSeconds,
             )
             OutputType.COVER -> telegramMediaSender.sendDocument(storageChatId, file.file)
+            OutputType.IMAGES -> throw TelegramSendException("Instagram image groups are unavailable in inline mode")
         }
     }
 
@@ -104,6 +123,20 @@ class TelegramFileSender(
                 durationSeconds = job.sourceDurationSeconds,
             )
             OutputType.COVER -> telegramMediaSender.editInlineDocument(inlineMessageId, fileId)
+            OutputType.IMAGES -> throw TelegramSendException("Instagram image groups are unavailable in inline mode")
         }
+    }
+
+    private fun encodePhotoIds(fileIds: List<String>): String {
+        return PHOTO_GROUP_PREFIX + objectMapper.writeValueAsString(fileIds)
+    }
+
+    private fun decodePhotoIds(value: String): List<String> {
+        require(value.startsWith(PHOTO_GROUP_PREFIX)) { "Cached photo group has invalid format" }
+        return objectMapper.readValue(value.removePrefix(PHOTO_GROUP_PREFIX))
+    }
+
+    private companion object {
+        private const val PHOTO_GROUP_PREFIX = "photo-group:"
     }
 }

@@ -5,6 +5,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.dto.YtDlpThumbnailDto
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -16,6 +18,8 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class InstagramEmbedDownloaderTest {
     private val httpClient: InstagramHttpClient = mockk(relaxed = true)
@@ -109,6 +113,61 @@ class InstagramEmbedDownloaderTest {
         }
     }
 
+    @Test
+    fun preparesEveryImageFromStaticCarouselMetadata() {
+        val metadata = imageMetadata(
+            entries = listOf(
+                imageMetadata("https://scontent-a.cdninstagram.com/first.jpg"),
+                imageMetadata("https://scontent-b.cdninstagram.com/second.jpg"),
+            )
+        )
+
+        val prepared = assertNotNull(downloader.prepareImages(request("https://www.instagram.com/p/ABC_123/"), metadata))
+
+        assertEquals(
+            listOf(
+                URI("https://scontent-a.cdninstagram.com/first.jpg"),
+                URI("https://scontent-b.cdninstagram.com/second.jpg"),
+            ),
+            prepared.imageUris,
+        )
+        assertEquals(null, prepared.metadata.duration)
+        assertEquals("https://scontent-a.cdninstagram.com/first.jpg", prepared.metadata.thumbnail)
+    }
+
+    @Test
+    fun rejectsCarouselWhenAnyImageIsMissing() {
+        val metadata = imageMetadata(
+            entries = listOf(
+                imageMetadata("https://scontent-a.cdninstagram.com/first.jpg"),
+                imageMetadata(),
+            )
+        )
+
+        assertNull(downloader.prepareImages(request("https://www.instagram.com/p/ABC_123/"), metadata))
+    }
+
+    @Test
+    fun downloadsPreparedImagesInOrder(@TempDir tempDir: Path) = runTest {
+        val firstUri = URI("https://scontent-a.cdninstagram.com/first.jpg")
+        val secondUri = URI("https://scontent-b.cdninstagram.com/second.jpg")
+        val firstFile = tempDir.resolve("instagram-ABC_123-01.jpg")
+        val secondFile = tempDir.resolve("instagram-ABC_123-02.jpg")
+        val prepared = InstagramPreparedDownload(
+            shortcode = "ABC_123",
+            mediaUri = null,
+            imageUris = listOf(firstUri, secondUri),
+            metadata = imageMetadata(),
+        )
+        coEvery { httpClient.downloadImage(firstUri, firstFile) } returns DownloadedFile(firstFile, 10)
+        coEvery { httpClient.downloadImage(secondUri, secondFile) } returns DownloadedFile(secondFile, 20)
+
+        val actual = downloader.downloadImages(prepared, tempDir)
+
+        assertEquals(listOf(firstFile, secondFile), actual.files)
+        assertEquals(30, actual.sizeBytes)
+    }
+
     private suspend fun InstagramEmbedDownloader.prepareWithStubbedPayload(): InstagramPreparedDownload {
         val embedUri = URI.create("https://www.instagram.com/p/ABC_123/embed/captioned/")
         coEvery { httpClient.getText(embedUri) } returns embedHtml()
@@ -134,6 +193,29 @@ class InstagramEmbedDownloaderTest {
         )
         val payload = jacksonObjectMapper().writeValueAsString(mapOf("contextJSON" to contextJson))
         return "<script>[\"init\",[],[$payload]],</script>"
+    }
+
+    private fun imageMetadata(
+        imageUrl: String? = null,
+        entries: List<YtDlpMetadataDto>? = null,
+    ): YtDlpMetadataDto {
+        return YtDlpMetadataDto(
+            title = "Instagram images",
+            thumbnail = null,
+            duration = null,
+            width = null,
+            height = null,
+            filesize = null,
+            filesizeApprox = null,
+            track = null,
+            artist = null,
+            uploader = "owner",
+            channel = "owner",
+            requestedFormats = null,
+            formats = emptyList(),
+            thumbnails = imageUrl?.let { listOf(YtDlpThumbnailDto(id = "original", url = it)) },
+            entries = entries,
+        )
     }
 
     private fun request(

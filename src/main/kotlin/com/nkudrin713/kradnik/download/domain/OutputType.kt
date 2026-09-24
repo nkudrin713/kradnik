@@ -3,7 +3,8 @@ package com.nkudrin713.kradnik.download.domain
 enum class OutputType(val dbValue: String) {
 	VIDEO("video"),
 	AUDIO("audio"),
-	COVER("cover");
+	COVER("cover"),
+	IMAGES("images");
 
 	companion object {
 		fun fromDb(value: String): OutputType =

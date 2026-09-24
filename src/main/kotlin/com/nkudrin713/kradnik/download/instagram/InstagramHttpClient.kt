@@ -29,6 +29,11 @@ interface InstagramHttpClient {
         uri: URI,
         outputFile: Path,
     ): DownloadedFile
+
+    suspend fun downloadImage(
+        uri: URI,
+        outputFile: Path,
+    ): DownloadedFile
 }
 
 /**
@@ -104,10 +109,32 @@ class JdkInstagramHttpClient(
     override suspend fun download(
         uri: URI,
         outputFile: Path,
+    ): DownloadedFile = downloadContent(
+        uri = uri,
+        outputFile = outputFile,
+        expectedContentType = "video/",
+        maxBytes = uploadLimits.maxUploadBytes.takeIf { uploadLimits.localMode },
+    )
+
+    override suspend fun downloadImage(
+        uri: URI,
+        outputFile: Path,
+    ): DownloadedFile = downloadContent(
+        uri = uri,
+        outputFile = outputFile,
+        expectedContentType = "image/",
+        maxBytes = MAX_PHOTO_BYTES,
+    )
+
+    private suspend fun downloadContent(
+        uri: URI,
+        outputFile: Path,
+        expectedContentType: String,
+        maxBytes: Long?,
     ): DownloadedFile = runInterruptible(Dispatchers.IO) {
         val request = HttpRequest.newBuilder(uri)
             .timeout(downloadTimeout)
-            .header("Accept", "video/*")
+            .header("Accept", "$expectedContentType*")
             .header("User-Agent", USER_AGENT)
             .GET()
             .build()
@@ -127,13 +154,15 @@ class JdkInstagramHttpClient(
         val contentType = response.headers()
             .firstValue("Content-Type")
             .orElse("")
-        if (!contentType.startsWith("video/")) {
+        if (!contentType.startsWith(expectedContentType)) {
             response.body().close()
-            throw InstagramEmbedException("Instagram media response is not a video: contentType=$contentType")
+            throw InstagramEmbedException(
+                "Instagram media response has unexpected content type: expected=$expectedContentType, actual=$contentType"
+            )
         }
 
         val contentLength = response.headers().firstValueAsLong("Content-Length").orElse(-1)
-        if (uploadLimits.localMode && contentLength > uploadLimits.maxUploadBytes) {
+        if (maxBytes != null && contentLength > maxBytes) {
             response.body().close()
             throw InstagramMediaTooLargeException()
         }
@@ -156,7 +185,7 @@ class JdkInstagramHttpClient(
                             break
                         }
                         downloadedBytes += count
-                        if (uploadLimits.localMode && downloadedBytes > uploadLimits.maxUploadBytes) {
+                        if (maxBytes != null && downloadedBytes > maxBytes) {
                             throw InstagramMediaTooLargeException()
                         }
                         output.write(buffer, 0, count)
@@ -178,6 +207,7 @@ class JdkInstagramHttpClient(
         private val CONNECT_TIMEOUT = Duration.ofSeconds(10)
         private val SUCCESS_STATUS_CODES = 200..299
         private const val DOWNLOAD_BUFFER_BYTES = 64 * 1024
+        private const val MAX_PHOTO_BYTES = 10_000_000L
         private const val USER_AGENT = "Mozilla/5.0"
     }
 }

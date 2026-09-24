@@ -96,6 +96,7 @@ class TelegramDownloadChoiceView(
                 OutputType.VIDEO -> "🎬"
                 OutputType.AUDIO -> "🎧"
                 OutputType.COVER -> "🖼"
+                OutputType.IMAGES -> "🖼"
             }
     }
 }

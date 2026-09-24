@@ -5,6 +5,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.instagram.InstagramEmbedDownloader
+import com.nkudrin713.kradnik.download.instagram.InstagramContentUnavailableException
+import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpException
 import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
@@ -122,6 +124,32 @@ class DownloadEngineTest {
         coEvery { instagramDownloader.prepare(spec) } returns prepared
         coEvery { ytDlpService.download(spec, dir) } returns file
         assertEquals(file, engine.download(spec, engine.prepare(spec), dir))
+    }
+
+    @Test
+    fun fallsBackToStaticInstagramImagesAndDownloadsTheGroup() = runTest {
+        val videoSpec = spec(DownloadPlatform.INSTAGRAM)
+        val imageSpec = videoSpec.copy(outputType = OutputType.IMAGES)
+        val metadata: YtDlpMetadataDto = mockk()
+        val prepared = mockk<InstagramPreparedDownload> {
+            every { this@mockk.metadata } returns metadata
+        }
+        val preparation = PreparedDownload(metadata, prepared)
+        val outputDir = Path.of("/tmp/instagram-images")
+        val downloaded = DownloadedFile(
+            file = outputDir.resolve("01.jpg"),
+            sizeBytes = 20,
+            additionalFiles = listOf(outputDir.resolve("02.jpg")),
+        )
+        coEvery { instagramDownloader.prepare(videoSpec) } throws InstagramContentUnavailableException()
+        coEvery { ytDlpService.extractInstagramImageMetadata(videoSpec) } returns metadata
+        every { instagramDownloader.prepareImages(videoSpec, metadata) } returns prepared
+        coEvery { instagramDownloader.downloadImages(prepared, outputDir) } returns downloaded
+
+        assertEquals(preparation, engine.prepare(videoSpec))
+        assertEquals(downloaded, engine.download(imageSpec, preparation, outputDir))
+        coVerify(exactly = 1) { instagramDownloader.downloadImages(prepared, outputDir) }
+        coVerify(exactly = 0) { ytDlpService.download(imageSpec, outputDir) }
     }
 
     private fun spec(

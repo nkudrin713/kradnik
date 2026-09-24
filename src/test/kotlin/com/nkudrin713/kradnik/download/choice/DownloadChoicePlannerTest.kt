@@ -9,6 +9,7 @@ import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
+import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
@@ -19,6 +20,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
+import java.net.URI
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -147,6 +149,31 @@ class DownloadChoicePlannerTest {
 
         assertEquals(DownloadPlatform.INSTAGRAM, actual.options.first().spec.platform)
         coVerify(exactly = 1) { downloadEngine.prepare(video, catalog = true) }
+    }
+
+    @Test
+    fun offersOnlyAllImagesForStaticInstagramPost() = runTest {
+        val video = resolved(OutputType.VIDEO).withInstagramPlatform()
+        val audio = resolved(OutputType.AUDIO).withInstagramPlatform()
+        val metadata = metadata(formats = emptyList())
+        val instagram = InstagramPreparedDownload(
+            shortcode = "ABC_123",
+            mediaUri = null,
+            imageUris = listOf(
+                URI("https://scontent-a.cdninstagram.com/1.jpg"),
+                URI("https://scontent-b.cdninstagram.com/2.jpg"),
+            ),
+            metadata = metadata,
+        )
+        every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns PreparedDownload(metadata, instagram)
+
+        val actual = planner.plan(URL, BotLanguage.RU)
+
+        assertEquals(listOf("images"), actual.options.map { it.key })
+        assertEquals("Все изображения", actual.options.single().label)
+        assertEquals(OutputType.IMAGES, actual.options.single().spec.outputType)
+        assertEquals("instagram_images", actual.options.single().spec.presetName)
     }
 
     private fun resolved(outputType: OutputType): DownloadSpec {

@@ -22,6 +22,7 @@ import kotlin.io.path.isRegularFile
 import kotlin.time.toKotlinDuration
 
 private const val DUMP_SINGLE_JSON = "--dump-single-json"
+private const val IGNORE_NO_FORMATS_ERROR = "--ignore-no-formats-error"
 private const val YT_DLP = "yt-dlp"
 private const val NO_PLAYLIST = "--no-playlist"
 private const val NO_WARNINGS = "--no-warnings"
@@ -83,6 +84,23 @@ class YtDlpService(
         return extractMetadata(spec, formatSelector = null)
     }
 
+    /** Extracts image-only Instagram posts and carousels without treating absent video formats as an error. */
+    suspend fun extractInstagramImageMetadata(spec: DownloadSpec): YtDlpMetadataDto {
+        val result = processRunner.run(
+            YtDlpCommand(
+                args = listOf(
+                    DUMP_SINGLE_JSON,
+                    IGNORE_NO_FORMATS_ERROR,
+                    NO_WARNINGS,
+                    spec.originalUrl,
+                ),
+                workingDir = null,
+                timeout = metadataTimeout.toKotlinDuration(),
+            )
+        )
+        return parseMetadataResult(result)
+    }
+
     private suspend fun extractMetadata(
         spec: DownloadSpec,
         formatSelector: String?,
@@ -105,6 +123,10 @@ class YtDlpService(
             )
         )
 
+        return parseMetadataResult(result)
+    }
+
+    private fun parseMetadataResult(result: ProcessExecutionResult): YtDlpMetadataDto {
         handleBaseErrors(result)
         if (result.stdoutTruncated) {
             throw YtDlpException("yt-dlp metadata extraction output exceeded capture limit")
@@ -112,7 +134,6 @@ class YtDlpService(
         if (result.stdout.isBlank()) {
             throw YtDlpException("yt-dlp metadata extraction returned empty output")
         }
-
         return objectMapper.readValue(result.stdout)
     }
 

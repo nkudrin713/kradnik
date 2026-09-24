@@ -112,6 +112,42 @@ class DownloadChoiceHandlerTest {
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
     }
 
+    @Test
+    fun rejectsImageGroupInInlineModeAndReleasesSelection() {
+        val base = readySelection()
+        val selection = base.copy(
+            option = base.option.copy(
+                key = "images",
+                label = "Все изображения",
+                spec = base.option.spec.copy(outputType = OutputType.IMAGES),
+            )
+        ).apply {
+            session.telegramMenuMessageId = null
+            session.telegramInlineMessageId = "inline-message"
+        }
+        every { preferenceService.resolveLanguage(300) } returns BotLanguage.RU
+        every { sessionService.select(any()) } returns selection
+        every { sessionService.release(token) } just runs
+        every {
+            telegramSender.answerCallback(
+                "callback-id",
+                "Все изображения можно скачать только в личном чате с ботом",
+                true,
+            )
+        } just runs
+
+        handler.handle(
+            callbackQuery(
+                userId = 300,
+                callbackData = DownloadChoiceCallback.encode(token, "images"),
+                inlineMessageId = "inline-message",
+            )
+        )
+
+        verify { sessionService.release(token) }
+        verify(exactly = 0) { starter.start(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
     private fun readySelection(): DownloadChoiceSelection.Ready {
         val option = DownloadChoiceOptionSnapshot(
             key = "video_720",

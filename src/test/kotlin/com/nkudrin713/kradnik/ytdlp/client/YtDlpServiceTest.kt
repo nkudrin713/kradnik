@@ -104,6 +104,32 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun extractsInstagramImageCarouselWithoutVideoFormats() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """
+                {
+                  "title":"Post by owner",
+                  "entries":[
+                    {"thumbnails":[{"id":"0","url":"https://scontent-a.cdninstagram.com/small.jpg"},{"id":"1","url":"https://scontent-a.cdninstagram.com/original.jpg"}]},
+                    {"thumbnails":[{"id":"0","url":"https://scontent-b.cdninstagram.com/original.jpg"}]}
+                  ]
+                }
+            """.trimIndent(),
+            timedOut = false,
+            exitCode = 0,
+        )
+
+        val actual = service.extractInstagramImageMetadata(testRequest())
+
+        assertEquals(2, actual.entries?.size)
+        assertEquals("1", actual.entries?.first()?.thumbnails?.last()?.id)
+        val command = slot<Command>()
+        coVerify { processRunner.run(capture(command)) }
+        assertTrue(command.captured.args.contains("--ignore-no-formats-error"))
+        assertFalse(command.captured.args.contains("--no-playlist"))
+    }
+
+    @Test
     fun extractMetadataIgnoresStderrOnSuccessfulProcess() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             stdout = """{"id":"video-id","title":"Test video"}""",

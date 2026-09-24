@@ -10,6 +10,7 @@ data class DownloadChoicePlan(
 data class DownloadChoiceMediaInfo(
     val title: String?,
     val durationSeconds: Long?,
+    val authorUsername: String? = null,
 )
 
 data class DownloadChoiceOptionSnapshot(

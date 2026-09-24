@@ -40,6 +40,8 @@ class InstagramEmbedDownloaderTest {
         assertEquals(720, prepared.metadata.width)
         assertEquals(1280, prepared.metadata.height)
         assertEquals("owner", prepared.metadata.uploader)
+        assertEquals("Video title", prepared.metadata.title)
+        assertEquals("Post <text>", prepared.metadata.description)
         assertEquals(THUMBNAIL_URL, prepared.metadata.thumbnail)
         assertEquals(42_000_000, prepared.metadata.filesize)
     }
@@ -188,6 +190,8 @@ class InstagramEmbedDownloaderTest {
                     "original_height" to 1280,
                     "display_url" to THUMBNAIL_URL,
                     "user" to mapOf("username" to "owner"),
+                    "title" to "Video title",
+                    "caption" to mapOf("text" to "Post <text>"),
                 ),
             ),
         )
@@ -215,6 +219,7 @@ class InstagramEmbedDownloaderTest {
             formats = emptyList(),
             thumbnails = imageUrl?.let { listOf(YtDlpThumbnailDto(id = "original", url = it)) },
             entries = entries,
+            description = "Image post text",
         )
     }
 

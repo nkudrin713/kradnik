@@ -19,7 +19,7 @@ import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.Instant
 
-/** Persistent request and queue state. Audio metadata is local to one processing call. */
+/** Persistent request and queue state. Audio metadata is local to one processing call; full-post text survives retries. */
 @Entity
 @Table(name = "download_jobs")
 class DownloadJob(
@@ -72,6 +72,9 @@ class DownloadJob(
 
 	@Transient
 	var sourceAudioPerformer: String? = null,
+
+	@Column(name = "source_post_text", columnDefinition = "TEXT")
+	var sourcePostText: String? = null,
 
 	@Column(name = "download_preset", nullable = false)
 	var downloadPreset: String = "",

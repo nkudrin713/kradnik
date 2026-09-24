@@ -114,6 +114,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 outputType = OutputType.IMAGES
                 platform = DownloadPlatform.INSTAGRAM
                 language = BotLanguage.RU
+                sourcePostText = "Post text"
             }
         )
         val preference = preferenceRepository.saveAndFlush(
@@ -132,6 +133,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         assertEquals(DownloadPlatform.YOUTUBE, persistedJob.platform)
         assertEquals(OutputType.IMAGES, persistedImageJob.outputType)
         assertEquals(DownloadPlatform.INSTAGRAM, persistedImageJob.platform)
+        assertEquals("Post text", persistedImageJob.sourcePostText)
         assertEquals(BotLanguage.RU, choiceSessionRepository.findById(session.token).orElseThrow().language)
         assertEquals(BotLanguage.RU, persistedJob.language)
         assertEquals(BotLanguage.RU, preferenceRepository.findById(preference.telegramUserId).orElseThrow().language)

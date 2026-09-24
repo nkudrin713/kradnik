@@ -9,10 +9,12 @@ import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.PhotoSize
 import com.pengrad.telegrambot.model.Video
 import com.pengrad.telegrambot.model.request.ReplyParameters
+import com.pengrad.telegrambot.model.request.ParseMode
 import com.pengrad.telegrambot.request.EditMessageMedia
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendDocument
 import com.pengrad.telegrambot.request.SendMediaGroup
+import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendVideo
 import com.pengrad.telegrambot.response.SendResponse
 import com.pengrad.telegrambot.response.BaseResponse
@@ -176,6 +178,18 @@ class TelegramMediaSenderTest {
 
         request.captured.getParameters()["reply_parameters"].shouldBeInstanceOf<ReplyParameters>()
         result shouldBe listOf("photo-1", "photo-2")
+    }
+
+    @Test
+    fun sendsEscapedPostTextAsMonospace() = runTest {
+        val request = slot<SendMessage>()
+        coEvery { apiClient.executeIo(capture(request), any()) } returns sendResponse()
+
+        sender.sendMonospaceText(100, "Post <text> & more", replyToMessageId = 200)
+
+        request.captured.getParameters()["text"] shouldBe "<pre>Post &lt;text&gt; &amp; more</pre>"
+        request.captured.getParameters()["parse_mode"] shouldBe ParseMode.HTML
+        request.captured.getParameters()["reply_parameters"].shouldBeInstanceOf<ReplyParameters>()
     }
 
     @Test

@@ -5,8 +5,8 @@ Kradnik retrieves public media from YouTube, Instagram, and VK and delivers it d
 It supports:
 
 - video quality selection, audio-only downloads, and cover images;
-- every photo from a static Instagram post or carousel, sent as Telegram photo albums;
-- direct chats and inline guest mode; Instagram photo sets are available only in direct chats;
+- full Instagram posts with the video or photo album followed by copyable monospace post text;
+- direct chats and inline guest mode; full Instagram posts are available only in direct chats;
 - English and Russian interfaces;
 - Telegram `file_id` reuse and cloud or local Bot API delivery.
 
@@ -18,7 +18,7 @@ Source playlists, private content, and authentication bypasses are not supported
 
 - Metadata is loaded before enqueueing to build the available format menu and estimate sizes.
 - Metadata work uses 2 threads and accepts at most 32 pending requests.
-- Instagram videos keep the video/audio menu; static posts expose one option for all images in post order.
+- Instagram videos keep the video/audio menu and add a full-post option; static posts expose one full-post option.
 - Menu snapshots, ownership, and language preferences are stored in PostgreSQL, so callbacks survive restarts.
 
 ## Queue and lifecycle

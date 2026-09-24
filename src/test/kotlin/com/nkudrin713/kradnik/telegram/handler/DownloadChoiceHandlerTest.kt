@@ -148,6 +148,42 @@ class DownloadChoiceHandlerTest {
         verify(exactly = 0) { starter.start(any(), any(), any(), any(), any(), any(), any()) }
     }
 
+    @Test
+    fun rejectsVideoPostWithTextInInlineModeAndReleasesSelection() {
+        val base = readySelection()
+        val selection = base.copy(
+            option = base.option.copy(
+                key = "post",
+                label = "Пост целиком",
+                spec = base.option.spec.copy(postText = "Post text"),
+            )
+        ).apply {
+            session.telegramMenuMessageId = null
+            session.telegramInlineMessageId = "inline-message"
+        }
+        every { preferenceService.resolveLanguage(300) } returns BotLanguage.RU
+        every { sessionService.select(any()) } returns selection
+        every { sessionService.release(token) } just runs
+        every {
+            telegramSender.answerCallback(
+                "callback-id",
+                "Пост целиком можно скачать только в личном чате с ботом",
+                true,
+            )
+        } just runs
+
+        handler.handle(
+            callbackQuery(
+                userId = 300,
+                callbackData = DownloadChoiceCallback.encode(token, "post"),
+                inlineMessageId = "inline-message",
+            )
+        )
+
+        verify { sessionService.release(token) }
+        verify(exactly = 0) { starter.start(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
     private fun readySelection(): DownloadChoiceSelection.Ready {
         val option = DownloadChoiceOptionSnapshot(
             key = "video_720",

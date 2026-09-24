@@ -23,6 +23,7 @@ data class YtDlpMetadataDto(
     val formats: List<YtDlpFormatDto>? = null,
     val thumbnails: List<YtDlpThumbnailDto>? = null,
     val entries: List<YtDlpMetadataDto>? = null,
+    val description: String? = null,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)

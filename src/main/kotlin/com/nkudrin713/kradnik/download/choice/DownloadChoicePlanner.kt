@@ -10,6 +10,7 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlan
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
@@ -41,17 +42,19 @@ class DownloadChoicePlanner(
         val metadata = prepared.metadata
 
         val options = if (prepared.instagram?.imageUris?.isNotEmpty() == true) {
-            listOf(imageOption(video, language))
+            listOf(imagePostOption(video, metadata.description, language))
         } else {
+            val videoOptions = videoOptions(
+                spec = video,
+                metadata = metadata,
+                language = language,
+                allowUnknownOriginalSize = prepared.instagram != null,
+            )
             buildList {
-                addAll(
-                    videoOptions(
-                        spec = video,
-                        metadata = metadata,
-                        language = language,
-                        allowUnknownOriginalSize = prepared.instagram != null,
-                    )
-                )
+                if (video.platform == DownloadPlatform.INSTAGRAM) {
+                    videoOptions.firstOrNull()?.let { add(videoPostOption(it, metadata.description, language)) }
+                }
+                addAll(videoOptions)
                 audioOption(audio, metadata, language)?.let(::add)
                 coverOption(video, metadata, language)?.let(::add)
             }
@@ -67,6 +70,11 @@ class DownloadChoicePlanner(
                     ?.takeIf { it >= BigDecimal.ZERO }
                     ?.setScale(0, RoundingMode.DOWN)
                     ?.toLong(),
+                authorUsername = if (video.platform == DownloadPlatform.INSTAGRAM) {
+                    metadata.channel ?: metadata.uploader
+                } else {
+                    null
+                },
             ),
             options = options,
         )
@@ -266,8 +274,21 @@ class DownloadChoicePlanner(
         )
     }
 
-    private fun imageOption(
+    private fun videoPostOption(
+        original: DownloadChoiceOptionSnapshot,
+        postText: String?,
+        language: BotLanguage,
+    ): DownloadChoiceOptionSnapshot {
+        return original.copy(
+            key = POST_KEY,
+            label = messages.text(language, TelegramMessage.CHOICE_POST),
+            spec = original.spec.copy(postText = postText?.takeIf(String::isNotBlank)),
+        )
+    }
+
+    private fun imagePostOption(
         spec: DownloadSpec,
+        postText: String?,
         language: BotLanguage,
     ): DownloadChoiceOptionSnapshot {
         return option(
@@ -276,9 +297,10 @@ class DownloadChoicePlanner(
                 formatSelector = IMAGES_FORMAT_SELECTOR,
                 extraArgs = emptyList(),
                 presetName = "${presetPrefix(spec)}_images",
+                postText = postText?.takeIf(String::isNotBlank),
             ),
-            key = IMAGES_KEY,
-            label = messages.text(language, TelegramMessage.CHOICE_IMAGES),
+            key = POST_KEY,
+            label = messages.text(language, TelegramMessage.CHOICE_POST),
             sizeBytes = null,
             approximateSize = false,
             language = language,
@@ -331,7 +353,7 @@ class DownloadChoicePlanner(
         private const val VIDEO_ORIGINAL_KEY = "video_original"
         private const val AUDIO_KEY = "audio"
         private const val COVER_KEY = "cover"
-        private const val IMAGES_KEY = "images"
+        private const val POST_KEY = "post"
         private const val IMAGES_FORMAT_SELECTOR = "images"
         private const val BITS_IN_KILOBIT = 1000L
         private const val BITS_IN_BYTE = 8L

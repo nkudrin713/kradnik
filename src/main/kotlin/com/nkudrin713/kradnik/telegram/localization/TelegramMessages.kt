@@ -49,6 +49,7 @@ enum class TelegramMessage(val key: String) {
     CHOICE_AUDIO("choice.audio"),
     CHOICE_COVER("choice.cover"),
     CHOICE_IMAGES("choice.images"),
+    CHOICE_POST("choice.post"),
     CHOICE_SIZE_MB("choice.size.mb"),
     CHOICE_SIZE_GB("choice.size.gb"),
     CHOICE_SELECTED("choice.selected"),
@@ -66,4 +67,5 @@ enum class TelegramMessage(val key: String) {
     ERROR_UNSUPPORTED_URL("error.unsupported-url"),
     ERROR_CHOICE_PREPARATION("error.choice-preparation"),
     ERROR_IMAGES_DIRECT_CHAT_ONLY("error.images-direct-chat-only"),
+    ERROR_POST_DIRECT_CHAT_ONLY("error.post-direct-chat-only"),
 }

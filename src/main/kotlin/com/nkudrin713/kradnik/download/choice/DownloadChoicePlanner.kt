@@ -22,7 +22,7 @@ import java.math.RoundingMode
 
 /**
  * Resolves a URL with [PlatformResolver], obtains one catalog through [DownloadEngine], and builds a stable menu snapshot.
- * Video formats are ranked for Telegram compatibility, duplicate 1080p original quality is omitted, and
+ * Video formats are ranked for Telegram compatibility, named qualities duplicating the original are omitted, and
  * [AudioUploadPlanner] plus [TelegramUploadLimits] determine which options can be offered.
  */
 @Component
@@ -44,7 +44,14 @@ class DownloadChoicePlanner(
             listOf(imageOption(video, language))
         } else {
             buildList {
-                addAll(videoOptions(video, metadata, language))
+                addAll(
+                    videoOptions(
+                        spec = video,
+                        metadata = metadata,
+                        language = language,
+                        allowUnknownOriginalSize = prepared.instagram != null,
+                    )
+                )
                 audioOption(audio, metadata, language)?.let(::add)
                 coverOption(video, metadata, language)?.let(::add)
             }
@@ -86,10 +93,16 @@ class DownloadChoicePlanner(
         spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
         language: BotLanguage,
+        allowUnknownOriginalSize: Boolean = false,
     ): List<DownloadChoiceOptionSnapshot> {
         val formats = metadata.formats.orEmpty()
         if (formats.isEmpty()) {
-            return fallbackOriginalOption(spec, metadata, language)?.let(::listOf).orEmpty()
+            return fallbackOriginalOption(
+                spec = spec,
+                metadata = metadata,
+                language = language,
+                allowUnknownSize = allowUnknownOriginalSize,
+            )?.let(::listOf).orEmpty()
         }
 
         return buildList {
@@ -99,7 +112,7 @@ class DownloadChoicePlanner(
                     videoOption(
                         spec = spec,
                         key = VIDEO_ORIGINAL_KEY,
-                        label = messages.text(language, TelegramMessage.CHOICE_ORIGINAL),
+                        label = originalLabel(language, it.height),
                         selected = it,
                         language = language,
                     )
@@ -107,7 +120,7 @@ class DownloadChoicePlanner(
             }
             TARGET_HEIGHTS.forEach { height ->
                 selectVideo(formats, metadata, targetHeight = height)?.let { selected ->
-                    if (height != 1080 || selected != original) {
+                    if (selected != original) {
                         add(
                             videoOption(
                                 spec = spec,
@@ -155,6 +168,7 @@ class DownloadChoicePlanner(
 
         return SelectedMedia(
             formatSelector = selector,
+            height = requireNotNull(video.height),
             sizeBytes = totalSize,
             approximateSize = videoSize.approximate || audioSize?.approximate == true,
         )
@@ -185,18 +199,27 @@ class DownloadChoicePlanner(
         spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
         language: BotLanguage,
+        allowUnknownSize: Boolean,
     ): DownloadChoiceOptionSnapshot? {
-        val size = metadata.filesize ?: metadata.filesizeApprox ?: return null
+        val size = metadata.filesize ?: metadata.filesizeApprox
+        if (size == null && !allowUnknownSize) {
+            return null
+        }
         return option(
             spec = spec.copy(
                 presetName = "${presetPrefix(spec)}_video_original",
             ),
             key = VIDEO_ORIGINAL_KEY,
-            label = messages.text(language, TelegramMessage.CHOICE_ORIGINAL),
+            label = originalLabel(language, metadata.height),
             sizeBytes = size,
-            approximateSize = metadata.filesize == null,
+            approximateSize = metadata.filesize == null && metadata.filesizeApprox != null,
             language = language,
         )
+    }
+
+    private fun originalLabel(language: BotLanguage, height: Int?): String {
+        val label = messages.text(language, TelegramMessage.CHOICE_ORIGINAL)
+        return height?.let { "$label · ${it}p" } ?: label
     }
 
     private fun audioOption(
@@ -352,6 +375,7 @@ class DownloadChoicePlanner(
 
 private data class SelectedMedia(
     val formatSelector: String,
+    val height: Int,
     val sizeBytes: Long,
     val approximateSize: Boolean,
 )

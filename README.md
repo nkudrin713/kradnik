@@ -127,5 +127,3 @@ APP_IMAGE=kradnik:local docker compose up -d
 - Merging to `main` does not deploy. A manual release builds and deploys an immutable version and image digest.
 - Migration `V26` requires the old application to be stopped; mixed versions and application-only rollback are unsafe.
 - Applied Flyway migrations are immutable.
-
-See [architecture decisions and interview walkthrough](docs/architecture-refactor.md) for design rationale and concurrency questions.

@@ -61,6 +61,22 @@ class JdkInstagramHttpClientTest {
     }
 
     @Test
+    fun downloadsImageResponse(@TempDir tempDir: Path) = runTest {
+        val body = byteArrayOf(1, 2, 3, 4)
+        server.createContext("/image") { exchange ->
+            exchange.responseHeaders.add("Content-Type", "image/jpeg")
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        val outputFile = tempDir.resolve("image.jpg")
+
+        val downloaded = client.downloadImage(baseUri.resolve("/image"), outputFile)
+
+        assertEquals(outputFile, downloaded.file)
+        assertContentEquals(body, Files.readAllBytes(outputFile))
+    }
+
+    @Test
     fun rejectsNonVideoResponse(@TempDir tempDir: Path) = runTest {
         server.createContext("/html") { exchange ->
             exchange.responseHeaders.add("Content-Type", "text/html")

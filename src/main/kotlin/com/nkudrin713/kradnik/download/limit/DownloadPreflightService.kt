@@ -23,7 +23,7 @@ class DownloadPreflightService(
         spec: DownloadSpec,
         metadata: YtDlpMetadataDto,
     ): DownloadPreflightDecision {
-        if (spec.outputType == OutputType.COVER) {
+        if (spec.outputType == OutputType.COVER || spec.outputType == OutputType.IMAGES) {
             return DownloadPreflightDecision.Allowed(spec)
         }
 

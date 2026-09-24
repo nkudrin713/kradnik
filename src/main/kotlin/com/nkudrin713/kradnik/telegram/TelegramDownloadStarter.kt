@@ -44,7 +44,7 @@ class TelegramDownloadStarter(
         val jobSpec = spec.copy(
             cacheKey = when (spec.outputType) {
                 OutputType.VIDEO -> TelegramVideoPolicy.versionCacheKey(spec.cacheKey)
-                OutputType.AUDIO, OutputType.COVER -> spec.cacheKey
+                OutputType.AUDIO, OutputType.COVER, OutputType.IMAGES -> spec.cacheKey
             },
         )
         val command = CreateDownloadJobCommand(

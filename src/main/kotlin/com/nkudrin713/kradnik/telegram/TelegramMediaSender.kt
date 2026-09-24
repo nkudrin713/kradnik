@@ -4,11 +4,14 @@ import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
 import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
 import com.pengrad.telegrambot.model.request.InputMediaAudio
 import com.pengrad.telegrambot.model.request.InputMediaDocument
+import com.pengrad.telegrambot.model.request.InputMediaPhoto
 import com.pengrad.telegrambot.model.request.InputMediaVideo
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.EditMessageMedia
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendDocument
+import com.pengrad.telegrambot.request.SendMediaGroup
+import com.pengrad.telegrambot.request.SendPhoto
 import com.pengrad.telegrambot.request.SendVideo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -183,6 +186,92 @@ class TelegramMediaSender(
         return fileId
     }
 
+    suspend fun sendPhotos(
+        chatId: Long,
+        files: List<Path>,
+        replyToMessageId: Int? = null,
+    ): List<String> {
+        require(files.isNotEmpty()) { "At least one photo is required" }
+        return files.chunked(MAX_MEDIA_GROUP_SIZE).flatMapIndexed { index, chunk ->
+            val replyId = replyToMessageId.takeIf { index == 0 }
+            if (chunk.size == 1) {
+                listOf(sendPhoto(chatId, chunk.single(), replyId))
+            } else {
+                sendPhotoGroup(chatId, chunk, replyId)
+            }
+        }
+    }
+
+    suspend fun sendCachedPhotos(
+        chatId: Long,
+        fileIds: List<String>,
+        replyToMessageId: Int? = null,
+    ): List<String> {
+        require(fileIds.isNotEmpty()) { "At least one photo file ID is required" }
+        return fileIds.chunked(MAX_MEDIA_GROUP_SIZE).flatMapIndexed { index, chunk ->
+            val replyId = replyToMessageId.takeIf { index == 0 }
+            if (chunk.size == 1) {
+                listOf(sendCachedPhoto(chatId, chunk.single(), replyId))
+            } else {
+                sendCachedPhotoGroup(chatId, chunk, replyId)
+            }
+        }
+    }
+
+    private suspend fun sendPhoto(chatId: Long, file: Path, replyToMessageId: Int?): String {
+        val request = if (properties.localApi) {
+            SendPhoto(chatId, localFileUri(file))
+        } else {
+            SendPhoto(chatId, file.toFile())
+        }
+        addReplyParameters(request, replyToMessageId)
+        val response = apiClient.executeIo(
+            request,
+            errorContext = "(sizeMb=${formatMegabytes(fileSize(file))})",
+        )
+        return response.message()?.photo()?.lastOrNull()?.fileId()
+            ?: throw TelegramSendException("Telegram response does not contain photo")
+    }
+
+    private suspend fun sendCachedPhoto(chatId: Long, fileId: String, replyToMessageId: Int?): String {
+        val request = SendPhoto(chatId, fileId)
+        addReplyParameters(request, replyToMessageId)
+        val response = apiClient.executeIo(request)
+        return response.message()?.photo()?.lastOrNull()?.fileId()
+            ?: throw TelegramSendException("Telegram response does not contain photo")
+    }
+
+    private suspend fun sendPhotoGroup(
+        chatId: Long,
+        files: List<Path>,
+        replyToMessageId: Int?,
+    ): List<String> {
+        val media = files.map { file ->
+            if (properties.localApi) InputMediaPhoto(localFileUri(file)) else InputMediaPhoto(file.toFile())
+        }
+        val request = SendMediaGroup(chatId, *media.toTypedArray())
+        addReplyParameters(request, replyToMessageId)
+        val response = apiClient.executeIo(request)
+        return response.messages()?.map { message ->
+            message.photo()?.lastOrNull()?.fileId()
+                ?: throw TelegramSendException("Telegram media group response does not contain photo")
+        } ?: throw TelegramSendException("Telegram response does not contain media group")
+    }
+
+    private suspend fun sendCachedPhotoGroup(
+        chatId: Long,
+        fileIds: List<String>,
+        replyToMessageId: Int?,
+    ): List<String> {
+        val request = SendMediaGroup(chatId, *fileIds.map(::InputMediaPhoto).toTypedArray())
+        addReplyParameters(request, replyToMessageId)
+        val response = apiClient.executeIo(request)
+        return response.messages()?.map { message ->
+            message.photo()?.lastOrNull()?.fileId()
+                ?: throw TelegramSendException("Telegram cached media group response does not contain photo")
+        } ?: throw TelegramSendException("Telegram response does not contain cached media group")
+    }
+
     private suspend fun fileSize(file: Path): Long {
         return withContext(Dispatchers.IO) {
             Files.size(file)
@@ -232,7 +321,16 @@ class TelegramMediaSender(
         )
     }
 
+    private fun addReplyParameters(request: SendMediaGroup, replyToMessageId: Int?) {
+        replyToMessageId ?: return
+        request.replyParameters(
+            ReplyParameters(replyToMessageId)
+                .allowSendingWithoutReply(true)
+        )
+    }
+
     private companion object {
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
+        private const val MAX_MEDIA_GROUP_SIZE = 10
     }
 }

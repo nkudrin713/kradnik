@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.choice
 
 import com.nkudrin713.kradnik.download.DownloadEngine
+import com.nkudrin713.kradnik.download.PreparedDownload
 import com.nkudrin713.kradnik.download.instagram.InstagramContentUnavailableException
 import com.nkudrin713.kradnik.download.instagram.InstagramHttpException
 import com.nkudrin713.kradnik.download.instagram.InstagramEmbedException
@@ -36,12 +37,17 @@ class DownloadChoicePlanner(
         val specs = platformResolver.resolve(url)
         val video = specs.video
         val audio = specs.audio
-        val metadata = extractCatalog(video, language)
+        val prepared = extractCatalog(video, language)
+        val metadata = prepared.metadata
 
-        val options = buildList {
-            addAll(videoOptions(video, metadata, language))
-            audioOption(audio, metadata, language)?.let(::add)
-            coverOption(video, metadata, language)?.let(::add)
+        val options = if (prepared.instagram?.imageUris?.isNotEmpty() == true) {
+            listOf(imageOption(video, language))
+        } else {
+            buildList {
+                addAll(videoOptions(video, metadata, language))
+                audioOption(audio, metadata, language)?.let(::add)
+                coverOption(video, metadata, language)?.let(::add)
+            }
         }
         if (options.isEmpty()) {
             throw DownloadChoicePlanningException(messages.text(language, TelegramMessage.ERROR_NO_OPTIONS))
@@ -59,9 +65,9 @@ class DownloadChoicePlanner(
         )
     }
 
-    private suspend fun extractCatalog(spec: DownloadSpec, language: BotLanguage): YtDlpMetadataDto {
+    private suspend fun extractCatalog(spec: DownloadSpec, language: BotLanguage): PreparedDownload {
         try {
-            return downloadEngine.prepare(spec, catalog = true).metadata
+            return downloadEngine.prepare(spec, catalog = true)
         } catch (error: InstagramContentUnavailableException) {
             throw DownloadChoicePlanningException(messages.text(language, TelegramMessage.ERROR_SOURCE_UNAVAILABLE))
         } catch (error: InstagramHttpException) {
@@ -237,6 +243,25 @@ class DownloadChoicePlanner(
         )
     }
 
+    private fun imageOption(
+        spec: DownloadSpec,
+        language: BotLanguage,
+    ): DownloadChoiceOptionSnapshot {
+        return option(
+            spec = spec.copy(
+                outputType = OutputType.IMAGES,
+                formatSelector = IMAGES_FORMAT_SELECTOR,
+                extraArgs = emptyList(),
+                presetName = "${presetPrefix(spec)}_images",
+            ),
+            key = IMAGES_KEY,
+            label = messages.text(language, TelegramMessage.CHOICE_IMAGES),
+            sizeBytes = null,
+            approximateSize = false,
+            language = language,
+        )
+    }
+
     private fun option(
         spec: DownloadSpec,
         key: String,
@@ -283,6 +308,8 @@ class DownloadChoicePlanner(
         private const val VIDEO_ORIGINAL_KEY = "video_original"
         private const val AUDIO_KEY = "audio"
         private const val COVER_KEY = "cover"
+        private const val IMAGES_KEY = "images"
+        private const val IMAGES_FORMAT_SELECTOR = "images"
         private const val BITS_IN_KILOBIT = 1000L
         private const val BITS_IN_BYTE = 8L
         private val TARGET_HEIGHTS = listOf(1080, 720, 480, 360)

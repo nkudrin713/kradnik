@@ -21,6 +21,14 @@ data class YtDlpMetadataDto(
     @JsonProperty("requested_formats")
     val requestedFormats: List<YtDlpFormatDto>?,
     val formats: List<YtDlpFormatDto>? = null,
+    val thumbnails: List<YtDlpThumbnailDto>? = null,
+    val entries: List<YtDlpMetadataDto>? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class YtDlpThumbnailDto(
+    val id: String?,
+    val url: String?,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)

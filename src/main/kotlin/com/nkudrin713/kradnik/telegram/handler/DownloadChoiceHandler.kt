@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.telegram.handler
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.choice.SelectDownloadChoiceCommand
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
@@ -89,6 +90,16 @@ class DownloadChoiceHandler(
         callback: DownloadChoiceCallback,
         selection: DownloadChoiceSelection.Ready,
     ) {
+        if (address is TelegramMessageAddress.Inline && selection.option.spec.outputType == OutputType.IMAGES) {
+            sessionService.release(callback.sessionToken)
+            answer(
+                callbackQueryId = callbackQueryId,
+                language = selection.session.language,
+                message = TelegramMessage.ERROR_IMAGES_DIRECT_CHAT_ONLY,
+                showAlert = true,
+            )
+            return
+        }
         try {
             telegramDownloadStarter.start(
                 telegramUserId = selection.session.telegramUserId,

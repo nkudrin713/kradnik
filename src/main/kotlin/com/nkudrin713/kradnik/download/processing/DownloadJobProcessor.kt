@@ -65,7 +65,7 @@ class DownloadJobProcessor(
             } else {
                 downloaded
             }
-            if (file.sizeBytes > uploadLimits.maxUploadBytes) {
+            if (job.outputType != OutputType.IMAGES && file.sizeBytes > uploadLimits.maxUploadBytes) {
                 fail(job, "File exceeds Telegram upload limit", TelegramDownloadStatus.REJECTED_TOO_LARGE)
                 return
             }

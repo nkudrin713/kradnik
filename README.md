@@ -1,6 +1,6 @@
 # Kradnik
 
-A Telegram bot for downloading public videos from YouTube, Instagram, and VK. Send a link directly or invoke the bot in another chat with `@bot link`, choose video quality, audio, or a cover image, and receive the file. English and Russian interfaces, Telegram file reuse, and cloud/local Bot API delivery are supported. Playlists, private content, and authentication bypasses are not supported.
+A Telegram bot for downloading public media from YouTube, Instagram, and VK. Send a link directly or invoke the bot in another chat with `@bot link`, choose video quality, audio, a cover image, or every image from a static Instagram post, and receive the media. Instagram carousels are sent directly as Telegram photo albums. English and Russian interfaces, Telegram file reuse, and cloud/local Bot API delivery are supported. Source playlists, private content, and authentication bypasses are not supported.
 
 ## Request flow
 
@@ -20,7 +20,7 @@ DownloadQueueWorker: one loop per worker thread
        -> finally: delete the job's directory
 ```
 
-Metadata is needed before enqueueing because it determines the available formats and estimated sizes. Two metadata threads serve this step, with at most 32 pending requests; overload returns the existing preparation error. The download queue contains only accepted selections. Menu snapshots and ownership are stored in PostgreSQL so callbacks still work after a restart; language preferences are stored per user.
+Metadata is needed before enqueueing because it determines the available formats and estimated sizes. Instagram video posts keep the existing video/audio menu; static posts expose one option that sends every image in post order. Two metadata threads serve this step, with at most 32 pending requests; overload returns the existing preparation error. The download queue contains only accepted selections. Menu snapshots and ownership are stored in PostgreSQL so callbacks still work after a restart; language preferences are stored per user.
 
 ## Concurrency
 
@@ -44,9 +44,10 @@ Paths below are relative to `src/main/kotlin/com/nkudrin713/kradnik/`.
 | `download/repository/DownloadJobRepository.kt` | Queue SQL and reusable Telegram file lookup |
 | `download/processing/DownloadQueueWorker.kt` | Fixed-size pool and polling loops |
 | `download/processing/DownloadJobProcessor.kt` | Linear download-to-delivery scenario and cleanup |
-| `download/DownloadEngine.kt` | Explicit yt-dlp, Instagram embed, and cover download branches |
+| `download/DownloadEngine.kt` | Explicit yt-dlp, Instagram video/image, and cover download branches |
+| `download/instagram/InstagramEmbedDownloader.kt` | Instagram video metadata plus static post/carousel image extraction and download |
 | `ytdlp/client/YtDlpService.kt`, `process/DefaultProcessRunner.kt` | External commands, deadlines, bounded diagnostics, process-tree termination |
-| `download/telegram/TelegramFileSender.kt`, `telegram/TelegramApiClient.kt` | Direct/guest media delivery and cancellation of Telegram uploads |
+| `download/telegram/TelegramFileSender.kt`, `telegram/TelegramMediaSender.kt` | Direct/guest media delivery, reusable files, and Telegram photo albums |
 | `download/video/` | Probe and normalize incompatible video for Telegram |
 
 Audio metadata stays local to a processing call. Persistent state consists of `download_jobs`, `download_choice_sessions`, and `telegram_user_preferences`; Flyway manages all schema changes. The HTTP clients are shared; request objects, media metadata, processes, and numeric job directories are per job. There is no shared mutable collection of running jobs.

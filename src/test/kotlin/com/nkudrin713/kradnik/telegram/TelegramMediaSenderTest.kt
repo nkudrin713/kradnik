@@ -6,14 +6,17 @@ import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
 import com.pengrad.telegrambot.model.Audio
 import com.pengrad.telegrambot.model.Document
 import com.pengrad.telegrambot.model.Message
+import com.pengrad.telegrambot.model.PhotoSize
 import com.pengrad.telegrambot.model.Video
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.EditMessageMedia
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendDocument
+import com.pengrad.telegrambot.request.SendMediaGroup
 import com.pengrad.telegrambot.request.SendVideo
 import com.pengrad.telegrambot.response.SendResponse
 import com.pengrad.telegrambot.response.BaseResponse
+import com.pengrad.telegrambot.response.MessagesResponse
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.coEvery
@@ -163,6 +166,19 @@ class TelegramMediaSenderTest {
     }
 
     @Test
+    fun sendsPhotosAsMediaGroup(@TempDir tempDir: Path) = runTest {
+        val first = tempDir.resolve("01.jpg").also { it.writeText("first") }
+        val second = tempDir.resolve("02.jpg").also { it.writeText("second") }
+        val request = slot<SendMediaGroup>()
+        coEvery { apiClient.executeIo(capture(request), any()) } returns messagesResponse("photo-1", "photo-2")
+
+        val result = sender.sendPhotos(100, listOf(first, second), replyToMessageId = 200)
+
+        request.captured.getParameters()["reply_parameters"].shouldBeInstanceOf<ReplyParameters>()
+        result shouldBe listOf("photo-1", "photo-2")
+    }
+
+    @Test
     fun editsInlineDocumentByFileId() = runTest {
         val request = slot<EditMessageMedia>()
         coEvery { apiClient.executeIo(capture(request), any()) } returns okResponse()
@@ -244,6 +260,19 @@ class TelegramMediaSenderTest {
     private fun okResponse(): BaseResponse {
         return mockk {
             every { isOk } returns true
+        }
+    }
+
+    private fun messagesResponse(vararg fileIds: String): MessagesResponse {
+        return mockk {
+            every { isOk } returns true
+            every { messages() } returns fileIds.map { fileId ->
+                mockk<Message> {
+                    every { photo() } returns arrayOf(mockk<PhotoSize> {
+                        every { fileId() } returns fileId
+                    })
+                }
+            }.toTypedArray()
         }
     }
 

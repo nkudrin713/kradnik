@@ -42,6 +42,7 @@ class DownloadJobServiceTest {
         assertEquals("preset", actual.downloadPreset)
         assertEquals("format", actual.selectedFormat)
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.downloadExtraArgs)
+        assertEquals("Post text", actual.sourcePostText)
         assertEquals(10, actual.telegramStatusMessageId)
         verify { repository.lockTelegramUpdate(3) }
     }
@@ -86,6 +87,7 @@ class DownloadJobServiceTest {
                 presetName = "preset",
                 formatSelector = "format",
                 extraArgs = listOf("-x", "--audio-format", "mp3"),
+                postText = "Post text",
             ),
             telegramStatusMessageId = 10,
         )

@@ -126,6 +126,36 @@ class TelegramFileSenderTest {
     }
 
     @Test
+    fun sendsFullPostTextAfterVideo() = runTest {
+        val job = job(OutputType.VIDEO).apply { sourcePostText = "Post <text>" }
+        coEvery {
+            telegramMediaSender.sendCachedVideo(
+                chatId = 100,
+                fileId = "cached-id",
+                replyToMessageId = 200,
+            )
+        } returns "video-id"
+        coEvery {
+            telegramMediaSender.sendMonospaceText(
+                chatId = 100,
+                text = "Post <text>",
+                replyToMessageId = 200,
+            )
+        } returns Unit
+
+        val actual = sender.sendCached(job, "cached-id")
+
+        assertEquals("video-id", actual)
+        coVerify {
+            telegramMediaSender.sendMonospaceText(
+                chatId = 100,
+                text = "Post <text>",
+                replyToMessageId = 200,
+            )
+        }
+    }
+
+    @Test
     fun sendsCachedAudio() = runTest {
         coEvery {
             telegramMediaSender.sendCachedAudio(

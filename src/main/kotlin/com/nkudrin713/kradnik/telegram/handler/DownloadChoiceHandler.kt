@@ -95,7 +95,21 @@ class DownloadChoiceHandler(
             answer(
                 callbackQueryId = callbackQueryId,
                 language = selection.session.language,
-                message = TelegramMessage.ERROR_IMAGES_DIRECT_CHAT_ONLY,
+                message = if (selection.option.key == POST_OPTION_KEY) {
+                    TelegramMessage.ERROR_POST_DIRECT_CHAT_ONLY
+                } else {
+                    TelegramMessage.ERROR_IMAGES_DIRECT_CHAT_ONLY
+                },
+                showAlert = true,
+            )
+            return
+        }
+        if (address is TelegramMessageAddress.Inline && !selection.option.spec.postText.isNullOrBlank()) {
+            sessionService.release(callback.sessionToken)
+            answer(
+                callbackQueryId = callbackQueryId,
+                language = selection.session.language,
+                message = TelegramMessage.ERROR_POST_DIRECT_CHAT_ONLY,
                 showAlert = true,
             )
             return
@@ -152,5 +166,9 @@ class DownloadChoiceHandler(
                 it,
             )
         }
+    }
+
+    private companion object {
+        private const val POST_OPTION_KEY = "post"
     }
 }

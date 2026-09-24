@@ -36,6 +36,7 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
 				downloadPreset = spec.presetName,
 				selectedFormat = spec.formatSelector,
 				downloadExtraArgs = spec.extraArgs,
+				sourcePostText = spec.postText,
 				telegramStatusMessageId = command.telegramStatusMessageId,
 				telegramInlineMessageId = command.telegramInlineMessageId,
 			)

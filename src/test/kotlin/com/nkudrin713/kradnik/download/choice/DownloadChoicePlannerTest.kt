@@ -156,7 +156,13 @@ class DownloadChoicePlannerTest {
     fun offersOriginalForInstagramVideoWithoutDirectUrlOrKnownSize() = runTest {
         val video = resolved(OutputType.VIDEO).withInstagramPlatform()
         val audio = resolved(OutputType.AUDIO).withInstagramPlatform()
-        val metadata = metadata(formats = emptyList()).copy(width = 720, height = 1280)
+        val metadata = metadata(formats = emptyList()).copy(
+            width = 720,
+            height = 1280,
+            description = "Post text",
+            uploader = "owner",
+            channel = null,
+        )
         val instagram = InstagramPreparedDownload(
             shortcode = "ABC_123",
             mediaUri = null,
@@ -167,8 +173,13 @@ class DownloadChoicePlannerTest {
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
-        assertEquals(listOf("video_original", "audio", "cover"), actual.options.map { it.key })
-        val original = actual.options.first()
+        assertEquals(listOf("post", "video_original", "audio", "cover"), actual.options.map { it.key })
+        val post = actual.options.first()
+        val original = actual.options[1]
+        assertEquals("Пост целиком", post.label)
+        assertEquals(original.spec.cacheKey, post.spec.cacheKey)
+        assertEquals("Post text", post.spec.postText)
+        assertEquals("owner", actual.mediaInfo.authorUsername)
         assertEquals("Оригинал · 1280p", original.label)
         assertEquals(null, original.sizeBytes)
         assertTrue(original.available)
@@ -188,10 +199,10 @@ class DownloadChoicePlannerTest {
     }
 
     @Test
-    fun offersOnlyAllImagesForStaticInstagramPost() = runTest {
+    fun offersOnlyFullPostForStaticInstagramPost() = runTest {
         val video = resolved(OutputType.VIDEO).withInstagramPlatform()
         val audio = resolved(OutputType.AUDIO).withInstagramPlatform()
-        val metadata = metadata(formats = emptyList())
+        val metadata = metadata(formats = emptyList()).copy(description = "Post text", channel = "owner")
         val instagram = InstagramPreparedDownload(
             shortcode = "ABC_123",
             mediaUri = null,
@@ -206,10 +217,12 @@ class DownloadChoicePlannerTest {
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
-        assertEquals(listOf("images"), actual.options.map { it.key })
-        assertEquals("Все изображения", actual.options.single().label)
+        assertEquals(listOf("post"), actual.options.map { it.key })
+        assertEquals("Пост целиком", actual.options.single().label)
         assertEquals(OutputType.IMAGES, actual.options.single().spec.outputType)
         assertEquals("instagram_images", actual.options.single().spec.presetName)
+        assertEquals("Post text", actual.options.single().spec.postText)
+        assertEquals("owner", actual.mediaInfo.authorUsername)
     }
 
     private fun resolved(outputType: OutputType): DownloadSpec {

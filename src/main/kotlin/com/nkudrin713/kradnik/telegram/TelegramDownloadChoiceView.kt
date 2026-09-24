@@ -25,8 +25,16 @@ class TelegramDownloadChoiceView(
                 mediaInfo.title?.takeIf { it.isNotBlank() }
                     ?: messages.text(language, TelegramMessage.CHOICE_TITLE_UNAVAILABLE)
             )
-            mediaInfo.durationSeconds?.let {
-                add(messages.text(language, TelegramMessage.CHOICE_DURATION, formatDuration(it)))
+            val authorUsername = mediaInfo.authorUsername
+                ?.trim()
+                ?.removePrefix("@")
+                ?.takeIf(String::isNotBlank)
+            if (authorUsername != null) {
+                add("@$authorUsername")
+            } else {
+                mediaInfo.durationSeconds?.let {
+                    add(messages.text(language, TelegramMessage.CHOICE_DURATION, formatDuration(it)))
+                }
             }
         }
         return "<pre>${videoInfo.joinToString("\n").escapeHtml()}</pre>"

@@ -6,11 +6,13 @@ import com.pengrad.telegrambot.model.request.InputMediaAudio
 import com.pengrad.telegrambot.model.request.InputMediaDocument
 import com.pengrad.telegrambot.model.request.InputMediaPhoto
 import com.pengrad.telegrambot.model.request.InputMediaVideo
+import com.pengrad.telegrambot.model.request.ParseMode
 import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.EditMessageMedia
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendDocument
 import com.pengrad.telegrambot.request.SendMediaGroup
+import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendPhoto
 import com.pengrad.telegrambot.request.SendVideo
 import kotlinx.coroutines.Dispatchers
@@ -218,6 +220,17 @@ class TelegramMediaSender(
         }
     }
 
+    suspend fun sendMonospaceText(
+        chatId: Long,
+        text: String,
+        replyToMessageId: Int? = null,
+    ) {
+        val request = SendMessage(chatId, "<pre>${text.escapeHtml()}</pre>")
+            .parseMode(ParseMode.HTML)
+        addReplyParameters(request, replyToMessageId)
+        apiClient.executeIo(request)
+    }
+
     private suspend fun sendPhoto(chatId: Long, file: Path, replyToMessageId: Int?): String {
         val request = if (properties.localApi) {
             SendPhoto(chatId, localFileUri(file))
@@ -308,6 +321,12 @@ class TelegramMediaSender(
 
     private fun formatMegabytes(bytes: Long): String {
         return String.format(Locale.US, "%.2f", bytes / BYTES_IN_MEGABYTE)
+    }
+
+    private fun String.escapeHtml(): String {
+        return replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
     }
 
     private fun addReplyParameters(

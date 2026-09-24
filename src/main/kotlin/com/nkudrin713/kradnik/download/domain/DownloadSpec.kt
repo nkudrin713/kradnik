@@ -11,6 +11,7 @@ data class DownloadSpec(
     val formatSelector: String,
     val extraArgs: List<String> = emptyList(),
     val presetName: String,
+    val postText: String? = null,
 ) {
     fun withAudioQuality(audioQuality: String): DownloadSpec {
         val args = extraArgs
@@ -31,6 +32,7 @@ data class DownloadSpec(
                 formatSelector = job.selectedFormat,
                 extraArgs = job.downloadExtraArgs,
                 presetName = job.downloadPreset,
+                postText = job.sourcePostText,
             )
         }
 

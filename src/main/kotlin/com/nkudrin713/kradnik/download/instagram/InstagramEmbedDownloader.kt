@@ -40,12 +40,18 @@ class InstagramEmbedDownloader(
             throw InstagramEmbedException("Instagram embed response does not contain video")
         }
         val mediaSize = mediaUri?.let { httpClient.contentLength(it) }
+        val username = context.findFirstText(USERNAME)
+        val postText = context.findFirstText(CAPTION)
+            ?: context.findFirstNestedText(CAPTION, TEXT)
+            ?: context.findFirstNestedText(EDGE_MEDIA_TO_CAPTION, TEXT)
 
         val preparedDownload = InstagramPreparedDownload(
             shortcode = shortcode,
             mediaUri = mediaUri,
             metadata = YtDlpMetadataDto(
-                title = "Instagram $shortcode",
+                title = context.findFirstText(TITLE)
+                    ?: username?.let { "Video by $it" }
+                    ?: "Instagram $shortcode",
                 thumbnail = context.findFirstText(DISPLAY_URL, THUMBNAIL_URL),
                 duration = context.findFirstDecimal(VIDEO_DURATION),
                 width = context.findFirstInt(ORIGINAL_WIDTH, WIDTH),
@@ -54,9 +60,10 @@ class InstagramEmbedDownloader(
                 filesizeApprox = null,
                 track = null,
                 artist = null,
-                uploader = context.findFirstText(USERNAME),
+                uploader = username,
                 channel = null,
                 requestedFormats = null,
+                description = postText,
             ),
         )
         logger.info(
@@ -219,6 +226,20 @@ class InstagramEmbedDownloader(
         return null
     }
 
+    private fun JsonNode.findFirstNestedText(parentField: String, childField: String): String? {
+        if (isObject) {
+            path(parentField).takeIf(JsonNode::isObject)
+                ?.findFirstText(childField)
+                ?.let { return it }
+        }
+
+        val children = elements()
+        while (children.hasNext()) {
+            children.next().findFirstNestedText(parentField, childField)?.let { return it }
+        }
+        return null
+    }
+
     private fun JsonNode.findFirstInt(vararg fieldNames: String): Int? {
         if (isObject) {
             for (fieldName in fieldNames) {
@@ -280,6 +301,10 @@ class InstagramEmbedDownloader(
         private const val DISPLAY_URL = "display_url"
         private const val THUMBNAIL_URL = "thumbnail_url"
         private const val USERNAME = "username"
+        private const val TITLE = "title"
+        private const val CAPTION = "caption"
+        private const val EDGE_MEDIA_TO_CAPTION = "edge_media_to_caption"
+        private const val TEXT = "text"
         private const val MAX_IMAGE_COUNT = 20
     }
 }

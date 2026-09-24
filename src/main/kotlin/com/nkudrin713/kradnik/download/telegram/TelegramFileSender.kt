@@ -29,7 +29,7 @@ class TelegramFileSender(
             return editInline(job, inlineMessageId, fileId)
         }
 
-        return when (job.outputType) {
+        val fileId = when (job.outputType) {
             OutputType.VIDEO -> telegramMediaSender.sendVideo(
                 chatId = job.telegramChatId,
                 file = file.file,
@@ -56,6 +56,8 @@ class TelegramFileSender(
                 )
             )
         }
+        sendPostText(job)
+        return fileId
     }
 
     suspend fun sendCached(
@@ -67,7 +69,7 @@ class TelegramFileSender(
             return editInline(job, inlineMessageId, fileId)
         }
 
-        return when (job.outputType) {
+        val sentId = when (job.outputType) {
             OutputType.VIDEO -> telegramMediaSender.sendCachedVideo(
                 chatId = job.telegramChatId,
                 fileId = fileId,
@@ -91,6 +93,8 @@ class TelegramFileSender(
                 )
             )
         }
+        sendPostText(job)
+        return sentId
     }
 
     private suspend fun uploadForInline(job: DownloadJob, file: DownloadedFile): String {
@@ -134,6 +138,15 @@ class TelegramFileSender(
     private fun decodePhotoIds(value: String): List<String> {
         require(value.startsWith(PHOTO_GROUP_PREFIX)) { "Cached photo group has invalid format" }
         return objectMapper.readValue(value.removePrefix(PHOTO_GROUP_PREFIX))
+    }
+
+    private suspend fun sendPostText(job: DownloadJob) {
+        val postText = job.sourcePostText?.takeIf(String::isNotBlank) ?: return
+        telegramMediaSender.sendMonospaceText(
+            chatId = job.telegramChatId,
+            text = postText,
+            replyToMessageId = job.telegramRequestMessageId,
+        )
     }
 
     private companion object {

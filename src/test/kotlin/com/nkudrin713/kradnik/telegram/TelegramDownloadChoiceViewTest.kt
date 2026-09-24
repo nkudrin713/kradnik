@@ -48,6 +48,20 @@ class TelegramDownloadChoiceViewTest {
     }
 
     @Test
+    fun showsInstagramTitleAndAuthorInMonospace() {
+        val actual = view.text(
+            DownloadChoiceMediaInfo(
+                title = "Video <title>",
+                durationSeconds = 120,
+                authorUsername = "@owner",
+            ),
+            BotLanguage.RU,
+        )
+
+        assertEquals("<pre>Video &lt;title&gt;\n@owner</pre>", actual)
+    }
+
+    @Test
     fun createsOneRowPerOptionWithFormattedSizes() {
         val token = UUID.randomUUID()
         val keyboard = view.keyboard(

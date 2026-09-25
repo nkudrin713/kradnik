@@ -25,7 +25,7 @@ class TelegramVideoPreparerTest {
         processRunner = processRunner,
         videoMetadataProbe = videoMetadataProbe,
         videoPolicy = TelegramVideoPolicy(
-            TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
+            TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES),
         ),
     )
 

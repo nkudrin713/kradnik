@@ -14,5 +14,5 @@ class KradnikApplication {
 }
 
 fun main(args: Array<String>) {
-	runApplication<KradnikApplication>(*args)
+    runApplication<KradnikApplication>(*args)
 }

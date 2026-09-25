@@ -45,8 +45,8 @@ class TelegramMediaSender(
         val metadata = videoMetadataProbe.probe(file)
         logger.info(
             "Telegram video upload metadata: fileName={}, container={}, width={}, height={}, sar={}, dar={}, " +
-                    "videoCodec={}, audioCodec={}, codecTag={}, profile={}, level={}, pixelFormat={}, " +
-                    "frameRate={}, colorSpace={}, colorTransfer={}, colorPrimaries={}",
+                "videoCodec={}, audioCodec={}, codecTag={}, profile={}, level={}, pixelFormat={}, " +
+                "frameRate={}, colorSpace={}, colorTransfer={}, colorPrimaries={}",
             file.fileName,
             metadata.containerFormat,
             metadata.width,
@@ -96,7 +96,7 @@ class TelegramMediaSender(
             EditMessageMedia(
                 inlineMessageId,
                 InputMediaVideo(fileId).supportsStreaming(true),
-            )
+            ),
         )
         return fileId
     }
@@ -389,7 +389,7 @@ class TelegramMediaSender(
         replyToMessageId ?: return
         request.replyParameters(
             ReplyParameters(replyToMessageId)
-                .allowSendingWithoutReply(true)
+                .allowSendingWithoutReply(true),
         )
     }
 
@@ -397,7 +397,7 @@ class TelegramMediaSender(
         replyToMessageId ?: return
         request.replyParameters(
             ReplyParameters(replyToMessageId)
-                .allowSendingWithoutReply(true)
+                .allowSendingWithoutReply(true),
         )
     }
 

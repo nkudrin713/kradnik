@@ -10,7 +10,6 @@ import kotlin.test.assertEquals
 
 class WorkDirCleanerTest {
 
-
     @Test
     fun deletesDirectoryRecursively(@TempDir tempDir: Path) {
         val workDir = tempDir.resolve("work")
@@ -30,6 +29,7 @@ class WorkDirCleanerTest {
 
         assertEquals(false, missingDir.exists())
     }
+
     @Test
     fun startupRemovesOnlyJobDirectories(@TempDir root: Path) {
         val cleaner = WorkDirCleaner(root.toString())

@@ -12,14 +12,14 @@ interface DownloadChoiceSessionRepository : JpaRepository<DownloadChoiceSession,
     @Modifying
     @Query(
         "DELETE FROM DownloadChoiceSession session " +
-            "WHERE session.selectedAt IS NOT NULL AND session.cleanupAfter <= :cutoff"
+            "WHERE session.selectedAt IS NOT NULL AND session.cleanupAfter <= :cutoff",
     )
     fun deleteConsumed(cutoff: Instant): Int
 
     @Modifying
     @Query(
         "DELETE FROM DownloadChoiceSession session " +
-            "WHERE session.selectedAt IS NULL AND session.createdAt <= :createdBefore"
+            "WHERE session.selectedAt IS NULL AND session.createdAt <= :createdBefore",
     )
     fun deleteExpiredUnselected(createdBefore: Instant): Int
 

@@ -15,7 +15,7 @@ import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
+import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -161,8 +161,7 @@ class PlaylistJobProcessor(
         }.onFailure { logger.warn("PLAYLIST_JOB[{}] status update failed", job.id, it) }
     }
 
-    private fun address(job: DownloadJob): TelegramMessageAddress =
-        TelegramMessageAddress.Chat(job.telegramChatId, requireNotNull(job.telegramStatusMessageId))
+    private fun address(job: DownloadJob): TelegramMessageAddress = TelegramMessageAddress.Chat(job.telegramChatId, requireNotNull(job.telegramStatusMessageId))
 
     private companion object {
         val PLAYLIST_AUDIO_ARGS = listOf(

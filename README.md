@@ -91,7 +91,7 @@ Run the complete verification:
 ./gradlew check bootJar
 ```
 
-- `check` runs tests and verifies aggregate JaCoCo coverage.
+- `check` runs ktlint, tests, and aggregate JaCoCo coverage verification.
 - PostgreSQL integration tests use Testcontainers and are skipped when Docker is unavailable.
 - A successful build with skipped Testcontainers tests is not database verification.
 

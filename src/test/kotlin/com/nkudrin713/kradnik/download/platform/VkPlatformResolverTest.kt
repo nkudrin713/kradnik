@@ -6,24 +6,24 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-class VkDownloadHandlerTest {
-    private val handler = PlatformResolver()
+class VkPlatformResolverTest {
+    private val resolver = PlatformResolver()
 
     @Test
     fun supportsExpectedHosts() {
-        assertEquals(DownloadPlatform.VK, handler.resolve("https://vk.com/video-1_2").video.platform)
-        assertEquals(DownloadPlatform.VK, handler.resolve("https://m.vk.ru/clip1_2").video.platform)
-        assertEquals(DownloadPlatform.VK, handler.resolve("https://vkvideo.ru/video-1_2").video.platform)
-        assertEquals(DownloadPlatform.VK, handler.resolve("https://vksport.vkvideo.ru/video-1_2").video.platform)
-        assertFailsWith<UnsupportedPlatformException> { handler.resolve("https://www.vk.com/video-1_2") }
-        assertFailsWith<UnsupportedPlatformException> { handler.resolve("https://evilvk.com/video-1_2") }
-        assertFailsWith<UnsupportedPlatformException> { handler.resolve("https://vk.com.example.org/video-1_2") }
+        assertEquals(DownloadPlatform.VK, resolver.resolve("https://vk.com/video-1_2").video.platform)
+        assertEquals(DownloadPlatform.VK, resolver.resolve("https://m.vk.ru/clip1_2").video.platform)
+        assertEquals(DownloadPlatform.VK, resolver.resolve("https://vkvideo.ru/video-1_2").video.platform)
+        assertEquals(DownloadPlatform.VK, resolver.resolve("https://vksport.vkvideo.ru/video-1_2").video.platform)
+        assertFailsWith<UnsupportedPlatformException> { resolver.resolve("https://www.vk.com/video-1_2") }
+        assertFailsWith<UnsupportedPlatformException> { resolver.resolve("https://evilvk.com/video-1_2") }
+        assertFailsWith<UnsupportedPlatformException> { resolver.resolve("https://vk.com.example.org/video-1_2") }
     }
 
     @Test
     fun buildsVideoRequest() {
-        val actual = handler.resolve(
-            "https://new.vk.com/video-123_456?utm_source=test"
+        val actual = resolver.resolve(
+            "https://new.vk.com/video-123_456?utm_source=test",
         ).video
 
         assertEquals("https://new.vk.com/video-123_456?utm_source=test", actual.originalUrl)
@@ -42,7 +42,7 @@ class VkDownloadHandlerTest {
 
     @Test
     fun buildsAudioRequestForClip() {
-        val actual = handler.resolve("https://vk.ru/clip30014565_456240946").audio
+        val actual = resolver.resolve("https://vk.ru/clip30014565_456240946").audio
 
         assertEquals("https://vk.com/clip30014565_456240946", actual.normalizedUrl)
         assertEquals(OutputType.AUDIO, actual.outputType)
@@ -54,8 +54,8 @@ class VkDownloadHandlerTest {
 
     @Test
     fun resolvesEncodedQueryTarget() {
-        val actual = handler.resolve(
-            "https://vk.com/clips-74006511?z=clip-74006511_456247211%2Fpl_-74006511_-2"
+        val actual = resolver.resolve(
+            "https://vk.com/clips-74006511?z=clip-74006511_456247211%2Fpl_-74006511_-2",
         ).video
 
         assertEquals("https://vk.com/clip-74006511_456247211", actual.normalizedUrl)
@@ -67,8 +67,8 @@ class VkDownloadHandlerTest {
 
     @Test
     fun resolvesVideoQueryTarget() {
-        val actual = handler.resolve(
-            "https://vk.com/feed?z=video-43215063_166094326%2Fbb50cacd3177146d7a"
+        val actual = resolver.resolve(
+            "https://vk.com/feed?z=video-43215063_166094326%2Fbb50cacd3177146d7a",
         ).video
 
         assertEquals("https://vk.com/video-43215063_166094326", actual.normalizedUrl)
@@ -89,7 +89,7 @@ class VkDownloadHandlerTest {
 
         urls.forEach { url ->
             assertFailsWith<UnsupportedUrlException>(url) {
-                handler.resolve(url)
+                resolver.resolve(url)
             }
         }
     }

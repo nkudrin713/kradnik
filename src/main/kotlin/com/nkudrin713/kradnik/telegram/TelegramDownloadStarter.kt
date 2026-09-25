@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.video.TelegramVideoPolicy
@@ -36,6 +36,7 @@ class TelegramDownloadStarter(
                 TelegramDownloadStatus.QUEUED,
                 language,
             )
+
             is TelegramMessageAddress.Inline -> {
                 telegramSender.editStatus(messageAddress, TelegramDownloadStatus.QUEUED, language)
                 null

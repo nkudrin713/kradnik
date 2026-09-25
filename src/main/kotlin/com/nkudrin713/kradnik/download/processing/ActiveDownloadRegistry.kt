@@ -29,5 +29,4 @@ class ActiveDownloadRegistry {
     } ?: false
 }
 
-class UserDownloadCancellationException(jobId: Long) :
-    java.util.concurrent.CancellationException("Download job $jobId was cancelled by the user")
+class UserDownloadCancellationException(jobId: Long) : java.util.concurrent.CancellationException("Download job $jobId was cancelled by the user")

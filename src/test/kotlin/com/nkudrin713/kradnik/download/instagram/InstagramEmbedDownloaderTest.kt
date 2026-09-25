@@ -1,12 +1,12 @@
 package com.nkudrin713.kradnik.download.instagram
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpThumbnailDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpThumbnailDto
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -121,7 +121,7 @@ class InstagramEmbedDownloaderTest {
             entries = listOf(
                 imageMetadata("https://scontent-a.cdninstagram.com/first.jpg"),
                 imageMetadata("https://scontent-b.cdninstagram.com/second.jpg"),
-            )
+            ),
         )
 
         val prepared = assertNotNull(downloader.prepareImages(request("https://www.instagram.com/p/ABC_123/"), metadata))
@@ -143,7 +143,7 @@ class InstagramEmbedDownloaderTest {
             entries = listOf(
                 imageMetadata("https://scontent-a.cdninstagram.com/first.jpg"),
                 imageMetadata(),
-            )
+            ),
         )
 
         assertNull(downloader.prepareImages(request("https://www.instagram.com/p/ABC_123/"), metadata))

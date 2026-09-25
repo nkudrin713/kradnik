@@ -29,10 +29,10 @@ class TelegramDonationSenderTest {
         val request = requests.single() as SendMessage
         request.getParameters().containsKey("reply_markup") shouldBe true
         request.getParameters()["text"] shouldBe "Kradnik remains free.\n\n" +
-                "This is a tip jar for anyone who wants to add some fuel to the project.\n" +
-                "Donations pay for hosting, new features, and the developer’s peace of mind.\n" +
-                "I promise not to spend them on beer or cigarettes.\n\n" +
-                "Thank you for helping the bot stay alive."
+            "This is a tip jar for anyone who wants to add some fuel to the project.\n" +
+            "Donations pay for hosting, new features, and the developer’s peace of mind.\n" +
+            "I promise not to spend them on beer or cigarettes.\n\n" +
+            "Thank you for helping the bot stay alive."
     }
 
     @Test

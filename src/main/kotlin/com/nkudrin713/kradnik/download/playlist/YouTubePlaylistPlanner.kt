@@ -15,7 +15,7 @@ import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
+import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -103,8 +103,7 @@ class YouTubePlaylistPlanner(
         )
     }
 
-    private fun estimatedSize(durationSeconds: Long): Long =
-        durationSeconds * AUDIO_BITRATE_KBPS * 1000 / 8
+    private fun estimatedSize(durationSeconds: Long): Long = durationSeconds * AUDIO_BITRATE_KBPS * 1000 / 8
 
     private data class PlaylistRange(
         val key: String,

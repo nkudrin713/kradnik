@@ -4,8 +4,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
-import org.springframework.beans.factory.annotation.Value
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.net.URI
 import java.net.http.HttpClient
@@ -44,7 +44,7 @@ interface InstagramHttpClient {
 @Component
 class JdkInstagramHttpClient(
     private val uploadLimits: TelegramUploadLimits = TelegramUploadLimits(
-        TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES
+        TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
     ),
     @Value("\${download.instagram.metadata-timeout:30s}")
     private val metadataTimeout: Duration = Duration.ofSeconds(30),
@@ -157,7 +157,7 @@ class JdkInstagramHttpClient(
         if (!contentType.startsWith(expectedContentType)) {
             response.body().close()
             throw InstagramEmbedException(
-                "Instagram media response has unexpected content type: expected=$expectedContentType, actual=$contentType"
+                "Instagram media response has unexpected content type: expected=$expectedContentType, actual=$contentType",
             )
         }
 
@@ -222,5 +222,4 @@ class InstagramHttpException(
     val statusCode: Int,
 ) : InstagramEmbedException("Instagram ${stage.name.lowercase()} request failed: status=$statusCode")
 
-class InstagramMediaTooLargeException :
-    InstagramEmbedException("Instagram media exceeds Telegram upload limit")
+class InstagramMediaTooLargeException : InstagramEmbedException("Instagram media exceeds Telegram upload limit")

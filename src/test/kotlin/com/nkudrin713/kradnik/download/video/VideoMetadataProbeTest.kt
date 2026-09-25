@@ -56,7 +56,7 @@ class VideoMetadataProbeTest {
         coEvery { processRunner.run(any()) } returns result(
             metadataOutput()
                 .replace("                  \"sample_aspect_ratio\": \"1:1\",\n", "")
-                .replace("                  \"display_aspect_ratio\": \"9:16\",\n", "")
+                .replace("                  \"display_aspect_ratio\": \"9:16\",\n", ""),
         )
 
         val actual = probe.probe(Path.of("video.mp4"))
@@ -118,7 +118,7 @@ class VideoMetadataProbeTest {
                   "streams": [$AUDIO_STREAM],
                   "format": {"format_name": "mov,mp4"}
                 }
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertFailsWith<VideoMetadataProbeException> {
@@ -154,7 +154,7 @@ class VideoMetadataProbeTest {
     @Test
     fun throwsOnInvalidHeight() = runTest {
         coEvery { processRunner.run(any()) } returns result(
-            metadataOutput().replace("\"height\": 1920", "\"height\": \"invalid\"")
+            metadataOutput().replace("\"height\": 1920", "\"height\": \"invalid\""),
         )
 
         assertFailsWith<VideoMetadataProbeException> {
@@ -168,7 +168,7 @@ class VideoMetadataProbeTest {
             metadataOutput()
                 .replace("\"width\": 1080", "\"width\": 1920")
                 .replace("\"height\": 1920", "\"height\": 1080")
-                .replace("\"display_aspect_ratio\": \"9:16\"", "\"display_aspect_ratio\": \"16:9\"")
+                .replace("\"display_aspect_ratio\": \"9:16\"", "\"display_aspect_ratio\": \"16:9\""),
         )
 
         val actual = probe.probe(Path.of("video.mp4"))

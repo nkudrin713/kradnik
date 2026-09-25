@@ -1,14 +1,14 @@
 package com.nkudrin713.kradnik.telegram.config
 
+import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.BotCommand
 import com.pengrad.telegrambot.model.botcommandscope.BotCommandScope
 import com.pengrad.telegrambot.model.botcommandscope.BotCommandScopeAllPrivateChats
 import com.pengrad.telegrambot.request.DeleteMyCommands
 import com.pengrad.telegrambot.request.SetMyCommands
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import org.slf4j.LoggerFactory
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner

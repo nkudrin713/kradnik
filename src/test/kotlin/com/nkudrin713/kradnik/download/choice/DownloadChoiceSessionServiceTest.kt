@@ -3,8 +3,8 @@ package com.nkudrin713.kradnik.download.choice
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -90,7 +90,7 @@ class DownloadChoiceSessionServiceTest {
                 telegramChatId = null,
                 telegramMenuMessageId = null,
                 telegramInlineMessageId = "inline-message",
-            )
+            ),
         )
 
         assertIs<DownloadChoiceSelection.Ready>(actual)

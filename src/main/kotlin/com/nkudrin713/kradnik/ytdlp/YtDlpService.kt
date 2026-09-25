@@ -1,16 +1,16 @@
-package com.nkudrin713.kradnik.ytdlp.client
+package com.nkudrin713.kradnik.ytdlp
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.springframework.beans.factory.annotation.Value
@@ -56,7 +56,7 @@ private data class YtDlpCommand(
 class YtDlpService(
     private val processRunner: ProcessRunner,
     private val uploadLimits: TelegramUploadLimits = TelegramUploadLimits(
-        TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES
+        TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
     ),
     @Value("\${download.youtube.po-token-provider-url:}")
     private val youtubePoTokenProviderUrl: String = "",
@@ -114,7 +114,7 @@ class YtDlpService(
                 ),
                 workingDir = null,
                 timeout = metadataTimeout.toKotlinDuration(),
-            )
+            ),
         )
         return parseMetadataResult(result)
     }
@@ -138,7 +138,7 @@ class YtDlpService(
                 },
                 workingDir = null,
                 timeout = metadataTimeout.toKotlinDuration(),
-            )
+            ),
         )
 
         return parseMetadataResult(result)
@@ -188,7 +188,7 @@ class YtDlpService(
                 workingDir = outputDir,
                 timeout = downloadTimeout.toKotlinDuration(),
                 maxWorkingDirectoryBytes = maxWorkspaceBytes(),
-            )
+            ),
         )
 
         if (result.workingDirectoryLimitExceeded) {
@@ -256,12 +256,12 @@ class YtDlpService(
             val diagnosticOutput = result.diagnosticOutput
             if (diagnosticOutput.isAuthenticationRequiredError()) {
                 throw YtDlpAuthenticationRequiredException(
-                    "yt-dlp authentication required: ${diagnosticOutput.takeLast(500)}"
+                    "yt-dlp authentication required: ${diagnosticOutput.takeLast(500)}",
                 )
             }
 
             throw YtDlpException(
-                "yt-dlp command failed: ${diagnosticOutput.takeLast(500)}"
+                "yt-dlp command failed: ${diagnosticOutput.takeLast(500)}",
             )
         }
     }
@@ -269,8 +269,8 @@ class YtDlpService(
     private fun String.isAuthenticationRequiredError(): Boolean {
         val normalized = lowercase()
         return normalized.contains("login required") ||
-                normalized.contains("--cookies") ||
-                normalized.contains("--cookies-from-browser")
+            normalized.contains("--cookies") ||
+            normalized.contains("--cookies-from-browser")
     }
 
     private companion object {
@@ -282,5 +282,4 @@ open class YtDlpException(message: String) : RuntimeException(message)
 
 class YtDlpAuthenticationRequiredException(message: String) : YtDlpException(message)
 
-class YtDlpFileSizeLimitException :
-    YtDlpException("yt-dlp working directory exceeded safe size limit")
+class YtDlpFileSizeLimitException : YtDlpException("yt-dlp working directory exceeded safe size limit")

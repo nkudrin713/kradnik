@@ -105,5 +105,4 @@ class CoverDownloader(
 
 open class CoverDownloadException(message: String) : RuntimeException(message)
 
-class CoverTooLargeException :
-    CoverDownloadException("Cover exceeds the upload limit")
+class CoverTooLargeException : CoverDownloadException("Cover exceeds the upload limit")

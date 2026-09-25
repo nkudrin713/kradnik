@@ -16,42 +16,41 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.transaction.PlatformTransactionManager
 
 @SpringBootTest(
-	properties = [
-		"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
-		"telegram.bot.token=test-token",
-		"download.worker.enabled=false",
-	]
+    properties = [
+        "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
+        "telegram.bot.token=test-token",
+        "download.worker.enabled=false",
+    ],
 )
 class KradnikApplicationTests {
-	@field:MockitoBean
-	private lateinit var telegramPollingService: TelegramPollingService
+    @field:MockitoBean
+    private lateinit var telegramPollingService: TelegramPollingService
 
-	@field:MockitoBean
-	private lateinit var telegramCommandsInitializer: TelegramCommandsInitializer
+    @field:MockitoBean
+    private lateinit var telegramCommandsInitializer: TelegramCommandsInitializer
 
-	@Test
-	fun contextLoads() {
-	}
+    @Test
+    fun contextLoads() {
+    }
 
-	@TestConfiguration
-	class Mocks {
-		@Bean
-		fun downloadJobRepository(): DownloadJobRepository = mockk(relaxed = true)
+    @TestConfiguration
+    class Mocks {
+        @Bean
+        fun downloadJobRepository(): DownloadJobRepository = mockk(relaxed = true)
 
-		@Bean
-		fun downloadChoiceSessionRepository(): DownloadChoiceSessionRepository = mockk(relaxed = true)
+        @Bean
+        fun downloadChoiceSessionRepository(): DownloadChoiceSessionRepository = mockk(relaxed = true)
 
-		@Bean
-		fun telegramUserPreferenceRepository(): TelegramUserPreferenceRepository = mockk(relaxed = true)
+        @Bean
+        fun telegramUserPreferenceRepository(): TelegramUserPreferenceRepository = mockk(relaxed = true)
 
-		@Bean
-		fun processRunner(): ProcessRunner = mockk(relaxed = true)
+        @Bean
+        fun processRunner(): ProcessRunner = mockk(relaxed = true)
 
-		@Bean
-		fun jdbcTemplate(): JdbcTemplate = mockk(relaxed = true)
+        @Bean
+        fun jdbcTemplate(): JdbcTemplate = mockk(relaxed = true)
 
-		@Bean
-		fun platformTransactionManager(): PlatformTransactionManager = mockk(relaxed = true)
-	}
-
+        @Bean
+        fun platformTransactionManager(): PlatformTransactionManager = mockk(relaxed = true)
+    }
 }

@@ -4,17 +4,17 @@ import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.PreparedDownload
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.platform.PlatformResolver
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
+import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
-import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpFormatDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -50,16 +50,18 @@ class DownloadChoicePlannerTest {
         val video = resolved(OutputType.VIDEO)
         val audio = resolved(OutputType.AUDIO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
-            formats = listOf(
-                videoFormat("v1440", 1440, 600_000_000),
-                videoFormat("v1080", 1080, 400_000_000),
-                videoFormat("v720", 720, 250_000_000),
-                videoFormat("v480", 480, 150_000_000),
-                videoFormat("v360", 360, 100_000_000),
-                audioFormat("a1", 20_000_000),
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(
+            metadata(
+                formats = listOf(
+                    videoFormat("v1440", 1440, 600_000_000),
+                    videoFormat("v1080", 1080, 400_000_000),
+                    videoFormat("v720", 720, 250_000_000),
+                    videoFormat("v480", 480, 150_000_000),
+                    videoFormat("v360", 360, 100_000_000),
+                    audioFormat("a1", 20_000_000),
+                ),
             ),
-        ))
+        )
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
@@ -85,13 +87,15 @@ class DownloadChoicePlannerTest {
     fun omitsUnavailableResolutionAndMarksOversizedOriginalUnavailable() = runTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
-            formats = listOf(
-                videoFormat("v1440", 1440, 1_990_000_000),
-                videoFormat("v720", 720, 200_000_000),
-                audioFormat("a1", 20_000_000),
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(
+            metadata(
+                formats = listOf(
+                    videoFormat("v1440", 1440, 1_990_000_000),
+                    videoFormat("v720", 720, 200_000_000),
+                    audioFormat("a1", 20_000_000),
+                ),
             ),
-        ))
+        )
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
@@ -105,13 +109,15 @@ class DownloadChoicePlannerTest {
     fun omitsNamedQualityWhenItDuplicatesOriginal() = runTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
-            formats = listOf(
-                videoFormat("v720", 720, 250_000_000),
-                videoFormat("v480", 480, 150_000_000),
-                audioFormat("a1", 20_000_000),
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(
+            metadata(
+                formats = listOf(
+                    videoFormat("v720", 720, 250_000_000),
+                    videoFormat("v480", 480, 150_000_000),
+                    audioFormat("a1", 20_000_000),
+                ),
             ),
-        ))
+        )
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
@@ -127,12 +133,14 @@ class DownloadChoicePlannerTest {
     fun usesApproximateBitrateSizeWhenFormatSizeIsMissing() = runTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
-            formats = listOf(
-                videoFormat("v720", 720, size = null, bitrate = 1_000),
-                audioFormat("a1", size = null, bitrate = 100),
+        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(
+            metadata(
+                formats = listOf(
+                    videoFormat("v720", 720, size = null, bitrate = 1_000),
+                    audioFormat("a1", size = null, bitrate = 100),
+                ),
             ),
-        ))
+        )
 
         val option = planner.plan(URL, BotLanguage.RU).options.first { it.key == "video_original" }
 

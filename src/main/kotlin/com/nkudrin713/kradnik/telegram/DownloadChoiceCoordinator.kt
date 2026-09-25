@@ -5,8 +5,8 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner
 import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanningException
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
-import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -34,7 +34,11 @@ class DownloadChoiceCoordinator(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val executor = ThreadPoolExecutor(
-        2, 2, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(32),
+        2,
+        2,
+        0,
+        TimeUnit.MILLISECONDS,
+        ArrayBlockingQueue(32),
         { task -> Thread(task, "download-choice-worker") },
         ThreadPoolExecutor.AbortPolicy(),
     )
@@ -106,7 +110,7 @@ class DownloadChoiceCoordinator(
                     telegramInlineMessageId = (messageAddress as? TelegramMessageAddress.Inline)?.inlineMessageId,
                     language = command.language,
                     plan = plan,
-                )
+                ),
             )
             telegramSender.editDownloadChoice(
                 address = messageAddress,
@@ -134,12 +138,15 @@ class DownloadChoiceCoordinator(
     private fun Exception.userMessage(language: BotLanguage): String {
         return when (this) {
             is DownloadChoicePlanningException -> userMessage
+
             is UnsupportedPlatformException -> messages.text(
                 language,
                 TelegramMessage.ERROR_UNSUPPORTED_PLATFORM,
                 DownloadPlatform.entries.joinToString(", ") { it.displayName },
             )
+
             is UnsupportedUrlException -> messages.text(language, TelegramMessage.ERROR_UNSUPPORTED_URL)
+
             else -> messages.text(language, TelegramMessage.ERROR_CHOICE_PREPARATION)
         }
     }

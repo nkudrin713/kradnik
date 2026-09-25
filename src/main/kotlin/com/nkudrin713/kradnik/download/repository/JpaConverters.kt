@@ -3,8 +3,8 @@ package com.nkudrin713.kradnik.download.repository
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
@@ -13,68 +13,55 @@ import jakarta.persistence.Converter
 
 @Converter
 class DownloadOutputTypeConverter : AttributeConverter<OutputType, String> {
-	override fun convertToDatabaseColumn(attribute: OutputType?): String? =
-		attribute?.dbValue
+    override fun convertToDatabaseColumn(attribute: OutputType?): String? = attribute?.dbValue
 
-	override fun convertToEntityAttribute(dbData: String?): OutputType? =
-		dbData?.let(OutputType::fromDb)
+    override fun convertToEntityAttribute(dbData: String?): OutputType? = dbData?.let(OutputType::fromDb)
 }
 
 @Converter
 class DownloadJobStatusConverter : AttributeConverter<DownloadJobStatus, String> {
-	override fun convertToDatabaseColumn(attribute: DownloadJobStatus?): String? =
-		attribute?.dbValue
+    override fun convertToDatabaseColumn(attribute: DownloadJobStatus?): String? = attribute?.dbValue
 
-	override fun convertToEntityAttribute(dbData: String?): DownloadJobStatus? =
-		dbData?.let(DownloadJobStatus::fromDb)
+    override fun convertToEntityAttribute(dbData: String?): DownloadJobStatus? = dbData?.let(DownloadJobStatus::fromDb)
 }
 
 @Converter
 class DownloadWorkloadTypeConverter : AttributeConverter<DownloadWorkloadType, String> {
     override fun convertToDatabaseColumn(attribute: DownloadWorkloadType?): String? = attribute?.dbValue
 
-    override fun convertToEntityAttribute(dbData: String?): DownloadWorkloadType? =
-        dbData?.let(DownloadWorkloadType::fromDb)
+    override fun convertToEntityAttribute(dbData: String?): DownloadWorkloadType? = dbData?.let(DownloadWorkloadType::fromDb)
 }
 
 @Converter
 class DownloadPlatformConverter : AttributeConverter<DownloadPlatform, String> {
-	override fun convertToDatabaseColumn(attribute: DownloadPlatform?): String? =
-		attribute?.dbValue
+    override fun convertToDatabaseColumn(attribute: DownloadPlatform?): String? = attribute?.dbValue
 
-	override fun convertToEntityAttribute(dbData: String?): DownloadPlatform? =
-		dbData?.let(DownloadPlatform::fromDb)
+    override fun convertToEntityAttribute(dbData: String?): DownloadPlatform? = dbData?.let(DownloadPlatform::fromDb)
 }
 
 @Converter
 class StringListJsonConverter : AttributeConverter<List<String>, String> {
-	private val objectMapper = jacksonObjectMapper()
+    private val objectMapper = jacksonObjectMapper()
 
-	override fun convertToDatabaseColumn(attribute: List<String>?): String =
-		objectMapper.writeValueAsString(attribute ?: emptyList<String>())
+    override fun convertToDatabaseColumn(attribute: List<String>?): String = objectMapper.writeValueAsString(attribute ?: emptyList<String>())
 
-	override fun convertToEntityAttribute(dbData: String?): List<String> =
-		dbData?.takeIf { it.isNotBlank() }?.let { objectMapper.readValue(it) } ?: emptyList()
+    override fun convertToEntityAttribute(dbData: String?): List<String> = dbData?.takeIf { it.isNotBlank() }?.let { objectMapper.readValue(it) } ?: emptyList()
 }
 
 @Converter
 class PlaylistAudioEntriesJsonConverter : AttributeConverter<List<PlaylistAudioEntry>, String> {
     private val objectMapper = jacksonObjectMapper()
 
-    override fun convertToDatabaseColumn(attribute: List<PlaylistAudioEntry>?): String =
-        objectMapper.writeValueAsString(attribute.orEmpty())
+    override fun convertToDatabaseColumn(attribute: List<PlaylistAudioEntry>?): String = objectMapper.writeValueAsString(attribute.orEmpty())
 
-    override fun convertToEntityAttribute(dbData: String?): List<PlaylistAudioEntry> =
-        dbData?.takeIf { it.isNotBlank() }?.let { objectMapper.readValue(it) } ?: emptyList()
+    override fun convertToEntityAttribute(dbData: String?): List<PlaylistAudioEntry> = dbData?.takeIf { it.isNotBlank() }?.let { objectMapper.readValue(it) } ?: emptyList()
 }
 
 @Converter
 class PlaylistAudioResultsJsonConverter : AttributeConverter<List<PlaylistAudioResult>, String> {
     private val objectMapper = jacksonObjectMapper()
 
-    override fun convertToDatabaseColumn(attribute: List<PlaylistAudioResult>?): String =
-        objectMapper.writeValueAsString(attribute.orEmpty())
+    override fun convertToDatabaseColumn(attribute: List<PlaylistAudioResult>?): String = objectMapper.writeValueAsString(attribute.orEmpty())
 
-    override fun convertToEntityAttribute(dbData: String?): List<PlaylistAudioResult> =
-        dbData?.takeIf { it.isNotBlank() }?.let { objectMapper.readValue(it) } ?: emptyList()
+    override fun convertToEntityAttribute(dbData: String?): List<PlaylistAudioResult> = dbData?.takeIf { it.isNotBlank() }?.let { objectMapper.readValue(it) } ?: emptyList()
 }

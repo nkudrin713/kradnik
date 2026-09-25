@@ -55,9 +55,9 @@ class PlatformResolver {
                 platform = DownloadPlatform.YOUTUBE,
                 presetName = "youtube_h264_mobile_2gb",
                 formatSelector =
-                    "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
-                            "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
-                            "b[height<=1280]/best",
+                "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
+                    "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
+                    "b[height<=1280]/best",
                 extraArgs = listOf("--merge-output-format", "mp4"),
             ),
             audio = DownloadSpec(
@@ -70,10 +70,12 @@ class PlatformResolver {
                 formatSelector = "ba/bestaudio",
                 extraArgs = listOf(
                     "-x",
-                    "--audio-format", "mp3",
+                    "--audio-format",
+                    "mp3",
                     "--embed-metadata",
                     "--embed-thumbnail",
-                    "--convert-thumbnails", "jpg"
+                    "--convert-thumbnails",
+                    "jpg",
                 ),
             ),
         )
@@ -120,9 +122,9 @@ class PlatformResolver {
                 platform = DownloadPlatform.INSTAGRAM,
                 presetName = "instagram_mobile_video",
                 formatSelector =
-                    "bv*[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
-                            "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
-                            "b[height<=1280]/best",
+                "bv*[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
+                    "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
+                    "b[height<=1280]/best",
                 extraArgs = listOf("--merge-output-format", "mp4"),
             ),
             audio = DownloadSpec(
@@ -160,9 +162,9 @@ class PlatformResolver {
                 platform = DownloadPlatform.VK,
                 presetName = VK_VIDEO_PRESET,
                 formatSelector =
-                    "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/" +
-                            "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
-                            "b[height<=1280]/best",
+                "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/" +
+                    "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
+                    "b[height<=1280]/best",
                 extraArgs = listOf("--merge-output-format", "mp4"),
             ),
             audio = DownloadSpec(
@@ -220,7 +222,6 @@ class PlatformResolver {
         )
         val VK_MEDIA_PATTERN = Regex("(video|clip)(-?\\d+_\\d+)")
         val VK_QUERY_MEDIA_PATTERN = Regex("(video|clip)(-?\\d+_\\d+)(?:[/?].*)?")
-
     }
 }
 

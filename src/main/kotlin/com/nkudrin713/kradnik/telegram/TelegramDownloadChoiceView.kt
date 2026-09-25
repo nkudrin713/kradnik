@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
@@ -49,7 +49,7 @@ class TelegramDownloadChoiceView(
         val videoInfo = buildList {
             add(
                 mediaInfo.title?.takeIf { it.isNotBlank() }
-                    ?: messages.text(language, TelegramMessage.CHOICE_TITLE_UNAVAILABLE)
+                    ?: messages.text(language, TelegramMessage.CHOICE_TITLE_UNAVAILABLE),
             )
             val authorUsername = mediaInfo.authorUsername
                 ?.trim()
@@ -74,7 +74,7 @@ class TelegramDownloadChoiceView(
         val rows = options.map { option ->
             arrayOf(
                 InlineKeyboardButton(buttonText(option, language))
-                    .callbackData(DownloadChoiceCallback.encode(sessionToken, option.key))
+                    .callbackData(DownloadChoiceCallback.encode(sessionToken, option.key)),
             )
         } + listOf(
             arrayOf(
@@ -100,7 +100,13 @@ class TelegramDownloadChoiceView(
     private fun formatSize(bytes: Long, language: BotLanguage): String {
         val gigabytes = bytes >= BYTES_IN_GIGABYTE
         val value = if (gigabytes) bytes / BYTES_IN_GIGABYTE else bytes / BYTES_IN_MEGABYTE
-        val pattern = if (value >= 100) "%.0f" else if (value >= 10) "%.1f" else "%.2f"
+        val pattern = if (value >= 100) {
+            "%.0f"
+        } else if (value >= 10) {
+            "%.1f"
+        } else {
+            "%.2f"
+        }
         val unit = messages.text(
             language,
             if (gigabytes) TelegramMessage.CHOICE_SIZE_GB else TelegramMessage.CHOICE_SIZE_MB,

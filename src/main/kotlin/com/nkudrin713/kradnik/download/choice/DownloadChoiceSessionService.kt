@@ -66,8 +66,8 @@ class DownloadChoiceSessionService(
             session.telegramInlineMessageId == command.telegramInlineMessageId
         } else {
             session.telegramInlineMessageId == null &&
-                    session.telegramChatId == command.telegramChatId &&
-                    session.telegramMenuMessageId == command.telegramMenuMessageId
+                session.telegramChatId == command.telegramChatId &&
+                session.telegramMenuMessageId == command.telegramMenuMessageId
         }
         if (!sameMessage) {
             return DownloadChoiceSelection.Invalid

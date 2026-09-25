@@ -128,14 +128,46 @@ class TelegramMediaSender(
     suspend fun sendCachedAudio(
         chatId: Long,
         fileId: String,
+        title: String? = null,
+        performer: String? = null,
+        durationSeconds: Int? = null,
         replyToMessageId: Int? = null,
     ): String {
         val request = SendAudio(chatId, fileId)
+        title?.let(request::title)
+        performer?.let(request::performer)
+        durationSeconds?.let(request::duration)
         addReplyParameters(request, replyToMessageId)
         val response = apiClient.executeIo(request)
         val audio = response.message()?.audio()
             ?: throw TelegramSendException("Telegram response does not contain audio")
         return audio.fileId ?: throw TelegramSendException("Telegram audio file_id is empty")
+    }
+
+    suspend fun sendCachedAudios(
+        chatId: Long,
+        audios: List<TelegramAudio>,
+        replyToMessageId: Int? = null,
+    ): List<String> {
+        require(audios.isNotEmpty()) { "At least one audio file is required" }
+        return audios.chunked(MAX_MEDIA_GROUP_SIZE).flatMapIndexed { index, chunk ->
+            val replyId = replyToMessageId.takeIf { index == 0 }
+            if (chunk.size == 1) {
+                val audio = chunk.single()
+                listOf(
+                    sendCachedAudio(
+                        chatId = chatId,
+                        fileId = audio.fileId,
+                        title = audio.title,
+                        performer = audio.performer,
+                        durationSeconds = audio.durationSeconds,
+                        replyToMessageId = replyId,
+                    ),
+                )
+            } else {
+                sendCachedAudioGroup(chatId, chunk, replyId)
+            }
+        }
     }
 
     suspend fun editInlineAudio(
@@ -285,6 +317,27 @@ class TelegramMediaSender(
         } ?: throw TelegramSendException("Telegram response does not contain cached media group")
     }
 
+    private suspend fun sendCachedAudioGroup(
+        chatId: Long,
+        audios: List<TelegramAudio>,
+        replyToMessageId: Int?,
+    ): List<String> {
+        val media = audios.map { audio ->
+            InputMediaAudio(audio.fileId).also {
+                it.title(audio.title)
+                audio.performer?.let(it::performer)
+                audio.durationSeconds?.let(it::duration)
+            }
+        }
+        val request = SendMediaGroup(chatId, *media.toTypedArray())
+        addReplyParameters(request, replyToMessageId)
+        val response = apiClient.executeIo(request)
+        return response.messages()?.map { message ->
+            message.audio()?.fileId
+                ?: throw TelegramSendException("Telegram media group response does not contain audio")
+        } ?: throw TelegramSendException("Telegram response does not contain media group")
+    }
+
     private suspend fun fileSize(file: Path): Long {
         return withContext(Dispatchers.IO) {
             Files.size(file)
@@ -353,3 +406,10 @@ class TelegramMediaSender(
         private const val MAX_MEDIA_GROUP_SIZE = 10
     }
 }
+
+data class TelegramAudio(
+    val fileId: String,
+    val title: String,
+    val performer: String? = null,
+    val durationSeconds: Int? = null,
+)

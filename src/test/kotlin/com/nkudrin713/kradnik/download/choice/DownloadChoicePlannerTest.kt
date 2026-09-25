@@ -9,6 +9,7 @@ import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
+import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
 import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
@@ -30,13 +31,19 @@ class DownloadChoicePlannerTest {
     private val platformResolver: PlatformResolver = mockk()
     private val downloadEngine: DownloadEngine = mockk()
     private val uploadLimits = TelegramUploadLimits(2_000_000_000, localMode = true)
+    private val youtubePlaylistPlanner = mockk<YouTubePlaylistPlanner>()
     private val planner = DownloadChoicePlanner(
         platformResolver = platformResolver,
         downloadEngine = downloadEngine,
         audioUploadPlanner = AudioUploadPlanner(uploadLimits),
         uploadLimits = uploadLimits,
         messages = telegramMessages(),
+        youtubePlaylistPlanner = youtubePlaylistPlanner,
     )
+
+    init {
+        coEvery { youtubePlaylistPlanner.planOrNull(any(), any()) } returns null
+    }
 
     @Test
     fun buildsOriginalNamedQualitiesAudioAndCoverFromSingleCatalog() = runTest {

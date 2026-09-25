@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
@@ -24,6 +25,10 @@ class TelegramDownloadStarterTest {
         telegramSender = telegramSender,
     )
 
+    init {
+        every { telegramSender.editJobStatus(any(), any(), any(), any()) } just runs
+    }
+
     @Test
     fun createsJobWithRequestMessage() {
         val command = slot<CreateDownloadJobCommand>()
@@ -32,7 +37,7 @@ class TelegramDownloadStarterTest {
         } returns 500
         every {
             downloadJobService.createJob(capture(command))
-        } returns true
+        } answers { createdJob(command.captured) }
 
         start(OutputType.VIDEO)
 
@@ -48,7 +53,7 @@ class TelegramDownloadStarterTest {
         } returns 500
         every {
             downloadJobService.createJob(any())
-        } returns false
+        } returns null
         every { telegramSender.deleteMessage(100, 500) } just runs
 
         start(OutputType.AUDIO)
@@ -78,7 +83,7 @@ class TelegramDownloadStarterTest {
         val command = slot<CreateDownloadJobCommand>()
         val address = TelegramMessageAddress.Inline("inline-message")
         every { telegramSender.editStatus(address, TelegramDownloadStatus.QUEUED, BotLanguage.EN) } just runs
-        every { downloadJobService.createJob(capture(command)) } returns true
+        every { downloadJobService.createJob(capture(command)) } answers { createdJob(command.captured) }
 
         start(OutputType.VIDEO, address)
 
@@ -112,6 +117,15 @@ class TelegramDownloadStarterTest {
             presetName = "preset",
         )
     }
+
+    private fun createdJob(command: CreateDownloadJobCommand): DownloadJob = DownloadJob(
+        id = 1,
+        telegramUserId = command.telegramUserId,
+        telegramChatId = command.telegramChatId,
+        telegramStatusMessageId = command.telegramStatusMessageId,
+        telegramInlineMessageId = command.telegramInlineMessageId,
+        language = command.language,
+    )
 
     private companion object {
         private const val URL = "https://example.com/video"

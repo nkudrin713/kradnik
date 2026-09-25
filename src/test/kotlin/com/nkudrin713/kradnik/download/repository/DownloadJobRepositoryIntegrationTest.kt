@@ -5,6 +5,9 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionRepository
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
+import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
+import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
+import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
@@ -221,8 +224,8 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             executor.shutdownNow()
         }
 
-        assertEquals(1, results.count { it })
-        assertEquals(1, results.count { !it })
+        assertEquals(1, results.count { it != null })
+        assertEquals(1, results.count { it == null })
         assertEquals(1, repository.count())
     }
 
@@ -246,6 +249,57 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         assertNotNull(claimed[1])
         assertNotEquals(claimed[0].id, claimed[1].id)
         assertEquals(setOf(DownloadJobStatus.PROCESSING), claimed.map { it.status }.toSet())
+    }
+
+    @Test
+    fun workerTypesClaimOnlyTheirOwnJobs() {
+        val single = repository.saveAndFlush(job("single"))
+        val playlist = repository.saveAndFlush(
+            job("playlist").apply {
+                workloadType = DownloadWorkloadType.PLAYLIST_AUDIO
+                playlistEntries = listOf(
+                    PlaylistAudioEntry(1, "video-1", "https://youtu.be/video-1", "Episode", 60),
+                )
+            },
+        )
+
+        assertEquals(single.id, downloadJobService.claimNextQueuedJob()?.id)
+        val claimedPlaylist = downloadJobService.claimNextQueuedPlaylistJob()
+        assertEquals(playlist.id, claimedPlaylist?.id)
+        assertEquals(DownloadWorkloadType.PLAYLIST_AUDIO, claimedPlaylist?.workloadType)
+    }
+
+    @Test
+    fun cancellationIsTerminalAndKeepsJob() {
+        val queued = repository.saveAndFlush(job("cancel"))
+
+        assertEquals(true, downloadJobService.cancelByUser(queued.requiredId(), queued.telegramUserId))
+
+        val persisted = repository.findById(queued.requiredId()).orElseThrow()
+        assertEquals(DownloadJobStatus.CANCELLED_BY_USER, persisted.status)
+        assertNotNull(persisted.completedAt)
+        assertNull(downloadJobService.claimNextQueuedJob())
+    }
+
+    @Test
+    fun persistsPlaylistResultWhileJobIsProcessing() {
+        val playlist = repository.saveAndFlush(
+            job("playlist-result").apply { workloadType = DownloadWorkloadType.PLAYLIST_AUDIO },
+        )
+        assertEquals(playlist.id, downloadJobService.claimNextQueuedPlaylistJob()?.id)
+
+        assertEquals(
+            true,
+            downloadJobService.savePlaylistResult(
+                playlist.requiredId(),
+                PlaylistAudioResult(position = 1, fileId = "audio-file"),
+            ),
+        )
+
+        assertEquals(
+            listOf(PlaylistAudioResult(position = 1, fileId = "audio-file")),
+            repository.findById(playlist.requiredId()).orElseThrow().playlistResults,
+        )
     }
 
     @Test

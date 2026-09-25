@@ -20,6 +20,32 @@ class TelegramDownloadChoiceView(
     private val messages: TelegramMessages,
 ) {
     fun text(mediaInfo: DownloadChoiceMediaInfo, language: BotLanguage = BotLanguage.EN): String {
+        if (mediaInfo.playlistCount != null) {
+            val lines = buildList {
+                add(
+                    mediaInfo.title?.takeIf(String::isNotBlank)
+                        ?: messages.text(language, TelegramMessage.CHOICE_TITLE_UNAVAILABLE),
+                )
+                add(messages.text(language, TelegramMessage.PLAYLIST_TRACK_COUNT, mediaInfo.playlistCount))
+                mediaInfo.durationSeconds?.let {
+                    add(messages.text(language, TelegramMessage.PLAYLIST_TOTAL_DURATION, formatDuration(it)))
+                }
+                val bitrate = mediaInfo.audioBitrateKbps
+                val size = mediaInfo.estimatedSizeBytes
+                if (bitrate != null && size != null) {
+                    add(
+                        messages.text(
+                            language,
+                            TelegramMessage.PLAYLIST_AUDIO_FORMAT,
+                            bitrate,
+                            formatSize(size, language),
+                        ),
+                    )
+                }
+                add(messages.text(language, TelegramMessage.PLAYLIST_DELIVERY_PARTS))
+            }
+            return "<pre>${lines.joinToString("\n").escapeHtml()}</pre>"
+        }
         val videoInfo = buildList {
             add(
                 mediaInfo.title?.takeIf { it.isNotBlank() }
@@ -50,8 +76,13 @@ class TelegramDownloadChoiceView(
                 InlineKeyboardButton(buttonText(option, language))
                     .callbackData(DownloadChoiceCallback.encode(sessionToken, option.key))
             )
-        }.toTypedArray()
-        return InlineKeyboardMarkup(*rows)
+        } + listOf(
+            arrayOf(
+                InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_CANCEL))
+                    .callbackData(DownloadChoiceCallback.encode(sessionToken, CANCEL_OPTION_KEY)),
+            ),
+        )
+        return InlineKeyboardMarkup(*rows.toTypedArray())
     }
 
     private fun buttonText(option: DownloadChoiceOptionSnapshot, language: BotLanguage): String {
@@ -108,6 +139,8 @@ class TelegramDownloadChoiceView(
             }
     }
 }
+
+const val CANCEL_OPTION_KEY = "cancel"
 
 data class DownloadChoiceCallback(
     val sessionToken: UUID,

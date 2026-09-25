@@ -1,7 +1,9 @@
 package com.nkudrin713.kradnik.download.service
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import org.springframework.stereotype.Service
@@ -12,16 +14,16 @@ import org.springframework.transaction.annotation.Transactional
 class DownloadJobService(private val downloadJobRepository: DownloadJobRepository) {
 	/** Locks a Telegram update identity and persists at most one [DownloadJob] for a non-null update ID. */
 	@Transactional
-	fun createJob(command: CreateDownloadJobCommand): Boolean {
+	fun createJob(command: CreateDownloadJobCommand): DownloadJob? {
 		command.telegramUpdateId?.let { telegramUpdateId ->
 			downloadJobRepository.lockTelegramUpdate(telegramUpdateId)
 			if (downloadJobRepository.findByTelegramUpdateId(telegramUpdateId) != null) {
-				return false
+				return null
 			}
 		}
 
 		val spec = command.spec
-		downloadJobRepository.save(
+		return downloadJobRepository.save(
 			DownloadJob(
 				telegramUserId = command.telegramUserId,
 				telegramChatId = command.telegramChatId,
@@ -37,16 +39,19 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
 				selectedFormat = spec.formatSelector,
 				downloadExtraArgs = spec.extraArgs,
 				sourcePostText = spec.postText,
+				workloadType = spec.workloadType,
+				playlistEntries = spec.playlistEntries,
 				telegramStatusMessageId = command.telegramStatusMessageId,
 				telegramInlineMessageId = command.telegramInlineMessageId,
 			)
 		)
-		return true
 	}
-
 
     @Transactional
     fun claimNextQueuedJob(): DownloadJob? = downloadJobRepository.claimNextQueuedJob()
+
+    @Transactional
+    fun claimNextQueuedPlaylistJob(): DownloadJob? = downloadJobRepository.claimNextQueuedPlaylistJob()
 
     /** Called once before workers start. The previous application instance must already be stopped. */
     @Transactional
@@ -56,18 +61,40 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
     fun findCachedJob(job: DownloadJob): DownloadJob? =
         downloadJobRepository.findCachedCompletedJob(job.cacheKey)
 
-    @Transactional
-    fun markCompleted(job: DownloadJob, telegramFileId: String) {
-        check(downloadJobRepository.complete(job.requiredId(), telegramFileId) == 1) {
-            "Job is no longer processing: ${job.id}"
-        }
-    }
+    @Transactional(readOnly = true)
+    fun findCachedFileId(cacheKey: String): String? =
+        downloadJobRepository.findCachedCompletedJob(cacheKey)?.telegramFileId
 
     @Transactional
-    fun markFailed(job: DownloadJob, errorMessage: String) {
-        check(downloadJobRepository.fail(job.requiredId(), errorMessage.take(1000)) == 1) {
-            "Job is no longer processing: ${job.id}"
-        }
+    fun markCompleted(job: DownloadJob, telegramFileId: String): Boolean =
+        downloadJobRepository.complete(job.requiredId(), telegramFileId) == 1
+
+    @Transactional
+    fun markFailed(job: DownloadJob, errorMessage: String): Boolean =
+        downloadJobRepository.fail(job.requiredId(), errorMessage.take(1000)) == 1
+
+    @Transactional
+    fun cancelByUser(jobId: Long, telegramUserId: Long): Boolean =
+        downloadJobRepository.cancelByUser(jobId, telegramUserId) == 1
+
+    @Transactional(readOnly = true)
+    fun findJob(jobId: Long): DownloadJob? = downloadJobRepository.findById(jobId).orElse(null)
+
+    @Transactional(readOnly = true)
+    fun isProcessing(jobId: Long): Boolean =
+        downloadJobRepository.findById(jobId).orElse(null)?.status == DownloadJobStatus.PROCESSING
+
+    @Transactional(readOnly = true)
+    fun isCancelledByUser(jobId: Long): Boolean =
+        downloadJobRepository.findById(jobId).orElse(null)?.status == DownloadJobStatus.CANCELLED_BY_USER
+
+    @Transactional
+    fun savePlaylistResult(jobId: Long, result: PlaylistAudioResult): Boolean {
+        val job = downloadJobRepository.findForUpdate(jobId) ?: return false
+        if (job.status != DownloadJobStatus.PROCESSING) return false
+        if (job.playlistResults.any { it.position == result.position }) return true
+        job.playlistResults = job.playlistResults + result
+        return true
     }
 }
 

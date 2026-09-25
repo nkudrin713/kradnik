@@ -18,6 +18,7 @@ Source playlists, private content, and authentication bypasses are not supported
 
 - Metadata is loaded before enqueueing to build the available format menu and estimate sizes.
 - Metadata work uses 2 threads and accepts at most 32 pending requests.
+- YouTube playlists expose fixed 96 kbps MP3 options for all, first 100, or last 100 tracks.
 - Instagram videos keep the video/audio menu and add a full-post option; static posts expose one full-post option.
 - Menu snapshots, ownership, and language preferences are stored in PostgreSQL, so callbacks survive restarts.
 
@@ -25,9 +26,11 @@ Source playlists, private content, and authentication bypasses are not supported
 
 - The application runs as a single instance.
 - `DOWNLOAD_WORKERS` controls the number of worker loops; the default is 3.
+- `DOWNLOAD_PLAYLIST_WORKERS` reserves worker loops for playlist jobs; the default is 1.
+- Each playlist downloads up to `DOWNLOAD_PLAYLIST_ITEM_PARALLELISM` tracks concurrently; the default is 2.
 - Pending jobs stay in PostgreSQL. Workers claim them with `FOR UPDATE SKIP LOCKED` and `UPDATE ... RETURNING`.
 - Claiming and state changes use short transactions; download and Telegram upload I/O run outside them.
-- Job states are `QUEUED`, `PROCESSING`, `COMPLETED`, and `FAILED`.
+- Job states are `QUEUED`, `PROCESSING`, `COMPLETED`, `FAILED`, and `CANCELLED_BY_USER`.
 - Failures are terminal; users can submit the link again.
 - Startup removes abandoned work directories and returns `PROCESSING` jobs to `QUEUED`.
 - Shutdown cancels external I/O and waits up to 30 seconds for workers.
@@ -98,6 +101,8 @@ Run the complete verification:
 - `TELEGRAM_BOT_*`, `TELEGRAM_MAX_UPLOAD_BYTES`: Telegram endpoints and file-size limit.
 - `TELEGRAM_FILE_STORAGE_CHAT_ID`: private storage chat for fresh guest-mode uploads.
 - `DOWNLOAD_WORKERS`: concurrent download jobs; default 3.
+- `DOWNLOAD_PLAYLIST_WORKERS`: concurrent playlist jobs; default 1.
+- `DOWNLOAD_PLAYLIST_ITEM_PARALLELISM`: concurrent track downloads inside one playlist; default 2.
 - `DOWNLOAD_WORK_DIR`: writable media directory with one subdirectory per job.
 - `DOWNLOAD_*_TIMEOUT`: external-process and HTTP timeouts.
 - `DOWNLOAD_YT_DLP_CLOUD_MAX_WORKSPACE_BYTES`: per-process cloud download workspace cap.

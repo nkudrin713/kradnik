@@ -87,12 +87,13 @@ class TelegramDownloadChoiceViewTest {
                 "🎬 720p · 460 МБ",
                 "🎧 Только звук · ≈ 24,5 МБ",
                 "🖼 Обложка",
+                "Отмена",
             ),
             keyboard.map { it.single().text },
         )
-        assertEquals("🎬 Original · ≈ 1.42 GB", englishKeyboard.single().single().text)
+        assertEquals(listOf("🎬 Original · ≈ 1.42 GB", "Cancel"), englishKeyboard.map { it.single().text })
         assertEquals(
-            listOf("video_original", "video_720", "audio", "cover"),
+            listOf("video_original", "video_720", "audio", "cover", "cancel"),
             keyboard.map { DownloadChoiceCallback.parse(requireNotNull(it.single().callbackData))?.optionKey },
         )
     }

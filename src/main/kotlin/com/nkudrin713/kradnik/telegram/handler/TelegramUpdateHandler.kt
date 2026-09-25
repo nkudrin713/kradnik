@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service
 class TelegramUpdateHandler(
     private val downloadChoiceCoordinator: DownloadChoiceCoordinator,
     private val downloadChoiceHandler: DownloadChoiceHandler,
+    private val downloadCancellationHandler: DownloadCancellationHandler,
     private val telegramSender: TelegramSender,
     private val telegramDonationSender: TelegramDonationSender,
     private val languageSelector: TelegramLanguageSelector,
@@ -48,7 +49,9 @@ class TelegramUpdateHandler(
             message?.text() != null -> handleMessage(update, message)
             update.callbackQuery()?.data() != null -> {
                 val callbackQuery = update.callbackQuery()
-                if (!languageSelector.handle(callbackQuery)) {
+                if (!languageSelector.handle(callbackQuery) &&
+                    !downloadCancellationHandler.handle(callbackQuery, update.updateId())
+                ) {
                     downloadChoiceHandler.handle(callbackQuery)
                 }
             }

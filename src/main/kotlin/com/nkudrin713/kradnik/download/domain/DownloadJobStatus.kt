@@ -4,7 +4,8 @@ enum class DownloadJobStatus(val dbValue: String) {
 	QUEUED("queued"),
 	PROCESSING("processing"),
 	COMPLETED("completed"),
-	FAILED("failed");
+	FAILED("failed"),
+	CANCELLED_BY_USER("cancelled_by_user");
 
 	companion object {
 		fun fromDb(value: String): DownloadJobStatus =

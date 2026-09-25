@@ -25,6 +25,7 @@ private const val DUMP_SINGLE_JSON = "--dump-single-json"
 private const val IGNORE_NO_FORMATS_ERROR = "--ignore-no-formats-error"
 private const val YT_DLP = "yt-dlp"
 private const val NO_PLAYLIST = "--no-playlist"
+private const val FLAT_PLAYLIST = "--flat-playlist"
 private const val NO_WARNINGS = "--no-warnings"
 private const val NO_RESTRICT_FILENAMES = "--no-restrict-filenames"
 private const val FORMAT = "-f"
@@ -84,6 +85,23 @@ class YtDlpService(
         return extractMetadata(spec, formatSelector = null)
     }
 
+    suspend fun extractPlaylistMetadata(url: String): YtDlpMetadataDto {
+        val result = processRunner.run(
+            YtDlpCommand(
+                args = buildList {
+                    add(DUMP_SINGLE_JSON)
+                    add(FLAT_PLAYLIST)
+                    add(NO_WARNINGS)
+                    addAll(youtubePoTokenArgs(DownloadPlatform.YOUTUBE))
+                    add(url)
+                },
+                workingDir = null,
+                timeout = metadataTimeout.toKotlinDuration(),
+            ),
+        )
+        return parseMetadataResult(result)
+    }
+
     /** Extracts image-only Instagram posts and carousels without treating absent video formats as an error. */
     suspend fun extractInstagramImageMetadata(spec: DownloadSpec): YtDlpMetadataDto {
         val result = processRunner.run(
@@ -115,7 +133,7 @@ class YtDlpService(
                         add(FORMAT)
                         add(formatSelector)
                     }
-                    addAll(youtubePoTokenArgs(spec))
+                    addAll(youtubePoTokenArgs(spec.platform))
                     add(spec.originalUrl)
                 },
                 workingDir = null,
@@ -159,7 +177,7 @@ class YtDlpService(
             }
             add(PRINT)
             add(FINAL_FILEPATH)
-            addAll(youtubePoTokenArgs(spec))
+            addAll(youtubePoTokenArgs(spec.platform))
             addAll(spec.extraArgs)
             add(spec.originalUrl)
         }
@@ -207,9 +225,9 @@ class YtDlpService(
         return file
     }
 
-    private fun youtubePoTokenArgs(spec: DownloadSpec): List<String> {
+    private fun youtubePoTokenArgs(platform: DownloadPlatform): List<String> {
         val providerUrl = youtubePoTokenProviderUrl.trim().trimEnd('/')
-        if (spec.platform != DownloadPlatform.YOUTUBE || providerUrl.isEmpty()) {
+        if (platform != DownloadPlatform.YOUTUBE || providerUrl.isEmpty()) {
             return emptyList()
         }
 

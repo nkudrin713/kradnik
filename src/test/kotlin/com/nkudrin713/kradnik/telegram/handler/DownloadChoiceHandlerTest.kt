@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.telegram.handler
 
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceCancellation
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
@@ -8,6 +9,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
+import com.nkudrin713.kradnik.telegram.CANCEL_OPTION_KEY
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
@@ -71,6 +73,25 @@ class DownloadChoiceHandlerTest {
             )
             telegramSender.deleteMessage(100, 500)
         }
+    }
+
+    @Test
+    fun cancelsAndDeletesDirectMenu() {
+        every { preferenceService.resolveLanguage(300) } returns BotLanguage.RU
+        every { sessionService.cancel(any()) } returns DownloadChoiceCancellation.Cancelled(BotLanguage.RU)
+        every { telegramSender.answerCallback("callback-id", null, false) } just runs
+        every { telegramSender.deleteMessage(100, 500) } just runs
+
+        handler.handle(
+            callbackQuery(
+                userId = 300,
+                callbackData = DownloadChoiceCallback.encode(token, CANCEL_OPTION_KEY),
+            ),
+        )
+
+        verify { telegramSender.deleteMessage(100, 500) }
+        verify(exactly = 0) { sessionService.select(any()) }
+        verify(exactly = 0) { starter.start(any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test

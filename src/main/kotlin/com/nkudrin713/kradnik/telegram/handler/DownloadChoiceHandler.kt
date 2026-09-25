@@ -1,11 +1,16 @@
 package com.nkudrin713.kradnik.telegram.handler
 
+import com.nkudrin713.kradnik.download.choice.CancelDownloadChoiceCommand
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceCancellation
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.choice.SelectDownloadChoiceCommand
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
+import com.nkudrin713.kradnik.telegram.CANCEL_OPTION_KEY
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
+import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
@@ -45,6 +50,10 @@ class DownloadChoiceHandler(
                 TelegramMessage.CHOICE_MENU_INVALID,
                 showAlert = true,
             )
+        if (callback.optionKey == CANCEL_OPTION_KEY) {
+            cancelMenu(callbackQuery, callback, address, fallbackLanguage)
+            return
+        }
         val selection = sessionService.select(
             SelectDownloadChoiceCommand(
                 token = callback.sessionToken,
@@ -84,12 +93,60 @@ class DownloadChoiceHandler(
         }
     }
 
+    private fun cancelMenu(
+        callbackQuery: CallbackQuery,
+        callback: DownloadChoiceCallback,
+        address: TelegramMessageAddress,
+        fallbackLanguage: BotLanguage,
+    ) {
+        val result = sessionService.cancel(
+            CancelDownloadChoiceCommand(
+                token = callback.sessionToken,
+                telegramUserId = callbackQuery.from().id(),
+                telegramChatId = (address as? TelegramMessageAddress.Chat)?.chatId,
+                telegramMenuMessageId = (address as? TelegramMessageAddress.Chat)?.messageId,
+                telegramInlineMessageId = (address as? TelegramMessageAddress.Inline)?.inlineMessageId,
+            ),
+        )
+        when (result) {
+            is DownloadChoiceCancellation.Cancelled -> {
+                telegramSender.answerCallback(callbackQuery.id())
+                if (address is TelegramMessageAddress.Chat) {
+                    deleteMenuBestEffort(address.chatId, address.messageId)
+                } else {
+                    telegramSender.editStatus(address, TelegramDownloadStatus.CANCELLED, result.language)
+                }
+            }
+            DownloadChoiceCancellation.NotOwner -> answer(
+                callbackQuery.id(), fallbackLanguage, TelegramMessage.CHOICE_NOT_OWNER, showAlert = true,
+            )
+            DownloadChoiceCancellation.AlreadySelected -> answer(
+                callbackQuery.id(), fallbackLanguage, TelegramMessage.CHOICE_ALREADY_SELECTED,
+            )
+            DownloadChoiceCancellation.Invalid -> answer(
+                callbackQuery.id(), fallbackLanguage, TelegramMessage.CHOICE_MENU_INVALID, showAlert = true,
+            )
+        }
+    }
+
     private fun startDownload(
         address: TelegramMessageAddress,
         callbackQueryId: String,
         callback: DownloadChoiceCallback,
         selection: DownloadChoiceSelection.Ready,
     ) {
+        if (address is TelegramMessageAddress.Inline &&
+            selection.option.spec.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO
+        ) {
+            sessionService.release(callback.sessionToken)
+            answer(
+                callbackQueryId,
+                selection.session.language,
+                TelegramMessage.ERROR_PLAYLIST_DIRECT_CHAT_ONLY,
+                showAlert = true,
+            )
+            return
+        }
         if (address is TelegramMessageAddress.Inline && selection.option.spec.outputType == OutputType.IMAGES) {
             sessionService.release(callback.sessionToken)
             answer(

@@ -104,6 +104,23 @@ class YtDlpServiceTest {
     }
 
     @Test
+    fun extractsFlatPlaylistWithoutSingleVideoRestriction() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"PL123","title":"Podcast","entries":[{"id":"video-1","duration":60}]}""",
+            timedOut = false,
+            exitCode = 0,
+        )
+
+        val actual = service.extractPlaylistMetadata("https://www.youtube.com/playlist?list=PL123")
+
+        assertEquals("video-1", actual.entries?.single()?.id)
+        val command = slot<Command>()
+        coVerify { processRunner.run(capture(command)) }
+        assertTrue(command.captured.args.contains("--flat-playlist"))
+        assertFalse(command.captured.args.contains("--no-playlist"))
+    }
+
+    @Test
     fun extractsInstagramImageCarouselWithoutVideoFormats() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             stdout = """

@@ -64,8 +64,22 @@ class TelegramDownloadStarter(
             throw error
         }
 
-        if (!created) {
+        if (created == null) {
             statusMessageId?.let { deleteStatusBestEffort(telegramChatId, it) }
+            return
+        }
+        val jobAddress = created.telegramInlineMessageId
+            ?.let(TelegramMessageAddress::Inline)
+            ?: TelegramMessageAddress.Chat(created.telegramChatId, requireNotNull(created.telegramStatusMessageId))
+        runCatching {
+            telegramSender.editJobStatus(
+                address = jobAddress,
+                status = TelegramDownloadStatus.QUEUED,
+                jobId = created.requiredId(),
+                language = created.language,
+            )
+        }.onFailure {
+            logger.warn("Queued job keyboard update failed: jobId={}", created.id, it)
         }
     }
 

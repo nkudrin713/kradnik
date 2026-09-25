@@ -12,6 +12,7 @@ import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
+import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -33,8 +34,10 @@ class DownloadChoicePlanner(
     private val audioUploadPlanner: AudioUploadPlanner,
     private val uploadLimits: TelegramUploadLimits,
     private val messages: TelegramMessages,
+    private val youtubePlaylistPlanner: YouTubePlaylistPlanner,
 ) {
     suspend fun plan(url: String, language: BotLanguage = BotLanguage.EN): DownloadChoicePlan {
+        youtubePlaylistPlanner.planOrNull(url, language)?.let { return it }
         val specs = platformResolver.resolve(url)
         val video = specs.video
         val audio = specs.audio

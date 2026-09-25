@@ -58,6 +58,9 @@ class DownloadJobProcessorTest {
 
     @BeforeEach
     fun setup() {
+        every { jobs.markCompleted(any(), any()) } returns true
+        every { jobs.markFailed(any(), any()) } returns true
+        every { jobs.isCancelledByUser(any()) } returns false
         every { jobs.findCachedJob(job) } returns null
         coEvery { engine.prepare(spec) } returns prepared
         every { preflight.check(spec, prepared.metadata) } returns DownloadPreflightDecision.Allowed(spec)

@@ -131,6 +131,28 @@ class TelegramMediaSenderTest {
     }
 
     @Test
+    fun sendsCachedAudiosInGroupsOfTen() = runTest {
+        val groupRequest = slot<SendMediaGroup>()
+        val audioRequest = slot<SendAudio>()
+        coEvery { apiClient.executeIo(capture(groupRequest), any()) } returns
+            audioMessagesResponse(*(1..10).map { "audio-$it" }.toTypedArray())
+        coEvery { apiClient.executeIo(capture(audioRequest), any()) } returns
+            sendResponse(audio = audio("audio-11", 456))
+
+        val result = sender.sendCachedAudios(
+            chatId = 100,
+            audios = (1..11).map { index ->
+                TelegramAudio("cached-$index", "Episode $index", durationSeconds = index * 60)
+            },
+            replyToMessageId = 200,
+        )
+
+        groupRequest.captured.getParameters()["reply_parameters"].shouldBeInstanceOf<ReplyParameters>()
+        audioRequest.captured.getParameters()["audio"] shouldBe "cached-11"
+        result shouldBe (1..11).map { "audio-$it" }
+    }
+
+    @Test
     fun editsInlineAudioByFileId() = runTest {
         val request = slot<EditMessageMedia>()
         coEvery { apiClient.executeIo(capture(request), any()) } returns okResponse()
@@ -285,6 +307,17 @@ class TelegramMediaSenderTest {
                     every { photo() } returns arrayOf(mockk<PhotoSize> {
                         every { fileId() } returns fileId
                     })
+                }
+            }.toTypedArray()
+        }
+    }
+
+    private fun audioMessagesResponse(vararg fileIds: String): MessagesResponse {
+        return mockk {
+            every { isOk } returns true
+            every { messages() } returns fileIds.map { fileId ->
+                mockk<Message> {
+                    every { audio() } returns audio(fileId, 456)
                 }
             }.toTypedArray()
         }

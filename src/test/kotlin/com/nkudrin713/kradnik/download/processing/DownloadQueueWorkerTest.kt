@@ -21,6 +21,7 @@ class DownloadQueueWorkerTest {
     private val jobs = mockk<DownloadJobService>(relaxed = true)
     private val processor = mockk<DownloadJobProcessor>()
     private val cleaner = mockk<WorkDirCleaner>(relaxed = true)
+    private val activeDownloads = ActiveDownloadRegistry()
 
     @Test
     fun threeJobsRunTogetherAndRemainingJobsStayInDatabaseUntilCapacityIsFree() {
@@ -36,6 +37,7 @@ class DownloadQueueWorkerTest {
             claimed.incrementAndGet()
             queue.poll()
         }
+        every { jobs.isProcessing(any()) } returns true
         coEvery { processor.process(any()) } coAnswers {
             val job = firstArg<DownloadJob>()
             assertTrue(seen.add(job.requiredId()))
@@ -49,7 +51,7 @@ class DownloadQueueWorkerTest {
                 active.decrementAndGet()
             }
         }
-        val worker = DownloadQueueWorker(jobs, processor, cleaner, workers = 3, pollDelayMs = 1)
+        val worker = DownloadQueueWorker(jobs, processor, activeDownloads, cleaner, workers = 3, pollDelayMs = 1)
         try {
             worker.start()
             assertTrue(started.await(10, TimeUnit.SECONDS))
@@ -82,10 +84,11 @@ class DownloadQueueWorkerTest {
                 else -> null
             }
         }
+        every { jobs.isProcessing(any()) } returns true
         val processed = CountDownLatch(1)
         coEvery { processor.process(match { it.id == 1L }) } throws IllegalStateException("unexpected failure")
         coEvery { processor.process(match { it.id == 2L }) } coAnswers { processed.countDown() }
-        val worker = DownloadQueueWorker(jobs, processor, cleaner, workers = 1, pollDelayMs = 1)
+        val worker = DownloadQueueWorker(jobs, processor, activeDownloads, cleaner, workers = 1, pollDelayMs = 1)
         try {
             worker.start()
             assertTrue(processed.await(10, TimeUnit.SECONDS))

@@ -59,6 +59,25 @@ class DownloadChoiceSessionServiceTest {
     }
 
     @Test
+    fun cancelsUnselectedMenu() {
+        val session = session()
+        every { repository.findForUpdate(session.token) } returns session
+
+        val actual = service.cancel(
+            CancelDownloadChoiceCommand(
+                token = session.token,
+                telegramUserId = 300,
+                telegramChatId = 100,
+                telegramMenuMessageId = 500,
+            ),
+        )
+
+        assertIs<DownloadChoiceCancellation.Cancelled>(actual)
+        assertEquals(now, session.selectedAt)
+        assertEquals(now.plus(Duration.ofMinutes(30)), session.cleanupAfter)
+    }
+
+    @Test
     fun selectsInlineSessionByInlineMessageId() {
         val session = session().apply {
             telegramMenuMessageId = null

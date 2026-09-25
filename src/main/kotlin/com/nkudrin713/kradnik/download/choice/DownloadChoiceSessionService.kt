@@ -97,6 +97,32 @@ class DownloadChoiceSessionService(
         )
     }
 
+    @Transactional
+    fun cancel(command: CancelDownloadChoiceCommand): DownloadChoiceCancellation {
+        val session = repository.findForUpdate(command.token)
+            ?: return DownloadChoiceCancellation.Invalid
+        val now = clock.instant()
+        if (session.telegramUserId != command.telegramUserId) {
+            return DownloadChoiceCancellation.NotOwner
+        }
+        val sameMessage = if (command.telegramInlineMessageId != null) {
+            session.telegramInlineMessageId == command.telegramInlineMessageId
+        } else {
+            session.telegramInlineMessageId == null &&
+                session.telegramChatId == command.telegramChatId &&
+                session.telegramMenuMessageId == command.telegramMenuMessageId
+        }
+        if (!sameMessage) return DownloadChoiceCancellation.Invalid
+        if (session.selectedAt != null) return DownloadChoiceCancellation.AlreadySelected
+        val createdAt = session.createdAt ?: return DownloadChoiceCancellation.Invalid
+        if (!createdAt.isAfter(now.minus(unselectedSessionMaxAge))) {
+            return DownloadChoiceCancellation.Invalid
+        }
+        session.selectedAt = now
+        session.cleanupAfter = now.plus(consumedSessionTtl)
+        return DownloadChoiceCancellation.Cancelled(session.language)
+    }
+
     /**
      * Makes a selected option available after
      * [TelegramDownloadStarter][com.nkudrin713.kradnik.telegram.TelegramDownloadStarter] fails to enqueue it.
@@ -135,6 +161,21 @@ data class SelectDownloadChoiceCommand(
     val telegramMenuMessageId: Int?,
     val telegramInlineMessageId: String? = null,
 )
+
+data class CancelDownloadChoiceCommand(
+    val token: UUID,
+    val telegramUserId: Long,
+    val telegramChatId: Long?,
+    val telegramMenuMessageId: Int?,
+    val telegramInlineMessageId: String? = null,
+)
+
+sealed interface DownloadChoiceCancellation {
+    data class Cancelled(val language: BotLanguage) : DownloadChoiceCancellation
+    data object NotOwner : DownloadChoiceCancellation
+    data object AlreadySelected : DownloadChoiceCancellation
+    data object Invalid : DownloadChoiceCancellation
+}
 
 sealed interface DownloadChoiceSelection {
     data class Ready(

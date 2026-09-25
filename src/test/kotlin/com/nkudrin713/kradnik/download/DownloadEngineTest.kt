@@ -1,16 +1,16 @@
 package com.nkudrin713.kradnik.download
 
 import com.nkudrin713.kradnik.download.cover.CoverDownloader
-import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.instagram.InstagramEmbedDownloader
 import com.nkudrin713.kradnik.download.instagram.InstagramContentUnavailableException
+import com.nkudrin713.kradnik.download.instagram.InstagramEmbedDownloader
 import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpException
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpException
+import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every

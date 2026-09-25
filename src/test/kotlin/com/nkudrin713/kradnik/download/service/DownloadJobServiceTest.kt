@@ -100,5 +100,4 @@ class DownloadJobServiceTest {
             telegramChatId = 2,
         )
     }
-
 }

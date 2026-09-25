@@ -38,6 +38,7 @@ class TelegramFileSender(
                 file = file.file,
                 replyToMessageId = job.telegramRequestMessageId,
             )
+
             OutputType.AUDIO -> telegramMediaSender.sendAudio(
                 chatId = job.telegramChatId,
                 file = file.file,
@@ -46,17 +47,19 @@ class TelegramFileSender(
                 durationSeconds = job.sourceDurationSeconds,
                 replyToMessageId = job.telegramRequestMessageId,
             )
+
             OutputType.COVER -> telegramMediaSender.sendDocument(
                 chatId = job.telegramChatId,
                 file = file.file,
                 replyToMessageId = job.telegramRequestMessageId,
             )
+
             OutputType.IMAGES -> encodePhotoIds(
                 telegramMediaSender.sendPhotos(
                     chatId = job.telegramChatId,
                     files = file.files,
                     replyToMessageId = job.telegramRequestMessageId,
-                )
+                ),
             )
         }
         sendPostText(job)
@@ -78,22 +81,25 @@ class TelegramFileSender(
                 fileId = fileId,
                 replyToMessageId = job.telegramRequestMessageId,
             )
+
             OutputType.AUDIO -> telegramMediaSender.sendCachedAudio(
                 chatId = job.telegramChatId,
                 fileId = fileId,
                 replyToMessageId = job.telegramRequestMessageId,
             )
+
             OutputType.COVER -> telegramMediaSender.sendCachedDocument(
                 chatId = job.telegramChatId,
                 fileId = fileId,
                 replyToMessageId = job.telegramRequestMessageId,
             )
+
             OutputType.IMAGES -> encodePhotoIds(
                 telegramMediaSender.sendCachedPhotos(
                     chatId = job.telegramChatId,
                     fileIds = decodePhotoIds(fileId),
                     replyToMessageId = job.telegramRequestMessageId,
-                )
+                ),
             )
         }
         sendPostText(job)
@@ -142,6 +148,7 @@ class TelegramFileSender(
         )
         return when (job.outputType) {
             OutputType.VIDEO -> telegramMediaSender.sendVideo(storageChatId, file.file)
+
             OutputType.AUDIO -> telegramMediaSender.sendAudio(
                 chatId = storageChatId,
                 file = file.file,
@@ -149,7 +156,9 @@ class TelegramFileSender(
                 performer = job.sourceAudioPerformer,
                 durationSeconds = job.sourceDurationSeconds,
             )
+
             OutputType.COVER -> telegramMediaSender.sendDocument(storageChatId, file.file)
+
             OutputType.IMAGES -> throw TelegramSendException("Instagram image groups are unavailable in inline mode")
         }
     }
@@ -157,6 +166,7 @@ class TelegramFileSender(
     private suspend fun editInline(job: DownloadJob, inlineMessageId: String, fileId: String): String {
         return when (job.outputType) {
             OutputType.VIDEO -> telegramMediaSender.editInlineVideo(inlineMessageId, fileId)
+
             OutputType.AUDIO -> telegramMediaSender.editInlineAudio(
                 inlineMessageId = inlineMessageId,
                 fileId = fileId,
@@ -164,7 +174,9 @@ class TelegramFileSender(
                 performer = job.sourceAudioPerformer,
                 durationSeconds = job.sourceDurationSeconds,
             )
+
             OutputType.COVER -> telegramMediaSender.editInlineDocument(inlineMessageId, fileId)
+
             OutputType.IMAGES -> throw TelegramSendException("Instagram image groups are unavailable in inline mode")
         }
     }

@@ -19,8 +19,8 @@ import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.telegram.TelegramSender
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpFileSizeLimitException
+import com.nkudrin713.kradnik.ytdlp.YtDlpAuthenticationRequiredException
+import com.nkudrin713.kradnik.ytdlp.YtDlpFileSizeLimitException
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -83,9 +83,13 @@ class DownloadJobProcessor(
             logger.error("JOB[{}] failed", job.id, error)
             val status = when (error) {
                 is YtDlpAuthenticationRequiredException -> TelegramDownloadStatus.AUTHENTICATION_REQUIRED
+
                 is InstagramContentUnavailableException -> TelegramDownloadStatus.SOURCE_UNAVAILABLE
+
                 is VideoTooLargeException, is YtDlpFileSizeLimitException,
-                is InstagramMediaTooLargeException, is CoverTooLargeException -> TelegramDownloadStatus.REJECTED_TOO_LARGE
+                is InstagramMediaTooLargeException, is CoverTooLargeException,
+                -> TelegramDownloadStatus.REJECTED_TOO_LARGE
+
                 else -> TelegramDownloadStatus.ERROR
             }
             fail(job, error.message ?: error.javaClass.simpleName, status)

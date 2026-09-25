@@ -47,25 +47,30 @@ class DownloadCancellationHandler(
                     telegramSender.answerCallback(callbackQuery.id())
                     telegramSender.editCancelledJob(address, callback.jobId, result.job.language)
                 }
+
                 is DownloadCancellation.AlreadyCancelled -> {
                     telegramSender.answerCallback(callbackQuery.id())
                     telegramSender.editCancelledJob(address, callback.jobId, result.job.language)
                 }
+
                 DownloadCancellation.AlreadyFinished -> telegramSender.answerCallback(
                     callbackQuery.id(),
                     messages.text(language, TelegramMessage.DOWNLOAD_ALREADY_FINISHED),
                 )
+
                 DownloadCancellation.NotOwner -> telegramSender.answerCallback(
                     callbackQuery.id(),
                     messages.text(language, TelegramMessage.CHOICE_NOT_OWNER),
                     true,
                 )
+
                 DownloadCancellation.Invalid -> telegramSender.answerCallback(
                     callbackQuery.id(),
                     messages.text(language, TelegramMessage.CHOICE_MENU_INVALID),
                     true,
                 )
             }
+
             DownloadJobAction.BACK -> {
                 val job = cancellationService.cancelledJob(callback.jobId, callbackQuery.from().id(), address)
                 if (job == null) {

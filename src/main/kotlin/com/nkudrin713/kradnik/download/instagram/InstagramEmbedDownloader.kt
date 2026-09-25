@@ -2,9 +2,9 @@ package com.nkudrin713.kradnik.download.instagram
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
@@ -153,7 +153,7 @@ class InstagramEmbedDownloader(
             httpClient.downloadImage(
                 uri = uri,
                 outputFile = outputDir.resolve(
-                    "instagram-${preparedDownload.shortcode}-${(index + 1).toString().padStart(2, '0')}.jpg"
+                    "instagram-${preparedDownload.shortcode}-${(index + 1).toString().padStart(2, '0')}.jpg",
                 ),
             )
         }
@@ -280,9 +280,9 @@ class InstagramEmbedDownloader(
 
     private fun isInstagramCdnHost(host: String): Boolean {
         return host == "cdninstagram.com" ||
-                host.endsWith(".cdninstagram.com") ||
-                host == "fbcdn.net" ||
-                host.endsWith(".fbcdn.net")
+            host.endsWith(".cdninstagram.com") ||
+            host == "fbcdn.net" ||
+            host.endsWith(".fbcdn.net")
     }
 
     private companion object {
@@ -322,5 +322,4 @@ open class InstagramEmbedException : RuntimeException {
     constructor(message: String, cause: Throwable) : super(message, cause)
 }
 
-class InstagramContentUnavailableException :
-    InstagramEmbedException("Instagram content is unavailable without authentication")
+class InstagramContentUnavailableException : InstagramEmbedException("Instagram content is unavailable without authentication")

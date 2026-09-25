@@ -27,7 +27,7 @@ class PlatformResolverTest {
     @Test
     fun instagramBuildsVideoAndAudioSpecs() {
         val specs = PlatformResolver().resolve(
-            "https://www.instagram.com/reel/abc/?igshid=tracking"
+            "https://www.instagram.com/reel/abc/?igshid=tracking",
         )
 
         assertEquals("https://www.instagram.com/reel/abc/", specs.video.normalizedUrl)
@@ -35,5 +35,4 @@ class PlatformResolverTest {
         assertEquals("instagram_mobile_video", specs.video.presetName)
         assertEquals("instagram_audio", specs.audio.presetName)
     }
-
 }

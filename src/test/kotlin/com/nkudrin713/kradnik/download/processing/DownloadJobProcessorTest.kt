@@ -4,8 +4,8 @@ import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.PreparedDownload
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
-import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
@@ -14,9 +14,9 @@ import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
-import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.TelegramSendException
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.telegram.TelegramSender
+import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -30,8 +30,8 @@ import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import kotlin.io.path.exists
 import kotlin.io.path.writeText
-import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 
 class DownloadJobProcessorTest {
     @TempDir lateinit var root: Path
@@ -141,11 +141,13 @@ class DownloadJobProcessorTest {
         verify { jobs.markCompleted(job, "file") }
         verify(exactly = 0) { jobs.markFailed(any(), any()) }
     }
+
     @Test
     fun invalidCachedFileFallsBackToFreshDownload() = runTest {
         every { jobs.findCachedJob(job) } returns DownloadJob(telegramFileId = "stale")
         coEvery { sender.sendCached(job, "stale") } throws TelegramSendException(
-            errorCode = 400, description = "wrong file identifier",
+            errorCode = 400,
+            description = "wrong file identifier",
         )
         processor().process(job)
         coVerify(exactly = 1) { engine.download(any(), any(), any()) }
@@ -156,7 +158,8 @@ class DownloadJobProcessorTest {
     fun cacheNetworkFailureDoesNotDownloadAndUploadAgain() = runTest {
         every { jobs.findCachedJob(job) } returns DownloadJob(telegramFileId = "cached")
         coEvery { sender.sendCached(job, "cached") } throws TelegramSendException(
-            errorCode = 500, description = "server unavailable",
+            errorCode = 500,
+            description = "server unavailable",
         )
         processor().process(job)
         verify { jobs.markFailed(job, any()) }
@@ -181,7 +184,7 @@ class DownloadJobProcessorTest {
     @Test
     fun sourceAuthenticationFailureHasSafeUserStatus() = runTest {
         coEvery { engine.prepare(any(), any()) } throws
-            com.nkudrin713.kradnik.ytdlp.client.YtDlpAuthenticationRequiredException("login needed")
+            com.nkudrin713.kradnik.ytdlp.YtDlpAuthenticationRequiredException("login needed")
         processor().process(job)
         verify { telegram.editStatus(2, 3, TelegramDownloadStatus.AUTHENTICATION_REQUIRED, job.language) }
         verify { jobs.markFailed(job, "login needed") }

@@ -2,11 +2,11 @@ package com.nkudrin713.kradnik.download.choice
 
 import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.PreparedDownload
-import com.nkudrin713.kradnik.download.instagram.InstagramContentUnavailableException
-import com.nkudrin713.kradnik.download.instagram.InstagramHttpException
-import com.nkudrin713.kradnik.download.instagram.InstagramEmbedException
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.instagram.InstagramContentUnavailableException
+import com.nkudrin713.kradnik.download.instagram.InstagramEmbedException
+import com.nkudrin713.kradnik.download.instagram.InstagramHttpException
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlan
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
@@ -16,8 +16,8 @@ import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpFormatDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -126,7 +126,7 @@ class DownloadChoicePlanner(
                         label = originalLabel(language, it.height),
                         selected = it,
                         language = language,
-                    )
+                    ),
                 )
             }
             TARGET_HEIGHTS.forEach { height ->
@@ -139,7 +139,7 @@ class DownloadChoicePlanner(
                                 label = "${height}p",
                                 selected = selected,
                                 language = language,
-                            )
+                            ),
                         )
                     }
                 }
@@ -387,13 +387,13 @@ class DownloadChoicePlanner(
 
         private fun YtDlpFormatDto.telegramVideoScore(): Int {
             return (if (ext == "mp4") 2 else 0) +
-                    (if (vcodec?.startsWith("avc1") == true || vcodec == "h264") 2 else 0) +
-                    (if (hasAudio()) 1 else 0)
+                (if (vcodec?.startsWith("avc1") == true || vcodec == "h264") 2 else 0) +
+                (if (hasAudio()) 1 else 0)
         }
 
         private fun YtDlpFormatDto.telegramAudioScore(): Int {
             return (if (ext == "m4a" || ext == "mp4") 1 else 0) +
-                    (if (acodec?.startsWith("mp4a") == true || acodec == "aac") 1 else 0)
+                (if (acodec?.startsWith("mp4a") == true || acodec == "aac") 1 else 0)
         }
     }
 }

@@ -129,7 +129,7 @@ class TelegramUpdateHandlerTest {
                     telegramRequestMessageId = 200,
                     url = "https://example.com/video",
                     language = BotLanguage.RU,
-                )
+                ),
             )
         }
     }
@@ -171,7 +171,7 @@ class TelegramUpdateHandlerTest {
                     url = "https://example.com/video",
                     language = BotLanguage.RU,
                     guestQueryId = "guest-query",
-                )
+                ),
             )
         }
     }

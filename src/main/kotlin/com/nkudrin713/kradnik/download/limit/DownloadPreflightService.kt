@@ -2,8 +2,8 @@ package com.nkudrin713.kradnik.download.limit
 
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpFormatDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import org.springframework.stereotype.Service
 import java.util.Locale
 
@@ -32,7 +32,9 @@ class DownloadPreflightService(
                 is AudioUploadPlan.Allowed -> return DownloadPreflightDecision.Allowed(
                     spec = spec.withAudioQuality(plan.audioQuality),
                 )
+
                 is AudioUploadPlan.Rejected -> return DownloadPreflightDecision.Rejected(plan.reason)
+
                 AudioUploadPlan.Unavailable -> Unit
             }
         }
@@ -49,7 +51,7 @@ class DownloadPreflightService(
 
         return DownloadPreflightDecision.Rejected(
             reason = "Selected ${spec.outputType.dbValue} is too large for Telegram: " +
-                    "sizeMb=${formatMegabytes(selectedSize)}, limitMb=${formatMegabytes(uploadLimits.maxUploadBytes)}"
+                "sizeMb=${formatMegabytes(selectedSize)}, limitMb=${formatMegabytes(uploadLimits.maxUploadBytes)}",
         )
     }
 

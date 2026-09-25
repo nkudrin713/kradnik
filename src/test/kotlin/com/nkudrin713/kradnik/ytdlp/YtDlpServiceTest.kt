@@ -1,9 +1,9 @@
-package com.nkudrin713.kradnik.ytdlp.client
+package com.nkudrin713.kradnik.ytdlp
 
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -427,8 +427,8 @@ class YtDlpServiceTest {
         assertTrue(command.args.contains("after_move:KRADNIK_FILEPATH:%(filepath)j"))
         assertTrue(
             command.args.windowed(2).contains(
-                listOf("--max-filesize", TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES.toString())
-            )
+                listOf("--max-filesize", TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES.toString()),
+            ),
         )
         assertEquals(
             TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES * 2,

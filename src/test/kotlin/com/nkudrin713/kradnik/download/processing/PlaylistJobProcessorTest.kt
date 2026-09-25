@@ -10,7 +10,7 @@ import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
+import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every

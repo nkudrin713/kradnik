@@ -1,16 +1,16 @@
 package com.nkudrin713.kradnik.download
 
 import com.nkudrin713.kradnik.download.cover.CoverDownloader
-import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.instagram.InstagramEmbedDownloader
 import com.nkudrin713.kradnik.download.instagram.InstagramEmbedException
 import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpService
-import com.nkudrin713.kradnik.ytdlp.client.YtDlpException
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpException
+import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import org.springframework.stereotype.Component
 import java.nio.file.Path
 
@@ -44,9 +44,11 @@ class DownloadEngine(
             spec.outputType == OutputType.IMAGES && instagram != null -> {
                 instagramDownloader.downloadImages(instagram, outputDir)
             }
+
             spec.outputType == OutputType.VIDEO && instagram?.mediaUri != null -> {
                 instagramDownloader.download(instagram, outputDir)
             }
+
             else -> ytDlpService.download(spec, outputDir)
         }
     }

@@ -5,10 +5,10 @@ import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.request.BaseRequest
 import com.pengrad.telegrambot.response.BaseResponse
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.springframework.stereotype.Component
 import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import org.springframework.stereotype.Component
 
 /**
  * Executes Telegram SDK requests for [TelegramSender] and [TelegramMediaSender].
@@ -43,21 +43,24 @@ class TelegramApiClient(
         errorContext: String? = null,
     ): R where T : BaseRequest<T, R>, R : BaseResponse {
         return suspendCancellableCoroutine { continuation ->
-            val call = bot.execute(request, object : Callback<T, R> {
-                override fun onResponse(request: T, response: R) {
-                    val result = try {
-                        checked(response, errorContext)
-                    } catch (error: Exception) {
-                        continuation.resumeWithException(error)
-                        return
+            val call = bot.execute(
+                request,
+                object : Callback<T, R> {
+                    override fun onResponse(request: T, response: R) {
+                        val result = try {
+                            checked(response, errorContext)
+                        } catch (error: Exception) {
+                            continuation.resumeWithException(error)
+                            return
+                        }
+                        continuation.resume(result)
                     }
-                    continuation.resume(result)
-                }
 
-                override fun onFailure(request: T, error: IOException) {
-                    continuation.resumeWithException(error)
-                }
-            })
+                    override fun onFailure(request: T, error: IOException) {
+                        continuation.resumeWithException(error)
+                    }
+                },
+            )
             continuation.invokeOnCancellation { call.cancel() }
         }
     }
@@ -81,7 +84,8 @@ class TelegramSendException(
 enum class TelegramSendFailureKind {
     INVALID_CACHED_FILE,
     MESSAGE_NOT_MODIFIED,
-    OTHER;
+    OTHER,
+    ;
 
     companion object {
         fun from(errorCode: Int?, description: String?): TelegramSendFailureKind {
@@ -95,7 +99,7 @@ enum class TelegramSendFailureKind {
 
         private fun isInvalidFileId(description: String): Boolean {
             return description.contains("wrong file identifier") ||
-                    description.contains("file_id") && description.contains("invalid")
+                (description.contains("file_id") && description.contains("invalid"))
         }
     }
 }

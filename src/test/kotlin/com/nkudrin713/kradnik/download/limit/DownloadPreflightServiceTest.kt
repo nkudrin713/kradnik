@@ -3,8 +3,8 @@ package com.nkudrin713.kradnik.download.limit
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpFormatDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -179,7 +179,7 @@ class DownloadPreflightServiceTest {
                         filesize = 1,
                         filesizeApprox = null,
                     ),
-                )
+                ),
             ),
         )
 

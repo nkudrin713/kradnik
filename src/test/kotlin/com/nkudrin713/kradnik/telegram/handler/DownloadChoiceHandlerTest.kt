@@ -1,15 +1,15 @@
 package com.nkudrin713.kradnik.telegram.handler
 
-import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceCancellation
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.CANCEL_OPTION_KEY
+import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
@@ -141,7 +141,7 @@ class DownloadChoiceHandlerTest {
                 key = "images",
                 label = "Все изображения",
                 spec = base.option.spec.copy(outputType = OutputType.IMAGES),
-            )
+            ),
         ).apply {
             session.telegramMenuMessageId = null
             session.telegramInlineMessageId = "inline-message"
@@ -162,7 +162,7 @@ class DownloadChoiceHandlerTest {
                 userId = 300,
                 callbackData = DownloadChoiceCallback.encode(token, "images"),
                 inlineMessageId = "inline-message",
-            )
+            ),
         )
 
         verify { sessionService.release(token) }
@@ -177,7 +177,7 @@ class DownloadChoiceHandlerTest {
                 key = "post",
                 label = "Пост целиком",
                 spec = base.option.spec.copy(postText = "Post text"),
-            )
+            ),
         ).apply {
             session.telegramMenuMessageId = null
             session.telegramInlineMessageId = "inline-message"
@@ -198,7 +198,7 @@ class DownloadChoiceHandlerTest {
                 userId = 300,
                 callbackData = DownloadChoiceCallback.encode(token, "post"),
                 inlineMessageId = "inline-message",
-            )
+            ),
         )
 
         verify { sessionService.release(token) }

@@ -1,15 +1,15 @@
 package com.nkudrin713.kradnik.download.repository
 
-import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionRepository
+import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
-import com.nkudrin713.kradnik.download.domain.DownloadSpec
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -66,11 +66,14 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun migrationRemovesLeaseRetryAndTransientMetadataColumns() {
-        val count = jdbcTemplate.queryForObject("""
+        val count = jdbcTemplate.queryForObject(
+            """
             SELECT count(*) FROM information_schema.columns WHERE table_name = 'download_jobs'
             AND column_name IN ('lease_token', 'lease_expires_at', 'attempts', 'next_attempt_at',
                 'source_audio_title', 'source_audio_performer', 'source_duration_seconds')
-        """, Int::class.java)
+        """,
+            Int::class.java,
+        )
         assertEquals(0, count)
     }
 
@@ -103,14 +106,14 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 language = BotLanguage.RU,
                 options = listOf(option),
                 cleanupAfter = Instant.now().plusSeconds(60),
-            )
+            ),
         )
         val coverJob = repository.saveAndFlush(
             job("cover").apply {
                 outputType = OutputType.COVER
                 platform = DownloadPlatform.YOUTUBE
                 language = BotLanguage.RU
-            }
+            },
         )
         val imageJob = repository.saveAndFlush(
             job("images").apply {
@@ -118,13 +121,13 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 platform = DownloadPlatform.INSTAGRAM
                 language = BotLanguage.RU
                 sourcePostText = "Post text"
-            }
+            },
         )
         val preference = preferenceRepository.saveAndFlush(
             TelegramUserPreference(
                 telegramUserId = 1,
                 language = BotLanguage.RU,
-            )
+            ),
         )
 
         val persistedOption = choiceSessionRepository.findById(session.token).orElseThrow().options.single()
@@ -151,14 +154,14 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 telegramUpdateId = 10,
                 telegramMenuMessageId = 20,
                 cleanupAfter = expiredDeadline,
-            )
+            ),
         )
         val expiredUnselectedSession = choiceSessionRepository.saveAndFlush(
             DownloadChoiceSession(
                 telegramUpdateId = 11,
                 telegramMenuMessageId = 21,
                 cleanupAfter = now.plusSeconds(3600),
-            )
+            ),
         )
         val consumedSession = choiceSessionRepository.saveAndFlush(
             DownloadChoiceSession(
@@ -166,7 +169,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 telegramMenuMessageId = 22,
                 cleanupAfter = expiredDeadline,
                 selectedAt = expiredDeadline,
-            )
+            ),
         )
         val activeConsumedSession = choiceSessionRepository.saveAndFlush(
             DownloadChoiceSession(
@@ -174,7 +177,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 telegramMenuMessageId = 23,
                 cleanupAfter = now.plusSeconds(3600),
                 selectedAt = now,
-            )
+            ),
         )
         jdbcTemplate.update(
             "UPDATE download_choice_sessions SET created_at = ? WHERE token = ?",
@@ -218,7 +221,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 listOf(
                     Callable { downloadJobService.createJob(command) },
                     Callable { downloadJobService.createJob(command) },
-                )
+                ),
             ).map { it.get() }
         } finally {
             executor.shutdownNow()
@@ -239,7 +242,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 listOf(
                     Callable { claimNextJob() },
                     Callable { claimNextJob() },
-                )
+                ),
             ).map { it.get() }
         } finally {
             executor.shutdownNow()
@@ -309,14 +312,14 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 status = DownloadJobStatus.COMPLETED
                 telegramFileId = "older-file"
                 completedAt = Instant.parse("2026-01-01T00:00:00Z")
-            }
+            },
         )
         val newer = repository.saveAndFlush(
             job("shared-cache").apply {
                 status = DownloadJobStatus.COMPLETED
                 telegramFileId = "newer-file"
                 completedAt = Instant.parse("2026-01-02T00:00:00Z")
-            }
+            },
         )
 
         val cached = repository.findCachedCompletedJob("shared-cache")
@@ -332,10 +335,12 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         val pool = Executors.newFixedThreadPool(8)
         try {
             val futures = (1..8).map {
-                pool.submit(Callable {
-                    barrier.await(10, java.util.concurrent.TimeUnit.SECONDS)
-                    downloadJobService.claimNextQueuedJob()
-                })
+                pool.submit(
+                    Callable {
+                        barrier.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                        downloadJobService.claimNextQueuedJob()
+                    },
+                )
             }
             assertEquals(1, futures.map { it.get(10, java.util.concurrent.TimeUnit.SECONDS) }.count { it != null })
         } finally {
@@ -396,7 +401,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         DownloadJobRepository::class,
         DownloadChoiceSessionRepository::class,
         TelegramUserPreferenceRepository::class,
-    ]
+    ],
 )
 @Import(DownloadJobService::class)
 class DownloadJobRepositoryTestApplication

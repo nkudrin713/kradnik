@@ -12,7 +12,8 @@ import io.mockk.verify
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DownloadJobServiceTest {
@@ -29,7 +30,7 @@ class DownloadJobServiceTest {
         val created = service.createJob(command())
         val actual = savedJob.captured
 
-        assertTrue(created)
+        assertNotNull(created)
         assertEquals(1, actual.telegramUserId)
         assertEquals(2, actual.telegramChatId)
         assertEquals(3, actual.telegramUpdateId)
@@ -55,7 +56,7 @@ class DownloadJobServiceTest {
 
         val created = service.createJob(command())
 
-        assertFalse(created)
+        assertNull(created)
         verify(exactly = 0) { repository.save(any()) }
     }
 
@@ -69,7 +70,7 @@ class DownloadJobServiceTest {
     @Test
     fun doesNotOverwriteTerminalJob() {
         every { repository.complete(1, "file") } returns 0
-        assertFailsWith<IllegalStateException> { service.markCompleted(job(), "file") }
+        assertFalse(service.markCompleted(job(), "file"))
     }
 
     private fun command(): CreateDownloadJobCommand {

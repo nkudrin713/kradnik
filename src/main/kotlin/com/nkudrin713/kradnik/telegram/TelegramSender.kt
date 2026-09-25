@@ -21,6 +21,7 @@ import java.util.UUID
 class TelegramSender(
     private val apiClient: TelegramApiClient,
     private val downloadChoiceView: TelegramDownloadChoiceView,
+    private val downloadJobView: TelegramDownloadJobView,
     private val messages: TelegramMessages,
 ) {
     fun sendMessage(
@@ -66,7 +67,7 @@ class TelegramSender(
         status: TelegramDownloadStatus,
         language: BotLanguage = BotLanguage.EN,
     ) {
-        editText(address, messages.text(language, status.message))
+        editText(address, messages.text(language, status.message), EMPTY_KEYBOARD)
     }
 
     fun editStatus(
@@ -76,7 +77,32 @@ class TelegramSender(
         language: BotLanguage = BotLanguage.EN,
     ) {
         messageId ?: return
-        editText(chatId, messageId, messages.text(language, status.message))
+        editText(chatId, messageId, messages.text(language, status.message), EMPTY_KEYBOARD)
+    }
+
+    fun editJobStatus(
+        address: TelegramMessageAddress,
+        status: TelegramDownloadStatus,
+        jobId: Long,
+        language: BotLanguage = BotLanguage.EN,
+    ) {
+        editText(
+            address,
+            messages.text(language, status.message),
+            downloadJobView.cancelKeyboard(jobId, language),
+        )
+    }
+
+    fun editCancelledJob(
+        address: TelegramMessageAddress,
+        jobId: Long,
+        language: BotLanguage = BotLanguage.EN,
+    ) {
+        editText(
+            address,
+            messages.text(language, TelegramMessage.STATUS_CANCELLED_BY_USER),
+            downloadJobView.backKeyboard(jobId, language),
+        )
     }
 
     fun editDownloadChoice(
@@ -120,8 +146,12 @@ class TelegramSender(
         editText(chatId, messageId, text, keyboard)
     }
 
-    fun editMessage(address: TelegramMessageAddress, text: String) {
-        editText(address, text)
+    fun editMessage(
+        address: TelegramMessageAddress,
+        text: String,
+        keyboard: InlineKeyboardMarkup? = null,
+    ) {
+        editText(address, text, keyboard)
     }
 
     fun answerCallback(
@@ -182,6 +212,10 @@ class TelegramSender(
         parseMode?.let(request::parseMode)
         apiClient.execute(request)
     }
+
+    private companion object {
+        val EMPTY_KEYBOARD = InlineKeyboardMarkup()
+    }
 }
 
 sealed interface TelegramMessageAddress {
@@ -199,4 +233,5 @@ enum class TelegramDownloadStatus(val message: TelegramMessage) {
     AUTHENTICATION_REQUIRED(TelegramMessage.STATUS_AUTHENTICATION_REQUIRED),
     SOURCE_UNAVAILABLE(TelegramMessage.STATUS_SOURCE_UNAVAILABLE),
     ERROR(TelegramMessage.STATUS_ERROR),
+    CANCELLED(TelegramMessage.STATUS_CANCELLED_BY_USER),
 }

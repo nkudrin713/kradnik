@@ -73,6 +73,7 @@ class DownloadJobProcessor(
             val fileId = telegramFileSender.send(job, file)
             complete(job, fileId)
         } catch (error: CancellationException) {
+            if (downloadJobService.isCancelledByUser(job.requiredId())) return
             // Shutdown leaves PROCESSING for startup recovery.
             throw error
         } catch (error: InterruptedException) {
@@ -107,7 +108,7 @@ class DownloadJobProcessor(
     }
 
     private fun complete(job: DownloadJob, fileId: String) {
-        downloadJobService.markCompleted(job, fileId)
+        if (!downloadJobService.markCompleted(job, fileId)) return
         logger.info("JOB[{}] completed", job.id)
         val messageId = job.telegramStatusMessageId
         if (job.telegramInlineMessageId == null && messageId != null) {
@@ -120,13 +121,22 @@ class DownloadJobProcessor(
     }
 
     private fun fail(job: DownloadJob, reason: String, status: TelegramDownloadStatus) {
-        downloadJobService.markFailed(job, reason)
+        if (!downloadJobService.markFailed(job, reason)) return
         setStatus(job, status)
     }
 
     private fun setStatus(job: DownloadJob, status: TelegramDownloadStatus) {
         try {
             val inlineId = job.telegramInlineMessageId
+            val address = if (inlineId != null) {
+                TelegramMessageAddress.Inline(inlineId)
+            } else {
+                job.telegramStatusMessageId?.let { TelegramMessageAddress.Chat(job.telegramChatId, it) }
+            } ?: return
+            if (status == TelegramDownloadStatus.DOWNLOADING || status == TelegramDownloadStatus.UPLOADING) {
+                telegramSender.editJobStatus(address, status, job.requiredId(), job.language)
+                return
+            }
             if (inlineId != null) {
                 telegramSender.editStatus(TelegramMessageAddress.Inline(inlineId), status, job.language)
             } else {

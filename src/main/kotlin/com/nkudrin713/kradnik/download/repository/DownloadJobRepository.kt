@@ -4,6 +4,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadJob
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.jpa.repository.Lock
+import jakarta.persistence.LockModeType
 
 interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
     fun findByTelegramUpdateId(telegramUpdateId: Int): DownloadJob?
@@ -14,7 +16,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
     @Query(value = """
         WITH picked AS (
             SELECT id FROM download_jobs
-            WHERE status = 'queued'
+            WHERE status = 'queued' AND workload_type = 'single'
             ORDER BY created_at, id
             FOR UPDATE SKIP LOCKED
             LIMIT 1
@@ -26,6 +28,36 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
         RETURNING download_jobs.*
     """, nativeQuery = true)
     fun claimNextQueuedJob(): DownloadJob?
+
+    @Query(value = """
+        WITH picked AS (
+            SELECT id FROM download_jobs
+            WHERE status = 'queued' AND workload_type = 'playlist_audio'
+            ORDER BY created_at, id
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+        )
+        UPDATE download_jobs
+        SET status = 'processing', started_at = now(), updated_at = now()
+        FROM picked
+        WHERE download_jobs.id = picked.id
+        RETURNING download_jobs.*
+    """, nativeQuery = true)
+    fun claimNextQueuedPlaylistJob(): DownloadJob?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT job FROM DownloadJob job WHERE job.id = :jobId")
+    fun findForUpdate(jobId: Long): DownloadJob?
+
+    @Modifying
+    @Query(value = """
+        UPDATE download_jobs
+        SET status = 'cancelled_by_user', completed_at = now(), updated_at = now(),
+            error_message = NULL
+        WHERE id = :jobId AND telegram_user_id = :telegramUserId
+          AND status IN ('queued', 'processing')
+    """, nativeQuery = true)
+    fun cancelByUser(jobId: Long, telegramUserId: Long): Int
 
     @Modifying
     @Query(value = """

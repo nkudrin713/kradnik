@@ -24,6 +24,7 @@ import kotlin.test.Test
 class TelegramUpdateHandlerTest {
     private val coordinator: DownloadChoiceCoordinator = mockk()
     private val choiceHandler: DownloadChoiceHandler = mockk()
+    private val cancellationHandler: DownloadCancellationHandler = mockk(relaxed = true)
     private val telegramSender: TelegramSender = mockk()
     private val donationSender: TelegramDonationSender = mockk()
     private val languageSelector: TelegramLanguageSelector = mockk()
@@ -139,11 +140,13 @@ class TelegramUpdateHandlerTest {
             every { data() } returns "dl:token:option"
         }
         val update = mockk<Update> {
+            every { updateId() } returns 500
             every { guestMessage() } returns null
             every { message() } returns null
             every { callbackQuery() } returns callbackQuery
         }
         every { languageSelector.handle(callbackQuery) } returns false
+        every { cancellationHandler.handle(callbackQuery, 500) } returns false
         every { choiceHandler.handle(callbackQuery) } just runs
 
         handler().handle(update)
@@ -190,6 +193,7 @@ class TelegramUpdateHandlerTest {
         return TelegramUpdateHandler(
             downloadChoiceCoordinator = coordinator,
             downloadChoiceHandler = choiceHandler,
+            downloadCancellationHandler = cancellationHandler,
             telegramSender = telegramSender,
             telegramDonationSender = donationSender,
             languageSelector = languageSelector,

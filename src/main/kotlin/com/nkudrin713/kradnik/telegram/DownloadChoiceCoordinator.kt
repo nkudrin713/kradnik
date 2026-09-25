@@ -69,6 +69,15 @@ class DownloadChoiceCoordinator(
                     replyToMessageId = command.telegramRequestMessageId,
                 ),
             )
+        submit(command, messageAddress)
+    }
+
+    fun prepareAgain(command: PrepareDownloadChoiceCommand, messageAddress: TelegramMessageAddress) {
+        telegramSender.editStatus(messageAddress, TelegramDownloadStatus.ANALYZING, command.language)
+        submit(command, messageAddress)
+    }
+
+    private fun submit(command: PrepareDownloadChoiceCommand, messageAddress: TelegramMessageAddress) {
         try {
             executor.execute {
                 runBlocking { prepareAsync(command, messageAddress) }

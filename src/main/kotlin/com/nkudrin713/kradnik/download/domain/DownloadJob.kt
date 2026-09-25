@@ -5,6 +5,9 @@ import com.nkudrin713.kradnik.download.repository.DownloadPlatformConverter
 import com.nkudrin713.kradnik.download.repository.DownloadJobStatusConverter
 import com.nkudrin713.kradnik.download.repository.DownloadOutputTypeConverter
 import com.nkudrin713.kradnik.download.repository.StringListJsonConverter
+import com.nkudrin713.kradnik.download.repository.DownloadWorkloadTypeConverter
+import com.nkudrin713.kradnik.download.repository.PlaylistAudioEntriesJsonConverter
+import com.nkudrin713.kradnik.download.repository.PlaylistAudioResultsJsonConverter
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.BotLanguageConverter
 import jakarta.persistence.Column
@@ -75,6 +78,18 @@ class DownloadJob(
 
 	@Column(name = "source_post_text", columnDefinition = "TEXT")
 	var sourcePostText: String? = null,
+
+    @Convert(converter = DownloadWorkloadTypeConverter::class)
+    @Column(name = "workload_type", nullable = false)
+    var workloadType: DownloadWorkloadType = DownloadWorkloadType.SINGLE,
+
+    @Convert(converter = PlaylistAudioEntriesJsonConverter::class)
+    @Column(name = "playlist_entries_json", nullable = false, columnDefinition = "TEXT")
+    var playlistEntries: List<PlaylistAudioEntry> = emptyList(),
+
+    @Convert(converter = PlaylistAudioResultsJsonConverter::class)
+    @Column(name = "playlist_results_json", nullable = false, columnDefinition = "TEXT")
+    var playlistResults: List<PlaylistAudioResult> = emptyList(),
 
 	@Column(name = "download_preset", nullable = false)
 	var downloadPreset: String = "",

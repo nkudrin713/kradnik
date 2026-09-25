@@ -11,6 +11,9 @@ data class DownloadChoiceMediaInfo(
     val title: String?,
     val durationSeconds: Long?,
     val authorUsername: String? = null,
+    val playlistCount: Int? = null,
+    val estimatedSizeBytes: Long? = null,
+    val audioBitrateKbps: Long? = null,
 )
 
 data class DownloadChoiceOptionSnapshot(

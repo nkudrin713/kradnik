@@ -5,6 +5,9 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
+import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
+import com.nkudrin713.kradnik.telegram.TelegramAudio
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
@@ -95,6 +98,41 @@ class TelegramFileSender(
         }
         sendPostText(job)
         return sentId
+    }
+
+    suspend fun stagePlaylistAudio(file: DownloadedFile, entry: PlaylistAudioEntry): String {
+        val storageChatId = properties.fileStorageChatId ?: throw TelegramSendException(
+            errorCode = null,
+            description = "telegram.bot.file-storage-chat-id is not configured",
+        )
+        return telegramMediaSender.sendAudio(
+            chatId = storageChatId,
+            file = file.file,
+            title = entry.title,
+            performer = null,
+            durationSeconds = entry.durationSeconds,
+        )
+    }
+
+    suspend fun sendPlaylistAudios(
+        job: DownloadJob,
+        results: List<PlaylistAudioResult>,
+    ): List<String> {
+        val entries = job.playlistEntries.associateBy(PlaylistAudioEntry::position)
+        val audios = results.sortedBy(PlaylistAudioResult::position).mapNotNull { result ->
+            val fileId = result.fileId ?: return@mapNotNull null
+            val entry = entries[result.position] ?: return@mapNotNull null
+            TelegramAudio(
+                fileId = fileId,
+                title = entry.title,
+                durationSeconds = entry.durationSeconds,
+            )
+        }
+        return telegramMediaSender.sendCachedAudios(
+            chatId = job.telegramChatId,
+            audios = audios,
+            replyToMessageId = job.telegramRequestMessageId,
+        )
     }
 
     private suspend fun uploadForInline(job: DownloadJob, file: DownloadedFile): String {

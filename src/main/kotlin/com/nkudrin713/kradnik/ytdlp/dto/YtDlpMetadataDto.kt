@@ -6,6 +6,10 @@ import java.math.BigDecimal
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class YtDlpMetadataDto(
+    val id: String? = null,
+    val url: String? = null,
+    @JsonProperty("webpage_url")
+    val webpageUrl: String? = null,
     val title: String?,
     val thumbnail: String?,
     val duration: BigDecimal?,
@@ -23,6 +27,8 @@ data class YtDlpMetadataDto(
     val formats: List<YtDlpFormatDto>? = null,
     val thumbnails: List<YtDlpThumbnailDto>? = null,
     val entries: List<YtDlpMetadataDto>? = null,
+    @JsonProperty("playlist_count")
+    val playlistCount: Int? = null,
     val description: String? = null,
 )
 

@@ -34,10 +34,12 @@ import java.util.UUID
 class TelegramSenderTest {
     private val bot: TelegramBot = mockk()
     private val downloadChoiceView: TelegramDownloadChoiceView = mockk()
+    private val downloadJobView: TelegramDownloadJobView = mockk()
     private val messages = telegramMessages()
     private val sender = TelegramSender(
         apiClient = TelegramApiClient(bot),
         downloadChoiceView = downloadChoiceView,
+        downloadJobView = downloadJobView,
         messages = messages,
     )
 

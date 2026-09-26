@@ -67,7 +67,7 @@ class DownloadJobProcessorTest {
     private fun processor(preflightService: DownloadPreflightService = preflight): DownloadJobProcessor {
         val progress = TelegramJobProgress(telegram, telegramMessages())
         return DownloadJobProcessor(
-            SingleMediaHandlers(VideoHandler(engine, preflightService, video), AudioHandler(engine, preflightService), CoverHandler(engine, preflightService, mockk()), ImagesHandler(engine, preflightService)),
+            SingleMediaHandlers(VideoHandler(engine, preflightService, video), AudioHandler(engine, preflightService), CoverHandler(engine, preflightService, mockk()), ImagesHandler(engine, preflightService), mockk()),
             TelegramResultCache(jobs),
             sender,
             JobLifecycle(jobs, progress),

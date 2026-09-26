@@ -22,7 +22,7 @@ class VideoMetadataProbe(
                     "-v",
                     "error",
                     "-show_entries",
-                    "format=format_name:" +
+                    "format=format_name,duration:" +
                         "stream=codec_type,codec_name,codec_tag_string,profile,level,width,height,pix_fmt," +
                         "r_frame_rate,avg_frame_rate,sample_aspect_ratio,display_aspect_ratio," +
                         "color_space,color_transfer,color_primaries",
@@ -76,6 +76,9 @@ class VideoMetadataProbe(
             colorSpace = videoStream?.text(COLOR_SPACE),
             colorTransfer = videoStream?.text(COLOR_TRANSFER),
             colorPrimaries = videoStream?.text(COLOR_PRIMARIES),
+            durationSeconds = root.path(FORMAT).path("duration").asText().toDoubleOrNull()
+                ?.takeIf { it.isFinite() && it >= 0 && it <= Int.MAX_VALUE }
+                ?.let { kotlin.math.ceil(it).toInt() },
         )
     }
 

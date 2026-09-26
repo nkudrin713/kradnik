@@ -155,7 +155,7 @@ class DownloadEngineTest {
         )
         coEvery { instagramDownloader.prepare(videoSpec) } throws InstagramContentUnavailableException()
         coEvery { ytDlpService.extractInstagramImageMetadata(videoSpec) } returns metadata
-        every { instagramDownloader.prepareImages(videoSpec, metadata) } returns prepared
+        every { instagramDownloader.prepareFromMetadata(videoSpec, metadata) } returns prepared
         coEvery { instagramDownloader.downloadImages(prepared, outputDir) } returns downloaded
 
         assertEquals(preparation, engine.prepare(videoSpec))

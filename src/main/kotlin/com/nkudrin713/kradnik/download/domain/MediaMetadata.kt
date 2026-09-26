@@ -21,7 +21,7 @@ data class MediaMetadata(
     val contentType: MediaContentType = MediaContentType.VIDEO,
 )
 
-enum class MediaContentType { VIDEO, IMAGES }
+enum class MediaContentType { VIDEO, IMAGES, CAROUSEL }
 
 data class MediaFormat(
     val formatId: String? = null,

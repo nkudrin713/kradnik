@@ -16,6 +16,7 @@ data class VideoMetadata(
     val colorSpace: String? = null,
     val colorTransfer: String? = null,
     val colorPrimaries: String? = null,
+    val durationSeconds: Int? = null,
 ) {
     val isVertical: Boolean = height > width
     val isMp4Container: Boolean = containerFormat

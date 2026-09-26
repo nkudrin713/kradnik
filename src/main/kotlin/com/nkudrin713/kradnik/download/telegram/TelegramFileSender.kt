@@ -1,7 +1,10 @@
 package com.nkudrin713.kradnik.download.telegram
 
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
+import com.nkudrin713.kradnik.download.domain.PostMedia
+import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
+import com.nkudrin713.kradnik.telegram.TelegramPostSender
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
 import org.springframework.stereotype.Component
@@ -14,8 +17,18 @@ import org.springframework.stereotype.Component
 class TelegramFileSender(
     private val telegramMediaSender: TelegramMediaSender,
     private val properties: TelegramBotProperties,
+    private val postSender: TelegramPostSender,
 ) {
     suspend fun send(context: DeliveryContext, artifact: MediaArtifact): String {
+        if (artifact is MediaArtifact.Post) return TelegramReceiptCodec.post(postSender.send(context, artifact.items))
+        if (context.inlineMessageId == null && !context.postText.isNullOrBlank()) {
+            val items = when (artifact) {
+                is MediaArtifact.Video -> listOf(PostMedia(PostMediaKind.VIDEO, artifact.file))
+                is MediaArtifact.Photos -> artifact.files.map { PostMedia(PostMediaKind.PHOTO, it) }
+                else -> null
+            }
+            if (items != null) return TelegramReceiptCodec.post(postSender.send(context, items))
+        }
         val inlineMessageId = context.inlineMessageId
         if (inlineMessageId != null) {
             val storageChatId = properties.fileStorageChatId ?: throw TelegramSendException(
@@ -39,17 +52,17 @@ class TelegramFileSender(
 
                 is MediaArtifact.Document -> telegramMediaSender.editInlineDocument(inlineMessageId, fileId)
 
-                is MediaArtifact.Photos -> throw TelegramSendException("Instagram image groups are unavailable in inline mode")
+                is MediaArtifact.Photos, is MediaArtifact.Post -> throw TelegramSendException("Instagram posts are unavailable in inline mode")
             }
         }
 
-        val fileId = sendMedia(context.chatId, context.replyToMessageId, artifact)
-        sendPostText(context)
-        return fileId
+        return sendMedia(context.chatId, context.replyToMessageId, artifact)
     }
 
     private suspend fun sendMedia(chatId: Long, replyToMessageId: Int?, artifact: MediaArtifact): String {
         return when (artifact) {
+            is MediaArtifact.Post -> error("Posts require full delivery context")
+
             is MediaArtifact.Video -> telegramMediaSender.sendVideo(
                 chatId = chatId,
                 file = artifact.file,
@@ -82,6 +95,15 @@ class TelegramFileSender(
     }
 
     suspend fun sendCached(context: DeliveryContext, media: CachedMedia): String {
+        if (media is CachedMedia.Post) return TelegramReceiptCodec.post(postSender.sendCached(context, media.items))
+        if (context.inlineMessageId == null && !context.postText.isNullOrBlank()) {
+            val items = when {
+                media is CachedMedia.Photos -> media.fileIds.map { CachedPostItem(PostMediaKind.PHOTO, it) }
+                media is CachedMedia.Single && media.kind == TelegramMediaKind.VIDEO -> listOf(CachedPostItem(PostMediaKind.VIDEO, media.fileId))
+                else -> null
+            }
+            if (items != null) return TelegramReceiptCodec.post(postSender.sendCached(context, items))
+        }
         val inlineId = context.inlineMessageId
         if (inlineId != null) {
             if (media is CachedMedia.Photos) throw TelegramSendException("Instagram image groups are unavailable in inline mode")
@@ -92,7 +114,9 @@ class TelegramFileSender(
                 TelegramMediaKind.DOCUMENT -> telegramMediaSender.editInlineDocument(inlineId, media.fileId)
             }
         }
-        val sentId = when (media) {
+        return when (media) {
+            is CachedMedia.Post -> error("Posts require full delivery context")
+
             is CachedMedia.Single -> when (media.kind) {
                 TelegramMediaKind.VIDEO -> telegramMediaSender.sendCachedVideo(context.chatId, media.fileId, context.replyToMessageId)
                 TelegramMediaKind.AUDIO -> telegramMediaSender.sendCachedAudio(context.chatId, media.fileId, replyToMessageId = context.replyToMessageId)
@@ -101,16 +125,5 @@ class TelegramFileSender(
 
             is CachedMedia.Photos -> TelegramReceiptCodec.photos(telegramMediaSender.sendCachedPhotos(context.chatId, media.fileIds, context.replyToMessageId))
         }
-        sendPostText(context)
-        return sentId
-    }
-
-    private suspend fun sendPostText(context: DeliveryContext) {
-        val postText = context.postText?.takeIf(String::isNotBlank) ?: return
-        telegramMediaSender.sendMonospaceText(
-            chatId = context.chatId,
-            text = postText,
-            replyToMessageId = context.replyToMessageId,
-        )
     }
 }

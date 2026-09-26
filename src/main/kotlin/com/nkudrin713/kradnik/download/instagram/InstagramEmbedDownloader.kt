@@ -5,6 +5,7 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import org.slf4j.LoggerFactory
@@ -41,11 +42,21 @@ class InstagramEmbedDownloader(
         } catch (error: Exception) {
             throw InstagramEmbedException("Instagram embed request failed", error)
         }
-        val context = extractContext(html)
-        val mediaUri = context.findFirstText(VIDEO_URL)?.let(::parseMediaUri)
-        if (mediaUri == null && context.findFirstBoolean(IS_VIDEO) != true) {
-            throw InstagramEmbedException("Instagram embed response does not contain video")
+        val payload = extractContext(html)
+        val context = payload.findValue("shortcode_media") ?: payload.findValue("media") ?: payload
+        val children = context.path("edge_sidecar_to_children").path("edges")
+        val nodes = if (children.isArray) children.map { it.path("node") } else listOf(context)
+        requireItemCount(nodes.size)
+        val items = nodes.map { node ->
+            if (node.findFirstBoolean(IS_VIDEO) == true || node.findFirstText(VIDEO_URL) != null) {
+                InstagramMedia(PostMediaKind.VIDEO, node.findFirstText(VIDEO_URL)?.let(::parseMediaUri))
+            } else {
+                val url = node.findFirstText(DISPLAY_URL)
+                    ?: throw InstagramEmbedException("Instagram photo URL is missing")
+                InstagramMedia(PostMediaKind.PHOTO, parseMediaUri(url))
+            }
         }
+        val mediaUri = items.singleOrNull()?.takeIf { it.kind == PostMediaKind.VIDEO }?.uri
         val mediaSize = mediaUri?.let { httpClient.contentLength(it) }
         val username = context.findFirstText(USERNAME)
         val postText = context.findFirstText(CAPTION)
@@ -55,6 +66,8 @@ class InstagramEmbedDownloader(
         val preparedDownload = InstagramPreparedDownload(
             shortcode = shortcode,
             mediaUri = mediaUri,
+            imageUris = items.filter { it.kind == PostMediaKind.PHOTO }.map { requireNotNull(it.uri) },
+            items = items,
             metadata = YtDlpMetadataDto(
                 title = context.findFirstText(TITLE)
                     ?: username?.let { "Video by $it" }
@@ -85,48 +98,47 @@ class InstagramEmbedDownloader(
         return preparedDownload
     }
 
-    fun prepareImages(
+    fun prepareFromMetadata(
         spec: SourceRequest,
         metadata: YtDlpMetadataDto,
     ): InstagramPreparedDownload? {
-        val entries = metadata.entries.orEmpty()
-        val imageUris = if (entries.isNotEmpty()) {
-            if (entries.any { it.formats.orEmpty().isNotEmpty() }) {
-                return null
-            }
-            entries.map { entry ->
+        val entries = metadata.entries.orEmpty().ifEmpty { listOf(metadata) }
+        requireItemCount(entries.size)
+        val items = entries.map { entry ->
+            if (entry.formats.orEmpty().any { it.vcodec != "none" }) {
+                // Let yt-dlp select and merge the formats for this one carousel position.
+                InstagramMedia(PostMediaKind.VIDEO, null)
+            } else {
                 val imageUrl = entry.bestImageUrl() ?: return null
-                parseMediaUri(imageUrl)
+                InstagramMedia(PostMediaKind.PHOTO, parseMediaUri(imageUrl))
             }
-        } else {
-            if (metadata.formats.orEmpty().isNotEmpty()) {
-                return null
-            }
-            listOfNotNull(metadata.bestImageUrl()?.let(::parseMediaUri))
-        }.distinct()
-        if (imageUris.isEmpty() || imageUris.size > MAX_IMAGE_COUNT) {
-            return null
         }
+        val imageUris = items.filter { it.kind == PostMediaKind.PHOTO }.map { requireNotNull(it.uri) }
 
         val shortcode = parseInstagramMediaUrl(spec.originalUrl)?.shortcode ?: return null
         return InstagramPreparedDownload(
             shortcode = shortcode,
             mediaUri = null,
             imageUris = imageUris,
-            metadata = metadata.copy(
-                thumbnail = imageUris.first().toString(),
-                duration = null,
-                width = null,
-                height = null,
-                filesize = null,
-                filesizeApprox = null,
-                track = null,
-                artist = null,
-                requestedFormats = null,
-                formats = null,
-                thumbnails = null,
-                entries = null,
-            ),
+            items = items,
+            metadata = if (items.singleOrNull()?.kind == PostMediaKind.VIDEO) {
+                metadata
+            } else {
+                metadata.copy(
+                    thumbnail = imageUris.firstOrNull()?.toString() ?: metadata.thumbnail,
+                    duration = null,
+                    width = null,
+                    height = null,
+                    filesize = null,
+                    filesizeApprox = null,
+                    track = null,
+                    artist = null,
+                    requestedFormats = null,
+                    formats = null,
+                    thumbnails = null,
+                    entries = null,
+                )
+            },
         )
     }
 
@@ -176,6 +188,20 @@ class InstagramEmbedDownloader(
             sizeBytes = totalSize,
             additionalFiles = files.drop(1).map(DownloadedFile::file),
         )
+    }
+
+    suspend fun downloadItem(item: InstagramMedia, outputDir: Path): DownloadedFile {
+        val uri = requireNotNull(item.uri) { "Instagram item requires yt-dlp download" }
+        return when (item.kind) {
+            PostMediaKind.PHOTO -> httpClient.downloadImage(uri, outputDir.resolve("photo.jpg"))
+            PostMediaKind.VIDEO -> httpClient.download(uri, outputDir.resolve("video.mp4"))
+        }
+    }
+
+    private fun requireItemCount(count: Int) {
+        if (count !in 1..MAX_IMAGE_COUNT) {
+            throw InstagramEmbedException("Instagram post must contain 1 to $MAX_IMAGE_COUNT items")
+        }
     }
 
     private fun YtDlpMetadataDto.bestImageUrl(): String? {
@@ -321,7 +347,14 @@ data class InstagramPreparedDownload(
     val mediaUri: URI?,
     val imageUris: List<URI> = emptyList(),
     val metadata: YtDlpMetadataDto,
+    val items: List<InstagramMedia> = if (imageUris.isNotEmpty()) {
+        imageUris.map { InstagramMedia(PostMediaKind.PHOTO, it) }
+    } else {
+        listOf(InstagramMedia(PostMediaKind.VIDEO, mediaUri))
+    },
 )
+
+data class InstagramMedia(val kind: PostMediaKind, val uri: URI?)
 
 open class InstagramEmbedException(
     message: String,

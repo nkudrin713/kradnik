@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="850" viewBox="0 0 1280 850" role="img" aria-labelledby="title description">
+<title id="title">YouTube playlist · ZIP archive</title>
+<desc id="description">PlaylistJobProcessor runs ZipPlaylistWorkflow under a timeout and a workspace monitor. Bounded parallel downloads skip recognized source failures but abort on size or disk failures. Successful local tracks are packaged, uploaded directly, and conditionally completed. All local files are cleaned after the attempt.</desc>
+<defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <style>
+      .title { font: 700 26px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .stage { font: 700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .name { font: 600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #0f172a; }
+      .note { font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
+      .small { font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
+      .box { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.5; rx: 10; }
+      .store { fill: #eff6ff; stroke: #3b82f6; stroke-width: 1.5; rx: 10; }
+      .external { fill: #f0fdf4; stroke: #22c55e; stroke-width: 1.5; rx: 10; }
+      .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 14; }
+      .arrow { fill: none; stroke: #64748b; stroke-width: 2; marker-end: url(#arrow); }
+      .divider { stroke: #cbd5e1; stroke-width: 1.5; }
+    </style>
+  </defs>
+<rect width="1280" height="850" fill="#ffffff"/>
+<text x="40" y="44" class="title">YouTube playlist · ZIP archive</text>
+<text x="40" y="72" class="note">Each attempt rebuilds local tracks and the archive. Telegram track cache is not used.</text>
+<text x="40" y="113" class="stage">YouTubePlaylistPlanner → saved track range + ZIP → persisted queue</text>
+<rect x="40" y="143" width="340" height="92" class="box"/>
+<text x="210.0" y="173" class="name" text-anchor="middle">PlaylistQueueWorker</text>
+<text x="210.0" y="200" class="small" text-anchor="middle">claim a queued playlist job</text>
+<rect x="470" y="143" width="340" height="92" class="box"/>
+<text x="640.0" y="173" class="name" text-anchor="middle">PlaylistJobProcessor</text>
+<text x="640.0" y="200" class="small" text-anchor="middle">map PlaylistAudioRequest; create workspace</text>
+<rect x="900" y="143" width="340" height="92" class="box"/>
+<text x="1070.0" y="173" class="name" text-anchor="middle">ZipPlaylistWorkflow</text>
+<text x="1070.0" y="200" class="small" text-anchor="middle">one timeout covers download to upload</text>
+<path d="M 380 189 H 470" class="arrow"/>
+<path d="M 810 189 H 900" class="arrow"/>
+<path d="M 1070 235 V 272" class="arrow"/>
+<rect x="40" y="272" width="1200" height="332" class="panel"/>
+<text x="65" y="308" class="stage">Whole attempt: timeout + PlaylistWorkspaceBudget</text>
+<text x="65" y="338" class="note">Check workspace size and free space before starting and every 250 ms during download, packaging, and upload.</text>
+<rect x="65" y="385" width="255" height="135" class="box"/>
+<text x="192.5" y="415" class="name" text-anchor="middle">PlaylistEntryDownloader</text>
+<text x="192.5" y="442" class="small" text-anchor="middle">bounded parallel yt-dlp downloads</text>
+<text x="192.5" y="466" class="small" text-anchor="middle">96 kbps MP3 per entry</text>
+<text x="192.5" y="490" class="small" text-anchor="middle">recognized source errors → skip</text>
+<rect x="365" y="385" width="255" height="135" class="box"/>
+<text x="492.5" y="415" class="name" text-anchor="middle">Validate local results</text>
+<text x="492.5" y="442" class="small" text-anchor="middle">sum actual track file sizes</text>
+<text x="492.5" y="466" class="small" text-anchor="middle">require ≥ 1 successful track</text>
+<text x="492.5" y="490" class="small" text-anchor="middle">check job is still PROCESSING</text>
+<rect x="665" y="385" width="255" height="135" class="box"/>
+<text x="792.5" y="415" class="name" text-anchor="middle">PlaylistZipBuilder</text>
+<text x="792.5" y="442" class="small" text-anchor="middle">PACKING; preserve track order</text>
+<text x="792.5" y="466" class="small" text-anchor="middle">numbered entries; size limit</text>
+<text x="792.5" y="490" class="small" text-anchor="middle">check PROCESSING before upload</text>
+<rect x="965" y="385" width="250" height="135" class="external"/>
+<text x="1090.0" y="415" class="name" text-anchor="middle">TelegramPlaylistSender</text>
+<text x="1090.0" y="442" class="small" text-anchor="middle">UPLOADING; sendArchive</text>
+<text x="1090.0" y="466" class="small" text-anchor="middle">upload document to the user</text>
+<text x="1090.0" y="490" class="small" text-anchor="middle">no storage chat required</text>
+<path d="M 320 452 H 365" class="arrow"/>
+<path d="M 620 452 H 665" class="arrow"/>
+<path d="M 920 452 H 965" class="arrow"/>
+<text x="65" y="561" class="note">Size limits, disk failures, and other non-source errors abort the attempt; an empty result also fails.</text>
+<path d="M 1090 604 V 643 H 210 V 679" class="arrow"/>
+<text x="640" y="636" class="small" text-anchor="middle">after successful archive delivery</text>
+<rect x="40" y="679" width="340" height="100" class="box"/>
+<text x="210.0" y="709" class="name" text-anchor="middle">JobLifecycle.complete</text>
+<text x="210.0" y="736" class="small" text-anchor="middle">conditional transition to COMPLETED</text>
+<rect x="470" y="679" width="340" height="100" class="box"/>
+<text x="640.0" y="709" class="name" text-anchor="middle">TelegramJobProgress</text>
+<text x="640.0" y="736" class="small" text-anchor="middle">summary only after completion</text>
+<text x="640.0" y="760" class="small" text-anchor="middle">and only if some entries failed</text>
+<rect x="900" y="679" width="340" height="100" class="box"/>
+<text x="1070.0" y="709" class="name" text-anchor="middle">WorkDirCleaner</text>
+<text x="1070.0" y="736" class="small" text-anchor="middle">processor finally removes tracks + ZIP</text>
+<text x="1070.0" y="760" class="small" text-anchor="middle">also after failure or cancellation</text>
+<path d="M 380 729 H 470" class="arrow"/>
+<path d="M 810 729 H 900" class="arrow"/>
+<text x="40" y="824" class="note">Restart rebuilds every local file. Cancellation suppresses late completion; the workflow timeout fails the attempt.</text>
+</svg>

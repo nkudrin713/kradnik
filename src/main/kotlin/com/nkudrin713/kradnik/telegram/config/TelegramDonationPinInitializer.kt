@@ -11,19 +11,24 @@ import org.springframework.stereotype.Component
 @Component
 class TelegramDonationPinInitializer(
     private val telegramDonationSender: TelegramDonationSender,
-    @Value("\${telegram.donation.pin.enabled:false}")
+    @Value($$"${telegram.donation.pin.enabled:false}")
     private val enabled: Boolean,
-    @Value("\${telegram.donation.channel-id:@mediakradnik}")
+    @Value($$"${telegram.donation.channel-id:@mediakradnik}")
     private val channelId: String,
-    @Value("\${telegram.donation.url:}")
+    @Value($$"${telegram.donation.url:}")
     private val donationUrl: String,
-    @Value("\${telegram.donation.pin-message-id:}")
+    @Value($$"${telegram.donation.pin-message-id:}")
     private val pinMessageId: String,
-    @Value("\${telegram.donation.pin-language:en}")
+    @Value($$"${telegram.donation.pin-language:en}")
     private val pinLanguage: String = "en",
 ) : ApplicationRunner {
     private val logger = LoggerFactory.getLogger(javaClass)
 
+    /**
+     * Creates or updates the configured donation pin at startup when enabled and a donation URL is present.
+     * A missing or non-numeric message ID creates a new pin; the resulting ID is logged, not persisted here.
+     * An unsupported language falls back to English. Telegram failures are logged without failing startup.
+     */
     override fun run(args: ApplicationArguments) {
         if (!enabled) {
             return

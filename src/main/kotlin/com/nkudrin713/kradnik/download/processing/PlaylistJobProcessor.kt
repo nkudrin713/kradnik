@@ -21,6 +21,7 @@ class PlaylistJobProcessor(
     private val lifecycle: JobLifecycle,
     private val progress: TelegramJobProgress,
     private val workDirCleaner: WorkDirCleaner,
+    private val jobProgressFactory: JobProgressFactory = JobProgressFactory(progress),
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -29,7 +30,7 @@ class PlaylistJobProcessor(
         var outputDir: Path? = null
         try {
             outputDir = workDirCleaner.create(job.requiredId())
-            val jobProgress = progress.forJob(job)
+            val jobProgress = jobProgressFactory.forJob(job)
             val context = DeliveryContext.fromJob(job)
             jobProgress.update(DownloadPhase.DOWNLOADING)
             val result = when (request.deliveryMode) {

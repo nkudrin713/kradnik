@@ -1,5 +1,11 @@
 package com.nkudrin713.kradnik.download.repository
 
+import com.nkudrin713.kradnik.admin.AdminQueries
+import com.nkudrin713.kradnik.admin.AdminStatistics
+import com.nkudrin713.kradnik.admin.AdminStatisticsStore
+import com.nkudrin713.kradnik.admin.ErrorMinute
+import com.nkudrin713.kradnik.admin.HistoryPoint
+import com.nkudrin713.kradnik.admin.MemoryPoint
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionRepository
@@ -14,6 +20,7 @@ import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.observability.RuntimeError
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreference
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceRepository
@@ -44,6 +51,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringJUnitConfig(DownloadJobRepositoryTestApplication::class)
@@ -63,6 +71,117 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         choiceSessionRepository.deleteAll()
         repository.deleteAll()
         preferenceRepository.deleteAll()
+        jdbcTemplate.execute("TRUNCATE admin_error_minutes, admin_queue_minutes, admin_memory_minutes")
+    }
+
+    @Test
+    fun memoryHistoryRestoresNullsAndIgnoresOlderRetriesAndPrunesExpiredRows() {
+        val store = AdminStatisticsStore(jdbcTemplate)
+        val now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MINUTES).plusSeconds(10)
+        val point = MemoryPoint(now, 100, 200, 300, 40, 20, 10, null, null, null, null)
+        store.saveMemoryHistory(listOf(point, point.copy(at = now.minusSeconds(8 * 86400))))
+        val updated = point.copy(at = now.plusSeconds(1), heapUsed = 150, containerUsed = 500, containerLimit = 1000, gcCount = 2, gcTimeMillis = 4, gcWindowSeconds = 60)
+        store.saveMemoryHistory(listOf(updated))
+        store.saveMemoryHistory(listOf(point))
+        assertEquals(listOf(updated), AdminStatisticsStore(jdbcTemplate).memoryHistory())
+        store.saveMemoryHistory(listOf(point.copy(at = now.plusSeconds(2))))
+        assertEquals(listOf(point.copy(at = now.plusSeconds(2))), store.memoryHistory())
+        store.prune()
+        assertEquals(1L, jdbcTemplate.queryForObject("SELECT count(*) FROM admin_memory_minutes", Long::class.java))
+    }
+
+    @Test
+    fun adminStatisticsSurviveRestartAndPersistenceRetriesAreIdempotent() {
+        val store = AdminStatisticsStore(jdbcTemplate)
+        val first = AdminStatistics(true, store = store)
+        first.restore()
+        first.error(RuntimeError.METADATA)
+        first.error(RuntimeError.PLAYLIST_ITEM)
+        first.stop()
+        val second = AdminStatistics(true, store = store)
+        second.restore()
+        second.error(RuntimeError.METADATA)
+        second.flush()
+        second.flush()
+        assertEquals(2L, second.snapshot().first().counts["METADATA"])
+        val third = AdminStatistics(true, store = store)
+        third.restore()
+        assertEquals(2L, third.snapshot().first().counts["METADATA"])
+        assertEquals(1L, third.snapshot().first().counts["PLAYLIST_ITEM"])
+        val row = ErrorMinute(Instant.now().epochSecond / 60, RuntimeError.WORKER, 3)
+        store.saveErrors("retry-fixture", listOf(row))
+        store.saveErrors("retry-fixture", listOf(row))
+        store.saveErrors("retry-fixture", listOf(row.copy(count = 1)))
+        assertEquals(3L, store.errorsExcept("unused").single { it.kind == RuntimeError.WORKER }.count)
+        val point = HistoryPoint(Instant.now(), 7, 3)
+        store.saveHistory(listOf(point, point))
+        store.saveHistory(listOf(point.copy(at = point.at.minusMillis(1), queued = 100)))
+        assertEquals(7L, store.history().single().queued)
+        store.saveHistory(listOf(point.copy(at = point.at.plusMillis(1), queued = 8)))
+        assertEquals(8L, store.history().single().queued)
+        store.saveErrors("expired", listOf(row.copy(minute = row.minute - 8 * 1440)))
+        store.saveHistory(listOf(point.copy(at = point.at.minusSeconds(8 * 86400))))
+        store.prune()
+        assertEquals(0L, jdbcTemplate.queryForObject("SELECT count(*) FROM admin_error_minutes WHERE instance_id = 'expired'", Long::class.java))
+        assertEquals(1L, jdbcTemplate.queryForObject("SELECT count(*) FROM admin_queue_minutes", Long::class.java))
+    }
+
+    @Test
+    fun adminAggregatesUseCompletionTimeAndKeepCancellationsAndWorkloadsSeparate() {
+        fun insert(status: String, minutes: Int, workload: String = "single") {
+            jdbcTemplate.update(
+                """
+                INSERT INTO download_jobs (telegram_user_id, telegram_chat_id, original_url, normalized_url,
+                    cache_key, download_preset, selected_format, platform, status, workload_type, created_at, completed_at)
+                VALUES (1, 1, 'https://example.com', 'https://example.com', 'admin-test', '', '', 'youtube', ?, ?,
+                    now() - interval '3 days', CASE WHEN ? IN ('queued', 'processing') THEN NULL
+                    ELSE now() - ? * interval '1 minute' END)
+                """.trimIndent(),
+                status,
+                workload,
+                status,
+                minutes,
+            )
+        }
+        insert("queued", 0)
+        insert("processing", 0, "playlist_audio")
+        insert("failed", 5)
+        insert("failed", 30, "playlist_audio")
+        insert("completed", 120)
+        insert("cancelled_by_user", 5)
+        insert("failed", 1500)
+        val queries = AdminQueries(jdbcTemplate)
+        val queues = queries.queues()
+        assertEquals(1L, queues.single { it.category == "single" }.count)
+        assertEquals("processing", queues.single { it.category == "playlist_audio" }.status)
+        assertTrue(queues.all { it.oldest.isBefore(Instant.now().minusSeconds(2 * 86400)) })
+        val outcomes = queries.outcomes()
+        assertEquals(1L, outcomes.single { it.minutes == 15 && it.status == "failed" }.count)
+        assertEquals(2L, outcomes.filter { it.minutes == 60 && it.status == "failed" }.sumOf { it.count })
+        assertEquals(1L, outcomes.single { it.minutes == 1440 && it.status == "completed" }.count)
+        assertEquals(1L, outcomes.single { it.minutes == 15 && it.status == "cancelled_by_user" }.count)
+        assertEquals(2L, outcomes.filter { it.minutes == 1440 && it.status == "failed" }.sumOf { it.count })
+    }
+
+    @Test
+    fun adminPlansUsePartialIndexesWithHistoricalPayloads() {
+        jdbcTemplate.execute(
+            """
+            INSERT INTO download_jobs (telegram_user_id, telegram_chat_id, original_url, normalized_url,
+                cache_key, download_preset, selected_format, platform, status, completed_at)
+            SELECT 1, 1, 'https://example.com', 'https://example.com', 'history-' || n, '', '', 'youtube',
+                CASE WHEN n <= 10 THEN 'queued' ELSE 'completed' END,
+                CASE WHEN n <= 10 THEN NULL WHEN n <= 100 THEN now() ELSE now() - interval '7 days' END
+            FROM generate_series(1, 30000) n
+            """.trimIndent(),
+        )
+        jdbcTemplate.execute("ANALYZE download_jobs")
+        listOf(AdminQueries.QUEUES_SQL, AdminQueries.OUTCOMES_SQL).forEach { sql ->
+            val plan = jdbcTemplate.queryForList("EXPLAIN (ANALYZE, BUFFERS) $sql", String::class.java).joinToString("\n")
+            println("Admin aggregate plan:\n$plan")
+            assertTrue(plan.contains("idx_download_jobs_admin_"), plan)
+            assertTrue(!plan.contains("Seq Scan on download_jobs"), plan)
+        }
     }
 
     @Test

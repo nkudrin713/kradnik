@@ -102,6 +102,52 @@ One timeout covers downloading, packaging, and uploading; exceeding it fails the
 - A crash after Telegram accepts a file but before `COMPLETED` can produce a duplicate message.
 - Overlapping application instances are not supported.
 
+## Embedded admin dashboard
+
+The monitoring dashboard runs in the bot JVM and container. Spring MVC serves local HTML/CSS/JavaScript; no frontend build, CDN, Node process, WebSocket server, or metrics service is required. The responsive layout supports phones; wide tables scroll inside their panels. A centered login form uses Spring Security sessions and a BCrypt password hash. The dashboard and its API require authentication.
+
+```mermaid
+flowchart LR
+    Workers[Metadata, download and playlist workers] --> Runtime[Bounded in-memory state]
+    Postgres[(PostgreSQL)] --> Collector[Single background collector]
+    Runtime --> Collector
+    JVM[JVM and cgroup counters] --> Collector
+    Collector -->|Minute samples| Postgres
+    Collector --> Snapshot[Shared immutable snapshot]
+    Snapshot --> API[Authenticated Spring MVC API]
+    API --> Browser[Dashboard polling every 2 seconds]
+```
+
+Enable it with `ADMIN_ENABLED=true`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD_HASH`. The hash must use BCrypt cost 10–14. Generate a hash interactively with `htpasswd -nBC 10 admin` where available, then copy only the hash after `admin:`. When using a Compose `.env` file, single-quote the hash to preserve its `$` characters. Never commit credentials or pass plaintext passwords on a command line.
+
+Compose publishes `127.0.0.1:${ADMIN_PUBLIC_PORT:-8080}` on the host. Open `/admin` through an SSH tunnel, for example `ssh -L 8080:127.0.0.1:8080 user@server`, or an existing HTTPS reverse proxy. For HTTPS, set `ADMIN_COOKIE_SECURE=true`; ordinary HTTP access with secure cookies will not keep the login session. Native non-Compose runs can set `ADMIN_PORT` (default 8080). The web listener remains present when `ADMIN_ENABLED=false`, but access is denied and the collector/database pool are not created. Blank or invalid credentials prevent startup when the dashboard is enabled.
+
+Sessions expire after 15 minutes of inactivity and allow at most three concurrent logins. Cookies are HttpOnly and SameSite=Strict; CSRF protection covers login and logout. A global in-memory limit allows ten login submissions per minute. It deliberately does not trust client-supplied forwarding headers. Active dashboard polling keeps a session active; use logout when finished. Credential changes require a restart.
+
+The dashboard shows:
+
+- Logical worker slots for metadata preparation, single downloads, and playlists: idle, busy, backoff after a loop error, or stopped; current job, platform, phase and elapsed time where applicable. Playlist track activity and waiting tracks are separate from parent jobs.
+- Persisted queued/processing job counts and the oldest queued job by workload. Metadata preparation has its own bounded in-memory queue. A long-running task is not automatically classified as stuck.
+- Completed, failed and user-cancelled jobs over rolling 15-minute, one-hour and 24-hour windows. These values use PostgreSQL `completed_at`; a partially successful playlist still counts as completed.
+- Persisted error counts for metadata preparation, playlist items, worker iterations and metadata queue rejection. These minute-resolution counters survive releases and overlap with failed jobs; do not sum them into a single failure total. They do not represent every application log error.
+- Up to one hour of queue history, with one sample per minute; the current minute updates live. Saved samples are restored after restart.
+
+All three tables support sorting by column headers (click, Enter or Space). Repeated activation reverses the direction; each table keeps its selection during polling and period changes. Sorting runs entirely in the browser: counts, job IDs and elapsed times use their underlying numeric values, missing values stay last, and playlist tracks sort by active count then waiting count.
+
+Memory monitoring reads JVM MXBeans and the process's Linux memory cgroup (v1/v2) in the existing collector, at most once every five seconds (normally every six seconds with its two-second tick). It adds no worker hooks, thread, dependency, object traversal, forced GC or remote monitoring service. The dashboard shows heap used/committed/max, non-heap total with metaspace/code cache, cgroup usage/limit, and rolling GC count/time deltas. GC time is the JVM's approximate accumulated collection time, not an exact application-pause measurement; startup and collection gaps show the actual measured window. Unsupported counters are unavailable, not zero. Cgroup usage includes child processes such as yt-dlp/ffmpeg and charged file cache; it is not JVM RSS or total VPS usage. The displayed limit belongs to the visible memory cgroup; limits of hidden ancestor groups cannot be detected. Missing or unlimited limits do not produce a percentage.
+
+V34 adds memory minute samples with seven-day retention. The UI restores up to one hour of heap/cgroup history across releases, with gaps left visible. Completed minute samples are written once per minute through the same bounded admin database connection; graceful shutdown also flushes the current minute. Buffered samples are bounded to one hour during outages. An abrupt stop can lose the unfinished minute and samples since the last successful write. Memory acquisition and persistence failures are reported separately, and cannot block bot workers; the collector, JVM and database still consume shared VPS resources.
+
+`download_jobs` remains the source of truth for queue state and completed job outcomes; these values are not duplicated in a separate event log. `AdminStatisticsStore` persists only information unavailable from that table: additional error counters and historical queue-length samples.
+
+One collector refreshes queue aggregates every two seconds after the previous collection finishes, and outcome aggregates at most once per ten seconds. Requests read the cached snapshot without SQL. The collector owns one separate PostgreSQL connection at most, shared by dashboard reads and aggregate writes, with a 500 ms statement timeout, 100 ms lock timeout, 500 ms connection acquisition timeout and bounded socket/connect timeouts. V33 adds partial indexes for active and terminal jobs and two small aggregate tables. If a query fails or times out, the previous values remain visible with their last successful update time; missing values are not reported as zero. Very large recent histories can exceed the query budget and require a later aggregation design.
+
+Backend instrumentation depends only on the `BotTelemetry` execution contract, not on controllers, dashboard DTOs, JPA entities or web configuration. Its integration points are the two queue loops, metadata execution, `JobProgressFactory` for all phase changes, and `PlaylistItems` for both playlist delivery modes. Platform adapters and media handlers do not know about the admin. `AdminQueries` isolates the dashboard's two job-table SQL projections from repository implementation changes; schema migrations affecting their columns must update these projections and their PostgreSQL integration tests. The browser consumes only `DashboardSnapshot`.
+
+Additional counters are flushed at most once every ten seconds and again after workers stop on graceful shutdown. Per-process absolute minute counts make retries idempotent, even if a database response is lost after commit. Queue samples are upserted by minute. Aggregate rows are retained for seven days and pruned hourly; the UI currently displays error windows up to 24 hours and queue history for one hour. Live worker states are rebuilt after restart. An abrupt process/container loss can discard counters since the last successful flush (normally about ten seconds; longer during database outages). Persistence outages keep pending counters in a bounded 24-hour memory window and are indicated on the dashboard; they do not block workers.
+
+Worker instrumentation only updates bounded memory; it performs no database or network I/O. The web server is limited to eight request threads and 32 connections. Hidden browser tabs pause polling; failed requests use bounded exponential backoff. Browser payloads exclude source URLs, Telegram identities, credentials and exception messages. CPU, heap and GC remain shared with the bot.
+
 ## Code map
 
 Paths are relative to `src/main/kotlin/com/nkudrin713/kradnik/`.

@@ -1,6 +1,8 @@
 package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.observability.BotTelemetry
+import com.nkudrin713.kradnik.observability.RuntimeError
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.runBlocking
@@ -21,6 +23,7 @@ class PlaylistQueueWorker(
     private val activeDownloads: ActiveDownloadRegistry,
     @Value($$"${download.playlist-workers:1}") private val workers: Int,
     @Value($$"${download.worker-delay-ms:1000}") private val pollDelayMs: Long = 1000,
+    private val runtime: BotTelemetry = BotTelemetry.NONE,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val executor = Executors.newFixedThreadPool(workers) { task -> Thread(task, "playlist-worker") }
@@ -37,36 +40,52 @@ class PlaylistQueueWorker(
     @PostConstruct
     fun start() {
         logger.info("Starting {} playlist workers", workers)
-        repeat(workers) { executor.execute(::work) }
+        repeat(workers) { index ->
+            val id = "playlist-${index + 1}"
+            runtime.register(id, "playlist")
+            executor.execute { work(id) }
+        }
     }
 
-    private fun work() {
-        while (!executor.isShutdown && !Thread.currentThread().isInterrupted) {
-            try {
-                val job = downloadJobService.claimNextQueuedPlaylistJob()
-                if (job == null) {
-                    Thread.sleep(pollDelayMs)
-                } else {
-                    runBlocking {
-                        activeDownloads.run(job.requiredId()) {
-                            if (downloadJobService.isProcessing(job.requiredId())) {
-                                playlistJobProcessor.process(job)
+    private fun work(id: String) {
+        try {
+            while (!executor.isShutdown && !Thread.currentThread().isInterrupted) {
+                try {
+                    runtime.state(id, "IDLE")
+                    val job = downloadJobService.claimNextQueuedPlaylistJob()
+                    if (job == null) {
+                        Thread.sleep(pollDelayMs)
+                    } else {
+                        runtime.busy(id, job.requiredId(), job.platform.name)
+                        try {
+                            runBlocking {
+                                activeDownloads.run(job.requiredId()) {
+                                    if (downloadJobService.isProcessing(job.requiredId())) {
+                                        playlistJobProcessor.process(job)
+                                    }
+                                }
                             }
+                        } finally {
+                            runtime.state(id, "IDLE")
                         }
                     }
-                }
-            } catch (error: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return
-            } catch (error: Exception) {
-                logger.error("Playlist worker iteration failed", error)
-                try {
-                    Thread.sleep(pollDelayMs)
-                } catch (interrupted: InterruptedException) {
+                } catch (error: InterruptedException) {
                     Thread.currentThread().interrupt()
                     return
+                } catch (error: Exception) {
+                    runtime.error(RuntimeError.WORKER)
+                    runtime.state(id, "BACKOFF")
+                    logger.error("Playlist worker iteration failed", error)
+                    try {
+                        Thread.sleep(pollDelayMs)
+                    } catch (interrupted: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return
+                    }
                 }
             }
+        } finally {
+            runtime.state(id, "STOPPED")
         }
     }
 

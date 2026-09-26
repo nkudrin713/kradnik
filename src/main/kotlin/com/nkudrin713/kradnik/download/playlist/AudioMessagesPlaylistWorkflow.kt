@@ -12,14 +12,8 @@ import com.nkudrin713.kradnik.download.telegram.TelegramPlaylistSender
 import com.nkudrin713.kradnik.download.telegram.TelegramResultCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.nio.file.Files
 import java.nio.file.Path
@@ -31,13 +25,9 @@ class AudioMessagesPlaylistWorkflow(
     private val telegramFileSender: TelegramPlaylistSender,
     private val cache: TelegramResultCache,
     private val workDirCleaner: WorkDirCleaner,
-    @Value($$"${download.playlist-item-parallelism:2}") private val itemParallelism: Int = 2,
+    private val items: PlaylistItems = PlaylistItems(),
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
-
-    init {
-        require(itemParallelism > 0) { "download.playlist-item-parallelism must be positive" }
-    }
 
     /**
      * Processes entries without a recorded result using bounded parallelism, then delivers successful audio files.
@@ -50,16 +40,7 @@ class AudioMessagesPlaylistWorkflow(
     suspend fun run(jobId: Long, request: PlaylistAudioRequest, context: DeliveryContext, root: Path, progress: JobProgress): PlaylistDeliveryResult? {
         val completedPositions = request.completedEntries.map(PlaylistAudioResult::position).toSet()
         val pending = request.entries.filterNot { it.position in completedPositions }
-        val semaphore = Semaphore(itemParallelism)
-        coroutineScope {
-            pending.map { entry ->
-                async {
-                    semaphore.withPermit {
-                        processEntry(jobId, entry, root)
-                    }
-                }
-            }.awaitAll()
-        }
+        items.map(jobId, pending) { entry -> processEntry(jobId, entry, root) }
         if (!downloadJobService.isProcessing(jobId)) return null
 
         val current = downloadJobService.findJob(jobId) ?: return null
@@ -72,7 +53,7 @@ class AudioMessagesPlaylistWorkflow(
         return PlaylistDeliveryResult(successful.size, current.playlistResults.count { it.fileId == null }, PlaylistCompletion.AudioMessages(successful.size))
     }
 
-    private suspend fun processEntry(jobId: Long, entry: PlaylistAudioEntry, root: Path) {
+    private suspend fun processEntry(jobId: Long, entry: PlaylistAudioEntry, root: Path): Boolean? {
         var outputDir: Path? = null
         try {
             val cacheKey = entryDownloader.cacheKey(entry)
@@ -91,6 +72,7 @@ class AudioMessagesPlaylistWorkflow(
                 jobId,
                 PlaylistAudioResult(position = entry.position, fileId = fileId),
             )
+            return true
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -108,6 +90,7 @@ class AudioMessagesPlaylistWorkflow(
                     error = (error.message ?: error.javaClass.simpleName).take(1000),
                 ),
             )
+            return null
         } finally {
             outputDir?.let(workDirCleaner::deleteRecursively)
         }

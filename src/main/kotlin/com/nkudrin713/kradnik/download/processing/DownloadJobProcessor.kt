@@ -24,6 +24,7 @@ class DownloadJobProcessor(
     private val lifecycle: JobLifecycle,
     private val progress: TelegramJobProgress,
     private val workDirCleaner: WorkDirCleaner,
+    private val jobProgressFactory: JobProgressFactory = JobProgressFactory(progress),
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -46,7 +47,7 @@ class DownloadJobProcessor(
                 }
             }
             outputDir = workDirCleaner.create(job.requiredId())
-            val jobProgress = progress.forJob(job)
+            val jobProgress = jobProgressFactory.forJob(job)
             val artifact = handlers.forOutput(request.outputType).produce(request, outputDir, job.requiredId(), jobProgress)
             jobProgress.update(DownloadPhase.UPLOADING)
             val receipt = sender.send(context, artifact)

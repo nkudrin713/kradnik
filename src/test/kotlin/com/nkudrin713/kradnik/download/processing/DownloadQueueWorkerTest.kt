@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.admin.AdminRuntime
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -22,6 +23,7 @@ class DownloadQueueWorkerTest {
     private val processor = mockk<DownloadJobProcessor>()
     private val cleaner = mockk<WorkDirCleaner>(relaxed = true)
     private val activeDownloads = ActiveDownloadRegistry()
+    private val runtime = AdminRuntime(true)
 
     @Test
     fun threeJobsRunTogetherAndRemainingJobsStayInDatabaseUntilCapacityIsFree() {
@@ -51,11 +53,12 @@ class DownloadQueueWorkerTest {
                 active.decrementAndGet()
             }
         }
-        val worker = DownloadQueueWorker(jobs, processor, activeDownloads, cleaner, workers = 3, pollDelayMs = 1)
+        val worker = DownloadQueueWorker(jobs, processor, activeDownloads, cleaner, workers = 3, pollDelayMs = 1, runtime = runtime)
         try {
             worker.start()
             assertTrue(started.await(10, TimeUnit.SECONDS))
             assertEquals(3, active.get())
+            assertEquals(3, runtime.snapshot().workers.count { it.state == "BUSY" })
             assertEquals(3, claimed.get())
             assertEquals(97, queue.size)
             finish.release()
@@ -66,6 +69,7 @@ class DownloadQueueWorkerTest {
             worker.shutdown()
         }
         assertEquals(0, active.get())
+        assertTrue(runtime.snapshot().workers.all { it.state == "STOPPED" && it.jobId == null })
         verifyOrder {
             cleaner.cleanInterruptedJobs()
             jobs.recoverInterruptedJobs()
@@ -88,12 +92,14 @@ class DownloadQueueWorkerTest {
         val processed = CountDownLatch(1)
         coEvery { processor.process(match { it.id == 1L }) } throws IllegalStateException("unexpected failure")
         coEvery { processor.process(match { it.id == 2L }) } coAnswers { processed.countDown() }
-        val worker = DownloadQueueWorker(jobs, processor, activeDownloads, cleaner, workers = 1, pollDelayMs = 1)
+        val worker = DownloadQueueWorker(jobs, processor, activeDownloads, cleaner, workers = 1, pollDelayMs = 1, runtime = runtime)
         try {
             worker.start()
             assertTrue(processed.await(10, TimeUnit.SECONDS))
         } finally {
             worker.shutdown()
         }
+        assertEquals(2L, runtime.snapshot().errors.first().counts["WORKER"])
+        assertTrue(runtime.snapshot().workers.all { it.state == "STOPPED" })
     }
 }

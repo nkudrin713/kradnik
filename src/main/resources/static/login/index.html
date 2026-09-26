@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kradnik · Вход</title>
+  <link rel="stylesheet" href="/login/login.css">
+  <script src="/login/login.js" defer></script>
+</head>
+<body>
+  <main class="login-card">
+    <div class="login-logo"><img src="/login/kradnik.jpg" alt="Kradnik" width="80" height="80"></div>
+    <form action="/login" method="post" id="login-form">
+      <label for="username">Логин</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus placeholder="Ваш логин">
+      <label for="password">Пароль</label><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Введите пароль">
+      <p id="message" role="status" hidden></p>
+      <button id="submit" type="submit" disabled>Войти <span aria-hidden="true">→</span></button>
+    </form>
+  </main>
+</body>
+</html>

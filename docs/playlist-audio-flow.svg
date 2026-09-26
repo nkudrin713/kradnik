@@ -1,80 +1,65 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="960" viewBox="0 0 1280 960" role="img" aria-labelledby="title description">
-<title id="title">YouTube playlist · audio messages</title>
-<desc id="description">A playlist worker starts PlaylistJobProcessor and AudioMessagesPlaylistWorkflow. The workflow skips recorded positions, reuses cached audio or downloads and stages new tracks, records each outcome, then sends successful tracks in playlist order. Conditional completion precedes the partial-success summary.</desc>
-<defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="790" viewBox="0 0 1120 790" role="img" aria-labelledby="title description">
+  <title id="title">YouTube playlist · audio messages</title>
+  <desc id="description">Queued playlist processing, per-entry cache or download, persisted outcomes, ordered delivery, and completion. Details are in the README.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
     </marker>
     <style>
-      .title { font: 700 26px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
-      .stage { font: 700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
-      .name { font: 600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #0f172a; }
-      .note { font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
-      .small { font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
-      .box { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.5; rx: 10; }
-      .store { fill: #eff6ff; stroke: #3b82f6; stroke-width: 1.5; rx: 10; }
-      .external { fill: #f0fdf4; stroke: #22c55e; stroke-width: 1.5; rx: 10; }
-      .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 14; }
+      text { font: 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .title { font-size: 26px; font-weight: 700; }
+      .stage { font-size: 20px; font-weight: 600; fill: #334155; }
+      .box { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.5; }
+      .store { fill: #eff6ff; stroke: #3b82f6; stroke-width: 1.5; }
+      .external { fill: #f0fdf4; stroke: #22c55e; stroke-width: 1.5; }
       .arrow { fill: none; stroke: #64748b; stroke-width: 2; marker-end: url(#arrow); }
-      .divider { stroke: #cbd5e1; stroke-width: 1.5; }
     </style>
   </defs>
-<rect width="1280" height="960" fill="#ffffff"/>
-<text x="40" y="44" class="title">YouTube playlist · audio messages</text>
-<text x="40" y="72" class="note">Recorded item results survive restart. Downloads are staged before ordered delivery.</text>
-<text x="40" y="113" class="stage">YouTubePlaylistPlanner → saved track range + AUDIO_MESSAGES → persisted queue</text>
-<rect x="40" y="143" width="340" height="92" class="box"/>
-<text x="210.0" y="173" class="name" text-anchor="middle">PlaylistQueueWorker</text>
-<text x="210.0" y="200" class="small" text-anchor="middle">claim a queued playlist job</text>
-<rect x="470" y="143" width="340" height="92" class="box"/>
-<text x="640.0" y="173" class="name" text-anchor="middle">PlaylistJobProcessor</text>
-<text x="640.0" y="200" class="small" text-anchor="middle">map PlaylistAudioRequest; create workspace</text>
-<rect x="900" y="143" width="340" height="92" class="box"/>
-<text x="1070.0" y="173" class="name" text-anchor="middle">AudioMessagesPlaylistWorkflow</text>
-<text x="1070.0" y="200" class="small" text-anchor="middle">skip all recorded positions</text>
-<path d="M 380 189 H 470" class="arrow"/>
-<path d="M 810 189 H 900" class="arrow"/>
-<path d="M 1070 235 V 272" class="arrow"/>
-<rect x="40" y="272" width="1200" height="347" class="panel"/>
-<text x="65" y="308" class="stage">Each pending entry · bounded parallelism</text>
-<text x="65" y="337" class="note">Recorded successes and failures are skipped on resume. Cancellation propagates without recording a failure.</text>
-<path d="M 207 413 V 378 H 1075 V 413" class="arrow"/>
-<text x="640" y="369" class="small" text-anchor="middle">cache hit: reuse file ID</text>
-<rect x="65" y="413" width="285" height="116" class="store"/>
-<text x="207.5" y="443" class="name" text-anchor="middle">TelegramResultCache</text>
-<text x="207.5" y="470" class="small" text-anchor="middle">lookup the track’s audio key</text>
-<text x="207.5" y="494" class="small" text-anchor="middle">shared with single-audio identity</text>
-<rect x="495" y="413" width="285" height="116" class="box"/>
-<text x="637.5" y="443" class="name" text-anchor="middle">PlaylistEntryDownloader</text>
-<text x="637.5" y="470" class="small" text-anchor="middle">yt-dlp → 96 kbps MP3</text>
-<text x="637.5" y="494" class="small" text-anchor="middle">stagePlaylistAudio → storage chat</text>
-<rect x="930" y="413" width="285" height="116" class="store"/>
-<text x="1072.5" y="443" class="name" text-anchor="middle">DownloadJobService</text>
-<text x="1072.5" y="470" class="small" text-anchor="middle">savePlaylistResult</text>
-<text x="1072.5" y="494" class="small" text-anchor="middle">file ID or per-entry error</text>
-<path d="M 350 471 H 495" class="arrow"/>
-<text x="422" y="456" class="small" text-anchor="middle">cache miss</text>
-<path d="M 780 471 H 930" class="arrow"/>
-<text x="855" y="456" class="small" text-anchor="middle">save outcome</text>
-<text x="65" y="568" class="note">A new track is uploaded with TelegramPlaylistSender before its success is saved.</text>
-<text x="65" y="594" class="note">Item directories are deleted in finally after staging or failure; other entries continue after item errors.</text>
-<path d="M 1075 619 V 653 H 210 V 689" class="arrow"/>
-<text x="640" y="646" class="small" text-anchor="middle">wait for all pending entries</text>
-<rect x="40" y="689" width="340" height="116" class="store"/>
-<text x="210.0" y="719" class="name" text-anchor="middle">Reload saved results</text>
-<text x="210.0" y="746" class="small" text-anchor="middle">require PROCESSING and ≥ 1 success</text>
-<text x="210.0" y="770" class="small" text-anchor="middle">no successes → fail the job</text>
-<rect x="470" y="689" width="340" height="116" class="external"/>
-<text x="640.0" y="719" class="name" text-anchor="middle">TelegramPlaylistSender</text>
-<text x="640.0" y="746" class="small" text-anchor="middle">sendPlaylistAudios sorts by position</text>
-<text x="640.0" y="770" class="small" text-anchor="middle">up to 50 tracks per Rich Message</text>
-<rect x="900" y="689" width="340" height="116" class="box"/>
-<text x="1070.0" y="719" class="name" text-anchor="middle">JobLifecycle.complete</text>
-<text x="1070.0" y="746" class="small" text-anchor="middle">conditional transition to COMPLETED</text>
-<text x="1070.0" y="770" class="small" text-anchor="middle">then summary if any entries failed</text>
-<path d="M 380 747 H 470" class="arrow"/>
-<path d="M 810 747 H 900" class="arrow"/>
-<text x="40" y="857" class="note">If cancellation wins, completion and the summary are suppressed. Delivery errors fail the job.</text>
-<text x="40" y="885" class="note">PlaylistJobProcessor cleans the job workspace in finally. Restart resumes entries without a saved outcome.</text>
-<text x="40" y="923" class="note">Requires the configured Telegram storage chat for staging fresh audio tracks.</text>
+  <rect width="1120" height="790" fill="#ffffff"/>
+  <text x="40" y="44" class="title">YouTube playlist · audio messages</text>
+  <rect x="40.0" y="90" width="325.3333333333333" height="76" rx="10" class="box"/>
+  <text x="202.66666666666666" y="134.0" text-anchor="middle">YouTubePlaylistPlanner</text>
+  <path d="M 365.3333333333333 128 H 393.3333333333333" class="arrow"/>
+  <rect x="397.3333333333333" y="90" width="325.3333333333333" height="76" rx="10" class="store"/>
+  <text x="560.0" y="121.5" text-anchor="middle">Saved selection</text>
+  <text x="560.0" y="146.5" text-anchor="middle">AUDIO_MESSAGES</text>
+  <path d="M 722.6666666666666 128 H 750.6666666666666" class="arrow"/>
+  <rect x="754.6666666666666" y="90" width="325.3333333333333" height="76" rx="10" class="box"/>
+  <text x="917.3333333333333" y="134.0" text-anchor="middle">PlaylistQueueWorker</text>
+  <path d="M 912 166 V 190 H 208 V 211" class="arrow"/>
+  <rect x="40.0" y="215" width="325.3333333333333" height="76" rx="10" class="box"/>
+  <text x="202.66666666666666" y="259.0" text-anchor="middle">PlaylistJobProcessor</text>
+  <path d="M 365.3333333333333 253 H 393.3333333333333" class="arrow"/>
+  <rect x="397.3333333333333" y="215" width="325.3333333333333" height="76" rx="10" class="box"/>
+  <text x="560.0" y="259.0" text-anchor="middle">AudioMessagesPlaylistWorkflow</text>
+  <path d="M 722.6666666666666 253 H 750.6666666666666" class="arrow"/>
+  <rect x="754.6666666666666" y="215" width="325.3333333333333" height="76" rx="10" class="box"/>
+  <text x="917.3333333333333" y="259.0" text-anchor="middle">Pending entries</text>
+  <text x="40" y="346" class="stage">Each pending entry</text>
+  <rect x="40.0" y="410" width="325.3333333333333" height="76" rx="10" class="store"/>
+  <text x="202.66666666666666" y="454.0" text-anchor="middle">TelegramResultCache</text>
+  <path d="M 365.3333333333333 448 H 393.3333333333333" class="arrow"/>
+  <rect x="397.3333333333333" y="410" width="325.3333333333333" height="76" rx="10" class="box"/>
+  <text x="560.0" y="454.0" text-anchor="middle">Download + stage audio</text>
+  <path d="M 722.6666666666666 448 H 750.6666666666666" class="arrow"/>
+  <rect x="754.6666666666666" y="410" width="325.3333333333333" height="76" rx="10" class="store"/>
+  <text x="917.3333333333333" y="441.5" text-anchor="middle">DownloadJobService</text>
+  <text x="917.3333333333333" y="466.5" text-anchor="middle">Save item result</text>
+  <text x="400" y="405" text-anchor="middle">miss</text>
+  <path d="M 208 410 V 371 H 912 V 406" class="arrow"/>
+  <text x="560" y="363" text-anchor="middle">cache hit</text>
+  <path d="M 912 486 V 556 H 208 V 560" class="arrow"/>
+  <text x="40" y="530" class="stage">After all entries finish</text>
+  <rect x="40.0" y="564" width="325.3333333333333" height="76" rx="10" class="store"/>
+  <text x="202.66666666666666" y="608.0" text-anchor="middle">Reload saved results</text>
+  <path d="M 365.3333333333333 602 H 393.3333333333333" class="arrow"/>
+  <rect x="397.3333333333333" y="564" width="325.3333333333333" height="76" rx="10" class="external"/>
+  <text x="560.0" y="595.5" text-anchor="middle">TelegramPlaylistSender</text>
+  <text x="560.0" y="620.5" text-anchor="middle">Ordered audio</text>
+  <path d="M 722.6666666666666 602 H 750.6666666666666" class="arrow"/>
+  <rect x="754.6666666666666" y="564" width="325.3333333333333" height="76" rx="10" class="box"/>
+  <text x="917.3333333333333" y="608.0" text-anchor="middle">JobLifecycle.complete</text>
+  <path d="M 912 640 V 662 H 560 V 683" class="arrow"/>
+  <rect x="400" y="687" width="320" height="76" rx="10" class="box"/>
+  <text x="560.0" y="731.0" text-anchor="middle">WorkDirCleaner</text>
 </svg>

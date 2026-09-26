@@ -1,110 +1,64 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1020" viewBox="0 0 1280 1020" role="img" aria-labelledby="title description">
-  <title id="title">Kradnik single-media request flow</title>
-  <desc id="description">Planning reads metadata through source adapters and persists a menu. Selection creates a queued job. A worker invokes DownloadJobProcessor, which checks cached Telegram media, produces a typed artifact through a single-media handler when needed, delivers it, and conditionally completes the job. Lifecycle, progress, and cleanup remain under processor control. Playlist workflows are described separately in the README.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="790" viewBox="0 0 1120 790" role="img" aria-labelledby="title description">
+  <title id="title">Single-media request flow</title>
+  <desc id="description">Menu planning, persisted selection, queued execution, cache lookup, production, and Telegram delivery. Details are in the README.</desc>
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
     </marker>
     <style>
-      .title { font: 700 26px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
-      .stage { font: 700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
-      .name { font: 600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #0f172a; }
-      .note { font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
-      .small { font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
-      .box { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.5; rx: 10; }
-      .store { fill: #eff6ff; stroke: #3b82f6; stroke-width: 1.5; rx: 10; }
-      .external { fill: #f0fdf4; stroke: #22c55e; stroke-width: 1.5; rx: 10; }
-      .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 14; }
+      text { font: 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .title { font-size: 26px; font-weight: 700; }
+      .stage { font-size: 20px; font-weight: 600; fill: #334155; }
+      .box { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.5; }
+      .store { fill: #eff6ff; stroke: #3b82f6; stroke-width: 1.5; }
+      .external { fill: #f0fdf4; stroke: #22c55e; stroke-width: 1.5; }
       .arrow { fill: none; stroke: #64748b; stroke-width: 2; marker-end: url(#arrow); }
-      .divider { stroke: #cbd5e1; stroke-width: 1.5; }
     </style>
   </defs>
-  <rect width="1280" height="1020" fill="#ffffff"/>
-  <text x="40" y="44" class="title">Kradnik single-media request flow</text>
-  <text x="40" y="72" class="note">Planning, queued execution, and delivery have separate responsibilities.</text>
-
-  <text x="40" y="116" class="stage">1. Plan the menu</text>
-  <rect x="40" y="140" width="280" height="100" class="external"/>
-  <text x="180" y="170" text-anchor="middle" class="name">TelegramUpdateHandler</text>
-  <text x="180" y="197" text-anchor="middle" class="note">Telegram link or inline query</text>
-  <text x="180" y="222" text-anchor="middle" class="small">validate and route the update</text>
-
-  <rect x="347" y="140" width="280" height="100" class="box"/>
-  <text x="487" y="170" text-anchor="middle" class="name">DownloadChoiceCoordinator</text>
-  <text x="487" y="197" text-anchor="middle" class="note">bounded metadata task</text>
-  <text x="487" y="222" text-anchor="middle" class="small">persist session and publish menu</text>
-
-  <rect x="654" y="140" width="280" height="100" class="box"/>
-  <text x="794" y="170" text-anchor="middle" class="name">DownloadChoicePlanner</text>
-  <text x="794" y="197" text-anchor="middle" class="note">standard or Instagram options</text>
-  <text x="794" y="222" text-anchor="middle" class="small">shared MediaChoiceBuilder</text>
-
-  <rect x="961" y="140" width="279" height="100" class="box"/>
-  <text x="1100" y="170" text-anchor="middle" class="name">DownloadEngine</text>
-  <text x="1100" y="197" text-anchor="middle" class="note">source adapter → metadata</text>
-  <text x="1100" y="222" text-anchor="middle" class="small">yt-dlp or Instagram</text>
-  <path d="M 320 190 H 347" class="arrow"/>
-  <path d="M 627 190 H 654" class="arrow"/>
-  <path d="M 934 190 H 961" class="arrow"/>
-  <text x="40" y="272" class="note">The stored DownloadSpec captures the selected format, arguments, output, and cache identity.</text>
-
-  <line x1="40" y1="297" x2="1240" y2="297" class="divider"/>
-  <text x="40" y="334" class="stage">2. Accept a selection and claim the job</text>
-  <rect x="40" y="359" width="280" height="90" class="box"/>
-  <text x="180" y="391" text-anchor="middle" class="name">DownloadChoiceHandler</text>
-  <text x="180" y="421" text-anchor="middle" class="note">accept the saved selection</text>
-  <rect x="347" y="359" width="280" height="90" class="box"/>
-  <text x="487" y="391" text-anchor="middle" class="name">TelegramDownloadStarter</text>
-  <text x="487" y="421" text-anchor="middle" class="note">create the job</text>
-  <rect x="654" y="359" width="280" height="90" class="store"/>
-  <text x="794" y="391" text-anchor="middle" class="name">DownloadJobService</text>
-  <text x="794" y="421" text-anchor="middle" class="note">persist QUEUED in PostgreSQL</text>
-  <rect x="961" y="359" width="279" height="90" class="box"/>
-  <text x="1100" y="391" text-anchor="middle" class="name">DownloadQueueWorker</text>
-  <text x="1100" y="421" text-anchor="middle" class="note">atomic claim → PROCESSING</text>
-  <path d="M 320 404 H 347" class="arrow"/>
-  <path d="M 627 404 H 654" class="arrow"/>
-  <path d="M 934 404 H 961" class="arrow"/>
-  <path d="M 1100 449 V 490" class="arrow"/>
-
-  <rect x="40" y="490" width="1200" height="435" class="panel"/>
-  <text x="64" y="526" class="stage">3. DownloadJobProcessor</text>
-  <text x="64" y="553" class="note">DownloadRequestMapper → SingleMediaRequest · DeliveryContext carries the Telegram destination and post text</text>
-
-  <path d="M 205 630 V 594 H 1060 V 630" class="arrow"/>
-  <text x="632" y="584" text-anchor="middle" class="small">cache hit: sendCached with a typed Telegram media reference</text>
-
-  <rect x="70" y="630" width="270" height="150" class="store"/>
-  <text x="205" y="665" text-anchor="middle" class="name">TelegramResultCache</text>
-  <text x="205" y="695" text-anchor="middle" class="note">lookup by the persisted key</text>
-  <text x="205" y="723" text-anchor="middle" class="small">TelegramReceiptCodec decodes</text>
-  <text x="205" y="746" text-anchor="middle" class="small">single, photo, or typed post IDs</text>
-
-  <rect x="410" y="630" width="430" height="150" class="box"/>
-  <text x="625" y="661" text-anchor="middle" class="name">SingleMediaHandler</text>
-  <text x="625" y="687" text-anchor="middle" class="note">Video · Audio · Cover · Images · InstagramPost</text>
-  <text x="625" y="716" text-anchor="middle" class="small">prepare metadata → preflight → download → process</text>
-  <text x="625" y="743" text-anchor="middle" class="small">DownloadEngine / source adapters · cover downloader</text>
-  <text x="625" y="765" text-anchor="middle" class="small">video preparation · upload limits</text>
-
-  <rect x="910" y="630" width="300" height="150" class="external"/>
-  <text x="1060" y="665" text-anchor="middle" class="name">TelegramFileSender</text>
-  <text x="1060" y="695" text-anchor="middle" class="note">MediaArtifact or CachedMedia</text>
-  <text x="1060" y="723" text-anchor="middle" class="small">MediaSender / PostSender → API</text>
-  <text x="1060" y="746" text-anchor="middle" class="small">post media and caption together</text>
-  <path d="M 340 705 H 410" class="arrow"/>
-  <text x="375" y="692" text-anchor="middle" class="small">miss</text>
-  <path d="M 840 705 H 910" class="arrow"/>
-  <text x="875" y="692" text-anchor="middle" class="small">artifact</text>
-
-  <line x1="70" y1="808" x2="1210" y2="808" class="divider"/>
-  <text x="70" y="838" class="name">JobLifecycle</text>
-  <text x="255" y="838" class="note">Conditional complete / fail through DownloadJobService; cancellation wins over late results.</text>
-  <text x="70" y="870" class="name">TelegramJobProgress</text>
-  <text x="255" y="870" class="note">Phase updates and semantic failure reasons → Telegram statuses.</text>
-  <text x="70" y="902" class="name">WorkDirCleaner</text>
-  <text x="255" y="902" class="note">Workspace created only for fresh production; cleanup runs in the processor's finally block.</text>
-
-  <text x="40" y="961" class="note">Invalid cached file reference: retry with fresh production. Other delivery failures fail the job.</text>
-  <text x="40" y="988" class="note">Playlists use separate audio-message and ZIP workflows; see README for checkpoints, ordering, and limits.</text>
+  <rect width="1120" height="790" fill="#ffffff"/>
+  <text x="40" y="44" class="title">Single-media request flow</text>
+  <text x="40" y="96" class="stage">1. Plan the menu</text>
+  <rect x="40.0" y="118" width="236.0" height="76" rx="10" class="external"/>
+  <text x="158.0" y="162.0" text-anchor="middle">TelegramUpdateHandler</text>
+  <path d="M 276.0 156 H 304.0" class="arrow"/>
+  <rect x="308.0" y="118" width="236.0" height="76" rx="10" class="box"/>
+  <text x="426.0" y="149.5" text-anchor="middle">DownloadChoice</text>
+  <text x="426.0" y="174.5" text-anchor="middle">Coordinator</text>
+  <path d="M 544.0 156 H 572.0" class="arrow"/>
+  <rect x="576.0" y="118" width="236.0" height="76" rx="10" class="box"/>
+  <text x="694.0" y="162.0" text-anchor="middle">DownloadChoicePlanner</text>
+  <path d="M 812.0 156 H 840.0" class="arrow"/>
+  <rect x="844.0" y="118" width="236.0" height="76" rx="10" class="box"/>
+  <text x="962.0" y="162.0" text-anchor="middle">DownloadEngine</text>
+  <text x="40" y="245" class="stage">2. Accept the selection</text>
+  <rect x="40.0" y="267" width="236.0" height="76" rx="10" class="box"/>
+  <text x="158.0" y="311.0" text-anchor="middle">DownloadChoiceHandler</text>
+  <path d="M 276.0 305 H 304.0" class="arrow"/>
+  <rect x="308.0" y="267" width="236.0" height="76" rx="10" class="box"/>
+  <text x="426.0" y="311.0" text-anchor="middle">TelegramDownloadStarter</text>
+  <path d="M 544.0 305 H 572.0" class="arrow"/>
+  <rect x="576.0" y="267" width="236.0" height="76" rx="10" class="store"/>
+  <text x="694.0" y="311.0" text-anchor="middle">DownloadJobService</text>
+  <path d="M 812.0 305 H 840.0" class="arrow"/>
+  <rect x="844.0" y="267" width="236.0" height="76" rx="10" class="box"/>
+  <text x="962.0" y="311.0" text-anchor="middle">DownloadQueueWorker</text>
+  <text x="40" y="396" class="stage">3. Process the job · DownloadJobProcessor</text>
+  <rect x="40.0" y="463" width="325.3333333333333" height="76" rx="10" class="store"/>
+  <text x="202.66666666666666" y="507.0" text-anchor="middle">TelegramResultCache</text>
+  <path d="M 365.3333333333333 501 H 393.3333333333333" class="arrow"/>
+  <rect x="397.3333333333333" y="463" width="325.3333333333333" height="76" rx="10" class="box"/>
+  <text x="560.0" y="507.0" text-anchor="middle">SingleMediaHandler</text>
+  <path d="M 722.6666666666666 501 H 750.6666666666666" class="arrow"/>
+  <rect x="754.6666666666666" y="463" width="325.3333333333333" height="76" rx="10" class="external"/>
+  <text x="917.3333333333333" y="507.0" text-anchor="middle">TelegramFileSender</text>
+  <text x="400" y="458" text-anchor="middle">miss</text>
+  <path d="M 208 463 V 422 H 912 V 459" class="arrow"/>
+  <text x="560" y="414" text-anchor="middle">cache hit</text>
+  <text x="40" y="609" class="stage">Processor responsibilities</text>
+  <rect x="40.0" y="633" width="325.3333333333333" height="76" rx="10" class="box"/>
+  <text x="202.66666666666666" y="677.0" text-anchor="middle">JobLifecycle</text>
+  <rect x="397.3333333333333" y="633" width="325.3333333333333" height="76" rx="10" class="box"/>
+  <text x="560.0" y="677.0" text-anchor="middle">TelegramJobProgress</text>
+  <rect x="754.6666666666666" y="633" width="325.3333333333333" height="76" rx="10" class="box"/>
+  <text x="917.3333333333333" y="677.0" text-anchor="middle">WorkDirCleaner</text>
 </svg>

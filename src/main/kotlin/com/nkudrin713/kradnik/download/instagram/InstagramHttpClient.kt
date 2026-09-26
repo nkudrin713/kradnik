@@ -1,5 +1,7 @@
 package com.nkudrin713.kradnik.download.instagram
 
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import kotlinx.coroutines.Dispatchers
@@ -220,6 +222,9 @@ enum class InstagramRequestStage {
 class InstagramHttpException(
     stage: InstagramRequestStage,
     val statusCode: Int,
-) : InstagramEmbedException("Instagram ${stage.name.lowercase()} request failed: status=$statusCode")
+) : InstagramEmbedException(
+    "Instagram ${stage.name.lowercase()} request failed: status=$statusCode",
+    reason = if (statusCode == 403 || statusCode == 429) DownloadFailureReason.SOURCE_RATE_LIMITED else DownloadFailureReason.SOURCE_REQUEST_FAILED,
+)
 
-class InstagramMediaTooLargeException : InstagramEmbedException("Instagram media exceeds Telegram upload limit")
+class InstagramMediaTooLargeException : InstagramEmbedException("Instagram media exceeds Telegram upload limit", reason = DownloadFailureReason.TOO_LARGE)

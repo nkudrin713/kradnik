@@ -1,9 +1,9 @@
 package com.nkudrin713.kradnik.ytdlp
 
-import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -583,12 +583,10 @@ class YtDlpServiceTest {
         }
     }
 
-    private fun testRequest(): DownloadSpec {
-        return DownloadSpec(
+    private fun testRequest(): SourceRequest {
+        return SourceRequest(
             originalUrl = "https://example.com",
             normalizedUrl = "https://example.com",
-            cacheKey = "video",
-            outputType = OutputType.VIDEO,
             platform = DownloadPlatform.VK,
             formatSelector = "bv*+ba/b",
             extraArgs = listOf("--merge-output-format", "mp4"),
@@ -596,7 +594,7 @@ class YtDlpServiceTest {
         )
     }
 
-    private fun youtubeRequest(): DownloadSpec {
+    private fun youtubeRequest(): SourceRequest {
         return testRequest().copy(
             originalUrl = "https://youtube.com/watch?v=video-id",
             normalizedUrl = "https://youtube.com/watch?v=video-id",

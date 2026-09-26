@@ -60,9 +60,6 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
     fun recoverInterruptedJobs(): Int = downloadJobRepository.requeueProcessingJobs()
 
     @Transactional(readOnly = true)
-    fun findCachedJob(job: DownloadJob): DownloadJob? = downloadJobRepository.findCachedCompletedJob(job.cacheKey)
-
-    @Transactional(readOnly = true)
     fun findCachedFileId(cacheKey: String): String? = downloadJobRepository.findCachedCompletedJob(cacheKey)?.telegramFileId
 
     @Transactional

@@ -1,15 +1,16 @@
 package com.nkudrin713.kradnik.download.instagram
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import com.nkudrin713.kradnik.ytdlp.YtDlpThumbnailDto
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
 import java.math.BigDecimal
@@ -20,6 +21,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class InstagramEmbedDownloaderTest {
     private val httpClient: InstagramHttpClient = mockk(relaxed = true)
@@ -88,6 +91,24 @@ class InstagramEmbedDownloaderTest {
 
         assertFailsWith<InstagramEmbedException> {
             downloader.prepare(request("https://www.instagram.com/reel/ABC_123/"))
+        }
+    }
+
+    @Test
+    fun propagatesCancellationAndInterruptionWithoutWrapping() = runTest {
+        val embedUri = URI.create("https://www.instagram.com/p/ABC_123/embed/captioned/")
+        val request = request("https://www.instagram.com/reel/ABC_123/")
+        val cancelled = CancellationException("cancelled")
+        coEvery { httpClient.getText(embedUri) } throws cancelled
+        assertSame(cancelled, assertFailsWith<CancellationException> { downloader.prepare(request) })
+
+        val interrupted = InterruptedException("interrupted")
+        coEvery { httpClient.getText(embedUri) } throws interrupted
+        try {
+            assertSame(interrupted, assertFailsWith<InterruptedException> { downloader.prepare(request) })
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally {
+            Thread.interrupted()
         }
     }
 
@@ -226,12 +247,10 @@ class InstagramEmbedDownloaderTest {
     private fun request(
         url: String,
         outputType: OutputType = OutputType.VIDEO,
-    ): DownloadSpec {
-        return DownloadSpec(
+    ): SourceRequest {
+        return SourceRequest(
             originalUrl = url,
             normalizedUrl = url,
-            cacheKey = "instagram",
-            outputType = outputType,
             platform = DownloadPlatform.INSTAGRAM,
             formatSelector = "format",
             presetName = "instagram",

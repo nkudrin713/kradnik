@@ -1,5 +1,7 @@
 package com.nkudrin713.kradnik.download.video
 
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -167,10 +169,11 @@ private data class FfmpegCommand(
 ) : Command
 
 class VideoTooLargeException(sizeBytes: Long) :
-    RuntimeException(
+    DownloadFailure(
+        DownloadFailureReason.TOO_LARGE,
         "Video is too large for Telegram upload: sizeMb=${
             String.format(Locale.US, "%.2f", sizeBytes / (1024.0 * 1024.0))
         }",
     )
 
-class VideoPrepareException(message: String) : RuntimeException(message)
+class VideoPrepareException(message: String) : DownloadFailure(DownloadFailureReason.PROCESSING_FAILED, message)

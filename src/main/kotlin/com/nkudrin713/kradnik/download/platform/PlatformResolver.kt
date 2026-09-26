@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.platform
 
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.identity.extractQueryParameter
 import com.nkudrin713.kradnik.download.identity.parseHttpUrl
@@ -9,6 +10,7 @@ import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments
 import com.nkudrin713.kradnik.download.instagram.isInstagramHost
 import com.nkudrin713.kradnik.download.instagram.parseInstagramMediaUrl
+import com.nkudrin713.kradnik.ytdlp.YtDlpPresets
 import org.springframework.stereotype.Service
 import java.net.URI
 import java.net.URLDecoder
@@ -50,31 +52,25 @@ class PlatformResolver {
             video = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "youtube:video:$youtubeVideoId:video:youtube_h264_mobile_2gb",
+                cacheKey = ResultKeyFactory.source("youtube:video:$youtubeVideoId", OutputType.VIDEO, "youtube_h264_mobile_2gb"),
                 outputType = OutputType.VIDEO,
                 platform = DownloadPlatform.YOUTUBE,
                 presetName = "youtube_h264_mobile_2gb",
                 formatSelector =
-                    "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
-                            "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
-                            "b[height<=1280]/best",
-                extraArgs = listOf("--merge-output-format", "mp4"),
+                "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
+                    "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
+                    "b[height<=1280]/best",
+                extraArgs = YtDlpPresets.MERGE_MP4_ARGS,
             ),
             audio = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "youtube:video:$youtubeVideoId:audio:youtube_audio",
+                cacheKey = ResultKeyFactory.source("youtube:video:$youtubeVideoId", OutputType.AUDIO, "youtube_audio"),
                 outputType = OutputType.AUDIO,
                 platform = DownloadPlatform.YOUTUBE,
                 presetName = "youtube_audio",
-                formatSelector = "ba/bestaudio",
-                extraArgs = listOf(
-                    "-x",
-                    "--audio-format", "mp3",
-                    "--embed-metadata",
-                    "--embed-thumbnail",
-                    "--convert-thumbnails", "jpg"
-                ),
+                formatSelector = YtDlpPresets.YOUTUBE_AUDIO_FORMAT,
+                extraArgs = YtDlpPresets.YOUTUBE_AUDIO_ARGS,
             ),
         )
     }
@@ -115,25 +111,25 @@ class PlatformResolver {
             video = DownloadSpec(
                 originalUrl = mediaUrl.original,
                 normalizedUrl = mediaUrl.normalized,
-                cacheKey = "$cacheKeyPrefix:video:instagram_mobile_video",
+                cacheKey = ResultKeyFactory.source(cacheKeyPrefix, OutputType.VIDEO, "instagram_mobile_video"),
                 outputType = OutputType.VIDEO,
                 platform = DownloadPlatform.INSTAGRAM,
                 presetName = "instagram_mobile_video",
                 formatSelector =
-                    "bv*[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
-                            "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
-                            "b[height<=1280]/best",
-                extraArgs = listOf("--merge-output-format", "mp4"),
+                "bv*[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
+                    "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
+                    "b[height<=1280]/best",
+                extraArgs = YtDlpPresets.MERGE_MP4_ARGS,
             ),
             audio = DownloadSpec(
                 originalUrl = mediaUrl.original,
                 normalizedUrl = mediaUrl.normalized,
-                cacheKey = "$cacheKeyPrefix:audio:instagram_audio",
+                cacheKey = ResultKeyFactory.source(cacheKeyPrefix, OutputType.AUDIO, "instagram_audio"),
                 outputType = OutputType.AUDIO,
                 platform = DownloadPlatform.INSTAGRAM,
                 presetName = "instagram_audio",
-                formatSelector = "ba/bestaudio/best",
-                extraArgs = listOf("-x", "--audio-format", "mp3"),
+                formatSelector = YtDlpPresets.AUDIO_FORMAT_WITH_VIDEO_FALLBACK,
+                extraArgs = YtDlpPresets.MP3_AUDIO_ARGS,
             ),
         )
     }
@@ -155,25 +151,25 @@ class PlatformResolver {
             video = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "$cacheKeyPrefix:video:$VK_VIDEO_PRESET",
+                cacheKey = ResultKeyFactory.source(cacheKeyPrefix, OutputType.VIDEO, VK_VIDEO_PRESET),
                 outputType = OutputType.VIDEO,
                 platform = DownloadPlatform.VK,
                 presetName = VK_VIDEO_PRESET,
                 formatSelector =
-                    "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/" +
-                            "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
-                            "b[height<=1280]/best",
-                extraArgs = listOf("--merge-output-format", "mp4"),
+                "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/" +
+                    "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
+                    "b[height<=1280]/best",
+                extraArgs = YtDlpPresets.MERGE_MP4_ARGS,
             ),
             audio = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "$cacheKeyPrefix:audio:$VK_AUDIO_PRESET",
+                cacheKey = ResultKeyFactory.source(cacheKeyPrefix, OutputType.AUDIO, VK_AUDIO_PRESET),
                 outputType = OutputType.AUDIO,
                 platform = DownloadPlatform.VK,
                 presetName = VK_AUDIO_PRESET,
-                formatSelector = "ba/bestaudio/best",
-                extraArgs = listOf("-x", "--audio-format", "mp3"),
+                formatSelector = YtDlpPresets.AUDIO_FORMAT_WITH_VIDEO_FALLBACK,
+                extraArgs = YtDlpPresets.MP3_AUDIO_ARGS,
             ),
         )
     }
@@ -220,7 +216,6 @@ class PlatformResolver {
         )
         val VK_MEDIA_PATTERN = Regex("(video|clip)(-?\\d+_\\d+)")
         val VK_QUERY_MEDIA_PATTERN = Regex("(video|clip)(-?\\d+_\\d+)(?:[/?].*)?")
-
     }
 }
 

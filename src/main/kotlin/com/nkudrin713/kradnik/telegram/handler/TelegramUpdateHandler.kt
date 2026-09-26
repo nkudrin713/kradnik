@@ -31,22 +31,29 @@ class TelegramUpdateHandler(
     private val languageSelector: TelegramLanguageSelector,
     private val preferenceService: TelegramUserPreferenceService,
     private val messages: TelegramMessages,
-    @Value("\${telegram.donation.url:}")
+    @Value($$"${telegram.donation.url:}")
     private val donationUrl: String,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
+    /**
+     * Routes guest text, pinned-message notices, regular text, and callbacks to the corresponding handler.
+     * Callbacks are offered to language selection, job cancellation, then download choice handling.
+     * Unsupported updates are ignored; handler failures propagate except for best-effort notice deletion.
+     */
     fun handle(update: Update) {
         val guestMessage = update.guestMessage()
         val message = update.message()
         when {
             guestMessage?.text() != null -> handleGuestMessage(update, guestMessage)
+
             message?.pinnedMessage() != null -> deletePinnedServiceMessageBestEffort(
                 chatId = message.chat().id(),
                 messageId = message.messageId(),
             )
 
             message?.text() != null -> handleMessage(update, message)
+
             update.callbackQuery()?.data() != null -> {
                 val callbackQuery = update.callbackQuery()
                 if (!languageSelector.handle(callbackQuery) &&
@@ -80,7 +87,7 @@ class TelegramUpdateHandler(
                 url = url,
                 language = language,
                 guestQueryId = guestQueryId,
-            )
+            ),
         )
     }
 
@@ -110,11 +117,16 @@ class TelegramUpdateHandler(
 
         when {
             text == "/start" -> sendMessage(chatId, language, TelegramMessage.START_PROMPT)
+
             text == "/help" -> sendMessage(chatId, language, TelegramMessage.HELP)
+
             text == "/legal" -> sendMessage(chatId, language, TelegramMessage.LEGAL)
+
             text == "/donate" -> sendDonation(chatId, language)
+
             text.startsWith("http://") || text.startsWith("https://") ->
                 prepareDownload(update, message, text, language)
+
             else -> sendMessage(chatId, language, TelegramMessage.LINK_REQUIRED)
         }
     }
@@ -141,7 +153,7 @@ class TelegramUpdateHandler(
                 telegramRequestMessageId = message.messageId(),
                 url = url,
                 language = language,
-            )
+            ),
         )
     }
 

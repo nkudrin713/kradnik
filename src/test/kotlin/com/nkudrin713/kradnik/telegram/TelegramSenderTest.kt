@@ -28,8 +28,8 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
-import kotlin.test.Test
 import java.util.UUID
+import kotlin.test.Test
 
 class TelegramSenderTest {
     private val bot: TelegramBot = mockk()
@@ -76,7 +76,7 @@ class TelegramSenderTest {
         every { bot.execute(capture(request)) } returns response
 
         sender.answerGuestMessage("guest-query", "Analyzing") shouldBe
-                TelegramMessageAddress.Inline("inline-message")
+            TelegramMessageAddress.Inline("inline-message")
 
         val actual = request.captured.shouldBeInstanceOf<AnswerGuestQuery>()
         actual.getParameters()["guest_query_id"] shouldBe "guest-query"

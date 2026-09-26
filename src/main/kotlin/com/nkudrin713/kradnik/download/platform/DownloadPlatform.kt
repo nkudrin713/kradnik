@@ -6,7 +6,8 @@ enum class DownloadPlatform(
 ) {
     YOUTUBE("youtube", "YouTube"),
     INSTAGRAM("instagram", "Instagram"),
-    VK("vk", "VK");
+    VK("vk", "VK"),
+    ;
 
     companion object {
         fun fromDb(value: String): DownloadPlatform {

@@ -28,7 +28,7 @@ class ProcessRunnerTest {
                 args = listOf("hello"),
                 workingDir = tempDir,
                 timeout = 5.seconds,
-            )
+            ),
         )
 
         assertFalse(result.timedOut)
@@ -45,7 +45,7 @@ class ProcessRunnerTest {
                 args = listOf("5"),
                 workingDir = tempDir,
                 timeout = 100.milliseconds,
-            )
+            ),
         )
 
         assertTrue(result.timedOut)
@@ -60,7 +60,7 @@ class ProcessRunnerTest {
                 args = listOf("-c", "echo error-message >&2"),
                 workingDir = tempDir,
                 timeout = 5.seconds,
-            )
+            ),
         )
 
         assertEquals("", result.stdout)
@@ -76,7 +76,7 @@ class ProcessRunnerTest {
                 workingDir = tempDir,
                 timeout = 15.seconds,
                 maxWorkingDirectoryBytes = 1_000_000,
-            )
+            ),
         )
 
         assertTrue(result.workingDirectoryLimitExceeded)
@@ -93,7 +93,7 @@ class ProcessRunnerTest {
                 ),
                 workingDir = tempDir,
                 timeout = 10.seconds,
-            )
+            ),
         )
 
         assertFalse(result.timedOut)
@@ -122,7 +122,7 @@ class ProcessRunnerTest {
                     workingDir = tempDir,
                     timeout = 60.seconds,
                     maxWorkingDirectoryBytes = 1_000_000,
-                )
+                ),
             )
         }
         withTimeout(5.seconds) {

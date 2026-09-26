@@ -1,5 +1,7 @@
 package com.nkudrin713.kradnik.download.video
 
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -10,10 +12,10 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration as JavaDuration
 import java.util.Locale
 import kotlin.time.Duration
 import kotlin.time.toKotlinDuration
+import java.time.Duration as JavaDuration
 
 /**
  * Probes downloaded media with [VideoMetadataProbe] and applies [TelegramVideoPolicy] before upload.
@@ -26,7 +28,7 @@ class TelegramVideoPreparer(
     private val processRunner: ProcessRunner,
     private val videoMetadataProbe: VideoMetadataProbe,
     private val videoPolicy: TelegramVideoPolicy,
-    @Value("\${download.video.ffmpeg-timeout:20m}")
+    @Value($$"${download.video.ffmpeg-timeout:20m}")
     private val ffmpegTimeout: JavaDuration = JavaDuration.ofMinutes(20),
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -37,6 +39,14 @@ class TelegramVideoPreparer(
         }
     }
 
+    /**
+     * Probes [file] and returns it unchanged when [TelegramVideoPolicy] accepts it.
+     * Otherwise, transcodes once into `telegram-video.mp4` under [outputDir] and validates the result again.
+     * The caller owns both the input and output workspace; this method does not delete either file.
+     *
+     * @throws VideoTooLargeException if the policy rejects the source or prepared file for its size.
+     * @throws VideoPrepareException if ffmpeg fails or the prepared file remains incompatible.
+     */
     suspend fun prepare(
         file: DownloadedFile,
         outputDir: Path,
@@ -45,7 +55,9 @@ class TelegramVideoPreparer(
         val sourceMetadata = videoMetadataProbe.probe(file.file)
         return when (val decision = videoPolicy.evaluate(sourceMetadata, file.sizeBytes)) {
             TelegramVideoPolicyDecision.Accepted -> file
+
             TelegramVideoPolicyDecision.RejectedTooLarge -> throw VideoTooLargeException(file.sizeBytes)
+
             is TelegramVideoPolicyDecision.Transcode -> transcode(
                 file = file,
                 sourceMetadata = sourceMetadata,
@@ -65,7 +77,7 @@ class TelegramVideoPreparer(
     ): DownloadedFile {
         logger.info(
             "JOB[{}] transcoding video for Telegram: reasons={}, sourceSizeMb={}, container={}, " +
-                    "videoCodec={}, audioCodec={}, pixelFormat={}, width={}, height={}",
+                "videoCodec={}, audioCodec={}, pixelFormat={}, width={}, height={}",
             jobId,
             issues,
             formatMegabytes(file.sizeBytes),
@@ -86,20 +98,22 @@ class TelegramVideoPreparer(
         val preparedMetadata = videoMetadataProbe.probe(preparedFile)
         when (val decision = videoPolicy.evaluate(preparedMetadata, preparedSize)) {
             TelegramVideoPolicyDecision.Accepted -> Unit
+
             TelegramVideoPolicyDecision.RejectedTooLarge -> throw VideoTooLargeException(preparedSize)
+
             is TelegramVideoPolicyDecision.Transcode -> {
                 if (TelegramVideoIssue.FILE_SIZE in decision.issues) {
                     throw VideoTooLargeException(preparedSize)
                 }
                 throw VideoPrepareException(
-                    "Prepared video violates Telegram policy: issues=${decision.issues}"
+                    "Prepared video violates Telegram policy: issues=${decision.issues}",
                 )
             }
         }
 
         logger.info(
             "JOB[{}] video prepared for Telegram: sizeMb={}, container={}, videoCodec={}, " +
-                    "audioCodec={}, pixelFormat={}, width={}, height={}",
+                "audioCodec={}, pixelFormat={}, width={}, height={}",
             jobId,
             formatMegabytes(preparedSize),
             preparedMetadata.containerFormat,
@@ -138,7 +152,7 @@ class TelegramVideoPreparer(
                     output.toString(),
                 ),
                 timeout = ffmpegTimeout.toKotlinDuration(),
-            )
+            ),
         )
 
         if (result.timedOut || result.exitCode != 0) {
@@ -163,10 +177,11 @@ private data class FfmpegCommand(
 ) : Command
 
 class VideoTooLargeException(sizeBytes: Long) :
-    RuntimeException(
+    DownloadFailure(
+        DownloadFailureReason.TOO_LARGE,
         "Video is too large for Telegram upload: sizeMb=${
             String.format(Locale.US, "%.2f", sizeBytes / (1024.0 * 1024.0))
-        }"
+        }",
     )
 
-class VideoPrepareException(message: String) : RuntimeException(message)
+class VideoPrepareException(message: String) : DownloadFailure(DownloadFailureReason.PROCESSING_FAILED, message)

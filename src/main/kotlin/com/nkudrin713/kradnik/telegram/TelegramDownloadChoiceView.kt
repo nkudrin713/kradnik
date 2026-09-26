@@ -1,8 +1,9 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -49,7 +50,7 @@ class TelegramDownloadChoiceView(
         val videoInfo = buildList {
             add(
                 mediaInfo.title?.takeIf { it.isNotBlank() }
-                    ?: messages.text(language, TelegramMessage.CHOICE_TITLE_UNAVAILABLE)
+                    ?: messages.text(language, TelegramMessage.CHOICE_TITLE_UNAVAILABLE),
             )
             val authorUsername = mediaInfo.authorUsername
                 ?.trim()
@@ -75,32 +76,49 @@ class TelegramDownloadChoiceView(
             arrayOf(
                 InlineKeyboardButton(buttonText(option, language))
                     .callbackData(DownloadChoiceCallback.encode(sessionToken, option.key))
+                    .apply {
+                        if (option.available && option.spec.playlistDeliveryMode != PlaylistDeliveryMode.ZIP) {
+                            when (option.spec.outputType) {
+                                OutputType.VIDEO, OutputType.POST -> style("primary")
+                                OutputType.AUDIO -> style("success")
+                                else -> Unit
+                            }
+                        }
+                    },
             )
         } + listOf(
             arrayOf(
                 InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_CANCEL))
-                    .callbackData(DownloadChoiceCallback.encode(sessionToken, CANCEL_OPTION_KEY)),
+                    .callbackData(DownloadChoiceCallback.encode(sessionToken, CANCEL_OPTION_KEY))
+                    .style("danger"),
             ),
         )
         return InlineKeyboardMarkup(*rows.toTypedArray())
     }
 
     private fun buttonText(option: DownloadChoiceOptionSnapshot, language: BotLanguage): String {
-        val label = "${option.spec.outputType.icon} ${option.label}"
-        val size = option.sizeBytes ?: return label
+        val icon = if (option.spec.playlistDeliveryMode == PlaylistDeliveryMode.ZIP) "📦" else option.spec.outputType.icon
+        val label = "$icon ${option.label}"
+        val size = option.sizeBytes
         val prefix = if (option.approximateSize) "≈ " else ""
         val unavailable = if (option.available) {
             ""
         } else {
             " · ${messages.text(language, TelegramMessage.CHOICE_UNAVAILABLE)}"
         }
-        return "$label · $prefix${formatSize(size, language)}$unavailable"
+        return if (size == null) "$label$unavailable" else "$label · $prefix${formatSize(size, language)}$unavailable"
     }
 
     private fun formatSize(bytes: Long, language: BotLanguage): String {
         val gigabytes = bytes >= BYTES_IN_GIGABYTE
         val value = if (gigabytes) bytes / BYTES_IN_GIGABYTE else bytes / BYTES_IN_MEGABYTE
-        val pattern = if (value >= 100) "%.0f" else if (value >= 10) "%.1f" else "%.2f"
+        val pattern = if (value >= 100) {
+            "%.0f"
+        } else if (value >= 10) {
+            "%.1f"
+        } else {
+            "%.2f"
+        }
         val unit = messages.text(
             language,
             if (gigabytes) TelegramMessage.CHOICE_SIZE_GB else TelegramMessage.CHOICE_SIZE_MB,
@@ -135,7 +153,7 @@ class TelegramDownloadChoiceView(
                 OutputType.VIDEO -> "🎬"
                 OutputType.AUDIO -> "🎧"
                 OutputType.COVER -> "🖼"
-                OutputType.IMAGES -> "🖼"
+                OutputType.IMAGES, OutputType.POST -> "🖼"
             }
     }
 }

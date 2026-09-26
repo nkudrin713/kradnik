@@ -1,193 +1,129 @@
 package com.nkudrin713.kradnik.download.telegram
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
-import com.nkudrin713.kradnik.download.domain.DownloadJob
-import com.nkudrin713.kradnik.download.domain.DownloadedFile
-import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
-import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
-import com.nkudrin713.kradnik.telegram.TelegramAudio
+import com.nkudrin713.kradnik.download.domain.MediaArtifact
+import com.nkudrin713.kradnik.download.domain.PostMedia
+import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
+import com.nkudrin713.kradnik.telegram.TelegramPostSender
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
 import org.springframework.stereotype.Component
 
 /**
- * Maps each [DownloadJob.outputType] to matching fresh-file and cached-file operations on [TelegramMediaSender].
- * [DownloadJobProcessor][com.nkudrin713.kradnik.download.processing.DownloadJobProcessor] can therefore share one
- * delivery path and always receive the reusable Telegram file ID returned by the API.
+ * Delivers typed local media through [TelegramMediaSender]. Cached delivery receives a decoded media reference;
+ * persistence and cache identity stay outside this transport adapter.
  */
 @Component
 class TelegramFileSender(
     private val telegramMediaSender: TelegramMediaSender,
     private val properties: TelegramBotProperties,
+    private val postSender: TelegramPostSender,
 ) {
-    private val objectMapper = jacksonObjectMapper()
-
-    suspend fun send(job: DownloadJob, file: DownloadedFile): String {
-        val inlineMessageId = job.telegramInlineMessageId
+    suspend fun send(context: DeliveryContext, artifact: MediaArtifact): String {
+        if (artifact is MediaArtifact.Post) return TelegramReceiptCodec.post(postSender.send(context, artifact.items))
+        if (context.inlineMessageId == null && !context.postText.isNullOrBlank()) {
+            val items = when (artifact) {
+                is MediaArtifact.Video -> listOf(PostMedia(PostMediaKind.VIDEO, artifact.file))
+                is MediaArtifact.Photos -> artifact.files.map { PostMedia(PostMediaKind.PHOTO, it) }
+                else -> null
+            }
+            if (items != null) return TelegramReceiptCodec.post(postSender.send(context, items))
+        }
+        val inlineMessageId = context.inlineMessageId
         if (inlineMessageId != null) {
-            val fileId = uploadForInline(job, file)
-            return editInline(job, inlineMessageId, fileId)
+            val storageChatId = properties.fileStorageChatId ?: throw TelegramSendException(
+                errorCode = null,
+                description = "telegram.bot.file-storage-chat-id is not configured",
+            )
+            if (artifact is MediaArtifact.Photos) {
+                throw TelegramSendException("Instagram image groups are unavailable in inline mode")
+            }
+            val fileId = sendMedia(storageChatId, null, artifact)
+            return when (artifact) {
+                is MediaArtifact.Video -> telegramMediaSender.editInlineVideo(inlineMessageId, fileId)
+
+                is MediaArtifact.Audio -> telegramMediaSender.editInlineAudio(
+                    inlineMessageId = inlineMessageId,
+                    fileId = fileId,
+                    title = artifact.metadata.title,
+                    performer = artifact.metadata.performer,
+                    durationSeconds = artifact.metadata.durationSeconds,
+                )
+
+                is MediaArtifact.Document -> telegramMediaSender.editInlineDocument(inlineMessageId, fileId)
+
+                is MediaArtifact.Photos, is MediaArtifact.Post -> throw TelegramSendException("Instagram posts are unavailable in inline mode")
+            }
         }
 
-        val fileId = when (job.outputType) {
-            OutputType.VIDEO -> telegramMediaSender.sendVideo(
-                chatId = job.telegramChatId,
-                file = file.file,
-                replyToMessageId = job.telegramRequestMessageId,
+        return sendMedia(context.chatId, context.replyToMessageId, artifact)
+    }
+
+    private suspend fun sendMedia(chatId: Long, replyToMessageId: Int?, artifact: MediaArtifact): String {
+        return when (artifact) {
+            is MediaArtifact.Post -> error("Posts require full delivery context")
+
+            is MediaArtifact.Video -> telegramMediaSender.sendVideo(
+                chatId = chatId,
+                file = artifact.file,
+                replyToMessageId = replyToMessageId,
             )
-            OutputType.AUDIO -> telegramMediaSender.sendAudio(
-                chatId = job.telegramChatId,
-                file = file.file,
-                title = job.sourceAudioTitle,
-                performer = job.sourceAudioPerformer,
-                durationSeconds = job.sourceDurationSeconds,
-                replyToMessageId = job.telegramRequestMessageId,
+
+            is MediaArtifact.Audio -> telegramMediaSender.sendAudio(
+                chatId = chatId,
+                file = artifact.file,
+                title = artifact.metadata.title,
+                performer = artifact.metadata.performer,
+                durationSeconds = artifact.metadata.durationSeconds,
+                replyToMessageId = replyToMessageId,
             )
-            OutputType.COVER -> telegramMediaSender.sendDocument(
-                chatId = job.telegramChatId,
-                file = file.file,
-                replyToMessageId = job.telegramRequestMessageId,
+
+            is MediaArtifact.Document -> telegramMediaSender.sendDocument(
+                chatId = chatId,
+                file = artifact.file,
+                replyToMessageId = replyToMessageId,
             )
-            OutputType.IMAGES -> encodePhotoIds(
+
+            is MediaArtifact.Photos -> TelegramReceiptCodec.photos(
                 telegramMediaSender.sendPhotos(
-                    chatId = job.telegramChatId,
-                    files = file.files,
-                    replyToMessageId = job.telegramRequestMessageId,
-                )
+                    chatId = chatId,
+                    files = artifact.files,
+                    replyToMessageId = replyToMessageId,
+                ),
             )
         }
-        sendPostText(job)
-        return fileId
     }
 
-    suspend fun sendCached(
-        job: DownloadJob,
-        fileId: String,
-    ): String {
-        val inlineMessageId = job.telegramInlineMessageId
-        if (inlineMessageId != null) {
-            return editInline(job, inlineMessageId, fileId)
+    suspend fun sendCached(context: DeliveryContext, media: CachedMedia): String {
+        if (media is CachedMedia.Post) return TelegramReceiptCodec.post(postSender.sendCached(context, media.items))
+        if (context.inlineMessageId == null && !context.postText.isNullOrBlank()) {
+            val items = when {
+                media is CachedMedia.Photos -> media.fileIds.map { CachedPostItem(PostMediaKind.PHOTO, it) }
+                media is CachedMedia.Single && media.kind == TelegramMediaKind.VIDEO -> listOf(CachedPostItem(PostMediaKind.VIDEO, media.fileId))
+                else -> null
+            }
+            if (items != null) return TelegramReceiptCodec.post(postSender.sendCached(context, items))
         }
-
-        val sentId = when (job.outputType) {
-            OutputType.VIDEO -> telegramMediaSender.sendCachedVideo(
-                chatId = job.telegramChatId,
-                fileId = fileId,
-                replyToMessageId = job.telegramRequestMessageId,
-            )
-            OutputType.AUDIO -> telegramMediaSender.sendCachedAudio(
-                chatId = job.telegramChatId,
-                fileId = fileId,
-                replyToMessageId = job.telegramRequestMessageId,
-            )
-            OutputType.COVER -> telegramMediaSender.sendCachedDocument(
-                chatId = job.telegramChatId,
-                fileId = fileId,
-                replyToMessageId = job.telegramRequestMessageId,
-            )
-            OutputType.IMAGES -> encodePhotoIds(
-                telegramMediaSender.sendCachedPhotos(
-                    chatId = job.telegramChatId,
-                    fileIds = decodePhotoIds(fileId),
-                    replyToMessageId = job.telegramRequestMessageId,
-                )
-            )
+        val inlineId = context.inlineMessageId
+        if (inlineId != null) {
+            if (media is CachedMedia.Photos) throw TelegramSendException("Instagram image groups are unavailable in inline mode")
+            require(media is CachedMedia.Single)
+            return when (media.kind) {
+                TelegramMediaKind.VIDEO -> telegramMediaSender.editInlineVideo(inlineId, media.fileId)
+                TelegramMediaKind.AUDIO -> telegramMediaSender.editInlineAudio(inlineId, media.fileId, null, null, null)
+                TelegramMediaKind.DOCUMENT -> telegramMediaSender.editInlineDocument(inlineId, media.fileId)
+            }
         }
-        sendPostText(job)
-        return sentId
-    }
+        return when (media) {
+            is CachedMedia.Post -> error("Posts require full delivery context")
 
-    suspend fun stagePlaylistAudio(file: DownloadedFile, entry: PlaylistAudioEntry): String {
-        val storageChatId = properties.fileStorageChatId ?: throw TelegramSendException(
-            errorCode = null,
-            description = "telegram.bot.file-storage-chat-id is not configured",
-        )
-        return telegramMediaSender.sendAudio(
-            chatId = storageChatId,
-            file = file.file,
-            title = entry.title,
-            performer = null,
-            durationSeconds = entry.durationSeconds,
-        )
-    }
+            is CachedMedia.Single -> when (media.kind) {
+                TelegramMediaKind.VIDEO -> telegramMediaSender.sendCachedVideo(context.chatId, media.fileId, context.replyToMessageId)
+                TelegramMediaKind.AUDIO -> telegramMediaSender.sendCachedAudio(context.chatId, media.fileId, replyToMessageId = context.replyToMessageId)
+                TelegramMediaKind.DOCUMENT -> telegramMediaSender.sendCachedDocument(context.chatId, media.fileId, context.replyToMessageId)
+            }
 
-    suspend fun sendPlaylistAudios(
-        job: DownloadJob,
-        results: List<PlaylistAudioResult>,
-    ): List<String> {
-        val entries = job.playlistEntries.associateBy(PlaylistAudioEntry::position)
-        val audios = results.sortedBy(PlaylistAudioResult::position).mapNotNull { result ->
-            val fileId = result.fileId ?: return@mapNotNull null
-            val entry = entries[result.position] ?: return@mapNotNull null
-            TelegramAudio(
-                fileId = fileId,
-                title = entry.title,
-                durationSeconds = entry.durationSeconds,
-            )
+            is CachedMedia.Photos -> TelegramReceiptCodec.photos(telegramMediaSender.sendCachedPhotos(context.chatId, media.fileIds, context.replyToMessageId))
         }
-        return telegramMediaSender.sendCachedAudios(
-            chatId = job.telegramChatId,
-            audios = audios,
-            replyToMessageId = job.telegramRequestMessageId,
-        )
-    }
-
-    private suspend fun uploadForInline(job: DownloadJob, file: DownloadedFile): String {
-        val storageChatId = properties.fileStorageChatId ?: throw TelegramSendException(
-            errorCode = null,
-            description = "telegram.bot.file-storage-chat-id is not configured",
-        )
-        return when (job.outputType) {
-            OutputType.VIDEO -> telegramMediaSender.sendVideo(storageChatId, file.file)
-            OutputType.AUDIO -> telegramMediaSender.sendAudio(
-                chatId = storageChatId,
-                file = file.file,
-                title = job.sourceAudioTitle,
-                performer = job.sourceAudioPerformer,
-                durationSeconds = job.sourceDurationSeconds,
-            )
-            OutputType.COVER -> telegramMediaSender.sendDocument(storageChatId, file.file)
-            OutputType.IMAGES -> throw TelegramSendException("Instagram image groups are unavailable in inline mode")
-        }
-    }
-
-    private suspend fun editInline(job: DownloadJob, inlineMessageId: String, fileId: String): String {
-        return when (job.outputType) {
-            OutputType.VIDEO -> telegramMediaSender.editInlineVideo(inlineMessageId, fileId)
-            OutputType.AUDIO -> telegramMediaSender.editInlineAudio(
-                inlineMessageId = inlineMessageId,
-                fileId = fileId,
-                title = job.sourceAudioTitle,
-                performer = job.sourceAudioPerformer,
-                durationSeconds = job.sourceDurationSeconds,
-            )
-            OutputType.COVER -> telegramMediaSender.editInlineDocument(inlineMessageId, fileId)
-            OutputType.IMAGES -> throw TelegramSendException("Instagram image groups are unavailable in inline mode")
-        }
-    }
-
-    private fun encodePhotoIds(fileIds: List<String>): String {
-        return PHOTO_GROUP_PREFIX + objectMapper.writeValueAsString(fileIds)
-    }
-
-    private fun decodePhotoIds(value: String): List<String> {
-        require(value.startsWith(PHOTO_GROUP_PREFIX)) { "Cached photo group has invalid format" }
-        return objectMapper.readValue(value.removePrefix(PHOTO_GROUP_PREFIX))
-    }
-
-    private suspend fun sendPostText(job: DownloadJob) {
-        val postText = job.sourcePostText?.takeIf(String::isNotBlank) ?: return
-        telegramMediaSender.sendMonospaceText(
-            chatId = job.telegramChatId,
-            text = postText,
-            replyToMessageId = job.telegramRequestMessageId,
-        )
-    }
-
-    private companion object {
-        private const val PHOTO_GROUP_PREFIX = "photo-group:"
     }
 }

@@ -1,5 +1,7 @@
 package com.nkudrin713.kradnik.download.cover
 
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import kotlinx.coroutines.Dispatchers
@@ -103,7 +105,6 @@ class CoverDownloader(
     }
 }
 
-open class CoverDownloadException(message: String) : RuntimeException(message)
+open class CoverDownloadException(message: String, reason: DownloadFailureReason = DownloadFailureReason.SOURCE_FAILED) : DownloadFailure(reason, message)
 
-class CoverTooLargeException :
-    CoverDownloadException("Cover exceeds the upload limit")
+class CoverTooLargeException : CoverDownloadException("Cover exceeds the upload limit", DownloadFailureReason.TOO_LARGE)

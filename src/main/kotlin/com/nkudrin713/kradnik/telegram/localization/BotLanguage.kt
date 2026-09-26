@@ -16,7 +16,6 @@ enum class BotLanguage(
         fun fromCode(code: String?): BotLanguage? {
             return entries.firstOrNull { it.code == code?.lowercase() }
         }
-
     }
 }
 
@@ -24,6 +23,5 @@ enum class BotLanguage(
 class BotLanguageConverter : AttributeConverter<BotLanguage, String> {
     override fun convertToDatabaseColumn(attribute: BotLanguage?): String? = attribute?.code
 
-    override fun convertToEntityAttribute(dbData: String?): BotLanguage? =
-        dbData?.let(BotLanguage::fromCode)
+    override fun convertToEntityAttribute(dbData: String?): BotLanguage? = dbData?.let(BotLanguage::fromCode)
 }

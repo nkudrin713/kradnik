@@ -5,8 +5,8 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceCancellation
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.choice.SelectDownloadChoiceCommand
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.telegram.CANCEL_OPTION_KEY
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
@@ -62,7 +62,7 @@ class DownloadChoiceHandler(
                 telegramChatId = (address as? TelegramMessageAddress.Chat)?.chatId,
                 telegramMenuMessageId = (address as? TelegramMessageAddress.Chat)?.messageId,
                 telegramInlineMessageId = (address as? TelegramMessageAddress.Inline)?.inlineMessageId,
-            )
+            ),
         )
 
         when (selection) {
@@ -72,18 +72,22 @@ class DownloadChoiceHandler(
                 callback = callback,
                 selection = selection,
             )
+
             is DownloadChoiceSelection.Unavailable -> answer(callbackQuery.id(), selection.reason, showAlert = true)
+
             DownloadChoiceSelection.NotOwner -> answer(
                 callbackQuery.id(),
                 fallbackLanguage,
                 TelegramMessage.CHOICE_NOT_OWNER,
                 showAlert = true,
             )
+
             DownloadChoiceSelection.AlreadySelected -> answer(
                 callbackQuery.id(),
                 fallbackLanguage,
                 TelegramMessage.CHOICE_ALREADY_SELECTED,
             )
+
             DownloadChoiceSelection.Invalid -> answer(
                 callbackQuery.id(),
                 fallbackLanguage,
@@ -117,14 +121,25 @@ class DownloadChoiceHandler(
                     telegramSender.editStatus(address, TelegramDownloadStatus.CANCELLED, result.language)
                 }
             }
+
             DownloadChoiceCancellation.NotOwner -> answer(
-                callbackQuery.id(), fallbackLanguage, TelegramMessage.CHOICE_NOT_OWNER, showAlert = true,
+                callbackQuery.id(),
+                fallbackLanguage,
+                TelegramMessage.CHOICE_NOT_OWNER,
+                showAlert = true,
             )
+
             DownloadChoiceCancellation.AlreadySelected -> answer(
-                callbackQuery.id(), fallbackLanguage, TelegramMessage.CHOICE_ALREADY_SELECTED,
+                callbackQuery.id(),
+                fallbackLanguage,
+                TelegramMessage.CHOICE_ALREADY_SELECTED,
             )
+
             DownloadChoiceCancellation.Invalid -> answer(
-                callbackQuery.id(), fallbackLanguage, TelegramMessage.CHOICE_MENU_INVALID, showAlert = true,
+                callbackQuery.id(),
+                fallbackLanguage,
+                TelegramMessage.CHOICE_MENU_INVALID,
+                showAlert = true,
             )
         }
     }
@@ -147,7 +162,7 @@ class DownloadChoiceHandler(
             )
             return
         }
-        if (address is TelegramMessageAddress.Inline && selection.option.spec.outputType == OutputType.IMAGES) {
+        if (address is TelegramMessageAddress.Inline && selection.option.spec.outputType in setOf(OutputType.IMAGES, OutputType.POST)) {
             sessionService.release(callback.sessionToken)
             answer(
                 callbackQueryId = callbackQueryId,

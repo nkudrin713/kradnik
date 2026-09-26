@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.download.limit
 
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -15,7 +15,7 @@ import java.util.Locale
 class AudioUploadPlanner(
     private val uploadLimits: TelegramUploadLimits,
 ) {
-    fun plan(metadata: YtDlpMetadataDto): AudioUploadPlan {
+    fun plan(metadata: MediaMetadata): AudioUploadPlan {
         val durationSeconds = metadata.duration?.takeIf { it > BigDecimal.ZERO }
             ?: return AudioUploadPlan.Unavailable
 
@@ -28,7 +28,7 @@ class AudioUploadPlanner(
         val bitrateKbps = ALLOWED_BITRATES_KBPS.firstOrNull { it <= maxBitrateKbps }
             ?: return AudioUploadPlan.Rejected(
                 reason = "Selected audio is too long for Telegram: " +
-                        "minQuality=${MIN_AUDIO_QUALITY}, limitMb=${formatMegabytes(uploadLimits.maxUploadBytes)}"
+                    "minQuality=${MIN_AUDIO_QUALITY}, limitMb=${formatMegabytes(uploadLimits.maxUploadBytes)}",
             )
 
         return AudioUploadPlan.Allowed(

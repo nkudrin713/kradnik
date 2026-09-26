@@ -1,16 +1,18 @@
-package com.nkudrin713.kradnik.ytdlp.client
+package com.nkudrin713.kradnik.ytdlp
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
-import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.springframework.beans.factory.annotation.Value
@@ -56,35 +58,47 @@ private data class YtDlpCommand(
 class YtDlpService(
     private val processRunner: ProcessRunner,
     private val uploadLimits: TelegramUploadLimits = TelegramUploadLimits(
-        TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES
+        TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
     ),
-    @Value("\${download.youtube.po-token-provider-url:}")
+    @Value($$"${download.youtube.po-token-provider-url:}")
     private val youtubePoTokenProviderUrl: String = "",
-    @Value("\${download.yt-dlp.metadata-timeout:30s}")
+    @Value($$"${download.yt-dlp.metadata-timeout:30s}")
     private val metadataTimeout: Duration = Duration.ofSeconds(30),
-    @Value("\${download.yt-dlp.download-timeout:30m}")
+    @Value($$"${download.yt-dlp.download-timeout:30m}")
     private val downloadTimeout: Duration = Duration.ofMinutes(30),
-    @Value("\${download.yt-dlp.cloud-max-workspace-bytes:536870912}")
+    @Value($$"${download.yt-dlp.cloud-max-workspace-bytes:536870912}")
     private val cloudMaxWorkspaceBytes: Long = 536_870_912,
 ) {
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
 
     init {
-        require(metadataTimeout.isPositive()) { "download.yt-dlp.metadata-timeout must be positive" }
-        require(downloadTimeout.isPositive()) { "download.yt-dlp.download-timeout must be positive" }
+        require(metadataTimeout.isPositive) { "download.yt-dlp.metadata-timeout must be positive" }
+        require(downloadTimeout.isPositive) { "download.yt-dlp.download-timeout must be positive" }
         require(cloudMaxWorkspaceBytes > 0) { "download.yt-dlp.cloud-max-workspace-bytes must be positive" }
     }
 
-    /** Extracts metadata for [DownloadSpec.formatSelector], including selected-format data used by preflight checks. */
-    suspend fun extractMetadata(spec: DownloadSpec): YtDlpMetadataDto {
+    /**
+     * Extracts metadata for [SourceRequest.formatSelector], including selected-format data used by preflight checks.
+     * Disables playlist expansion and applies the metadata timeout without downloading media.
+     * Process failures and empty or truncated output are rejected before JSON parsing.
+     */
+    suspend fun extractMetadata(spec: SourceRequest): YtDlpMetadataDto {
         return extractMetadata(spec, spec.formatSelector)
     }
 
-    /** Leaves the format selector unset so [DownloadChoicePlanner][com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner] receives the complete catalog. */
-    suspend fun extractCatalogMetadata(spec: DownloadSpec): YtDlpMetadataDto {
+    /**
+     * Leaves the format selector unset so [DownloadChoicePlanner][com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner]
+     * receives the available format catalog. Uses the same single-item extraction and failure checks as [extractMetadata].
+     */
+    suspend fun extractCatalogMetadata(spec: SourceRequest): YtDlpMetadataDto {
         return extractMetadata(spec, formatSelector = null)
     }
 
+    /**
+     * Extracts a flat YouTube playlist listing without downloading media or resolving each entry's formats.
+     * Applies the metadata timeout and configured YouTube token provider; item-count validation belongs to the caller.
+     * Rejects failed, empty, or truncated process output before parsing the playlist metadata.
+     */
     suspend fun extractPlaylistMetadata(url: String): YtDlpMetadataDto {
         val result = processRunner.run(
             YtDlpCommand(
@@ -102,8 +116,11 @@ class YtDlpService(
         return parseMetadataResult(result)
     }
 
-    /** Extracts image-only Instagram posts and carousels without treating absent video formats as an error. */
-    suspend fun extractInstagramImageMetadata(spec: DownloadSpec): YtDlpMetadataDto {
+    /**
+     * Extracts Instagram posts and mixed carousels without treating absent video formats as an error.
+     * Applies the metadata timeout and normal process/output checks; this does not download the images.
+     */
+    suspend fun extractInstagramImageMetadata(spec: SourceRequest): YtDlpMetadataDto {
         val result = processRunner.run(
             YtDlpCommand(
                 args = listOf(
@@ -114,13 +131,13 @@ class YtDlpService(
                 ),
                 workingDir = null,
                 timeout = metadataTimeout.toKotlinDuration(),
-            )
+            ),
         )
         return parseMetadataResult(result)
     }
 
     private suspend fun extractMetadata(
-        spec: DownloadSpec,
+        spec: SourceRequest,
         formatSelector: String?,
     ): YtDlpMetadataDto {
         val result = processRunner.run(
@@ -138,7 +155,7 @@ class YtDlpService(
                 },
                 workingDir = null,
                 timeout = metadataTimeout.toKotlinDuration(),
-            )
+            ),
         )
 
         return parseMetadataResult(result)
@@ -157,10 +174,13 @@ class YtDlpService(
 
     /**
      * Downloads [spec] and returns only the regular final path emitted by yt-dlp after merging or post-processing.
-     * Timeout, process failure, local workspace growth, missing marker, and missing file are reported as typed failures.
+     * Uses [outputDir] as the process workspace and disables playlist expansion in the base arguments.
+     * Workspace growth is bounded in both API modes; local Bot API mode also supplies yt-dlp's file-size limit.
+     * Timeout, process failure, workspace growth, missing marker, and missing file are reported as typed failures.
+     * The caller owns cleanup of downloaded and partial files in [outputDir].
      */
     suspend fun download(
-        spec: DownloadSpec,
+        spec: SourceRequest,
         outputDir: Path,
     ): DownloadedFile {
         val args = buildList {
@@ -188,7 +208,7 @@ class YtDlpService(
                 workingDir = outputDir,
                 timeout = downloadTimeout.toKotlinDuration(),
                 maxWorkingDirectoryBytes = maxWorkspaceBytes(),
-            )
+            ),
         )
 
         if (result.workingDirectoryLimitExceeded) {
@@ -256,12 +276,12 @@ class YtDlpService(
             val diagnosticOutput = result.diagnosticOutput
             if (diagnosticOutput.isAuthenticationRequiredError()) {
                 throw YtDlpAuthenticationRequiredException(
-                    "yt-dlp authentication required: ${diagnosticOutput.takeLast(500)}"
+                    "yt-dlp authentication required: ${diagnosticOutput.takeLast(500)}",
                 )
             }
 
             throw YtDlpException(
-                "yt-dlp command failed: ${diagnosticOutput.takeLast(500)}"
+                "yt-dlp command failed: ${diagnosticOutput.takeLast(500)}",
             )
         }
     }
@@ -269,8 +289,8 @@ class YtDlpService(
     private fun String.isAuthenticationRequiredError(): Boolean {
         val normalized = lowercase()
         return normalized.contains("login required") ||
-                normalized.contains("--cookies") ||
-                normalized.contains("--cookies-from-browser")
+            normalized.contains("--cookies") ||
+            normalized.contains("--cookies-from-browser")
     }
 
     private companion object {
@@ -278,9 +298,8 @@ class YtDlpService(
     }
 }
 
-open class YtDlpException(message: String) : RuntimeException(message)
+open class YtDlpException(message: String, reason: DownloadFailureReason = DownloadFailureReason.SOURCE_FAILED) : DownloadFailure(reason, message)
 
-class YtDlpAuthenticationRequiredException(message: String) : YtDlpException(message)
+class YtDlpAuthenticationRequiredException(message: String) : YtDlpException(message, DownloadFailureReason.AUTHENTICATION_REQUIRED)
 
-class YtDlpFileSizeLimitException :
-    YtDlpException("yt-dlp working directory exceeded safe size limit")
+class YtDlpFileSizeLimitException : YtDlpException("yt-dlp working directory exceeded safe size limit", DownloadFailureReason.TOO_LARGE)

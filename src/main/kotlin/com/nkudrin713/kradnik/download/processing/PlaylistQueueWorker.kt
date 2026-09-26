@@ -19,8 +19,8 @@ class PlaylistQueueWorker(
     private val downloadJobService: DownloadJobService,
     private val playlistJobProcessor: PlaylistJobProcessor,
     private val activeDownloads: ActiveDownloadRegistry,
-    @Value("\${download.playlist-workers:1}") private val workers: Int,
-    @Value("\${download.worker-delay-ms:1000}") private val pollDelayMs: Long = 1000,
+    @Value($$"${download.playlist-workers:1}") private val workers: Int,
+    @Value($$"${download.worker-delay-ms:1000}") private val pollDelayMs: Long = 1000,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val executor = Executors.newFixedThreadPool(workers) { task -> Thread(task, "playlist-worker") }
@@ -30,6 +30,10 @@ class PlaylistQueueWorker(
         require(pollDelayMs > 0) { "download.worker-delay-ms must be positive" }
     }
 
+    /**
+     * Starts the dedicated playlist worker pool after [DownloadQueueWorker] has performed startup recovery.
+     * Each worker processes one claimed playlist at a time; per-item parallelism belongs to its workflow.
+     */
     @PostConstruct
     fun start() {
         logger.info("Starting {} playlist workers", workers)
@@ -66,6 +70,10 @@ class PlaylistQueueWorker(
         }
     }
 
+    /**
+     * Interrupts polling and active playlist processing, then waits up to 30 seconds for workers to exit.
+     * Logs a timeout and preserves interruption of the shutdown thread.
+     */
     @PreDestroy
     fun shutdown() {
         executor.shutdownNow()

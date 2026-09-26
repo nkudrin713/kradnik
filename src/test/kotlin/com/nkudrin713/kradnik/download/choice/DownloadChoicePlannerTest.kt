@@ -1,20 +1,24 @@
 package com.nkudrin713.kradnik.download.choice
 
 import com.nkudrin713.kradnik.download.DownloadEngine
-import com.nkudrin713.kradnik.download.PreparedDownload
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.MediaContentType
+import com.nkudrin713.kradnik.download.domain.MediaFormat
+import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.platform.PlatformResolver
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
+import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
-import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
+import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
+import com.nkudrin713.kradnik.download.source.YtDlpPreparedSource
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -24,7 +28,9 @@ import java.math.BigDecimal
 import java.net.URI
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class DownloadChoicePlannerTest {
@@ -32,11 +38,12 @@ class DownloadChoicePlannerTest {
     private val downloadEngine: DownloadEngine = mockk()
     private val uploadLimits = TelegramUploadLimits(2_000_000_000, localMode = true)
     private val youtubePlaylistPlanner = mockk<YouTubePlaylistPlanner>()
+    private val choices = MediaChoiceBuilder(AudioUploadPlanner(uploadLimits), uploadLimits, telegramMessages())
     private val planner = DownloadChoicePlanner(
         platformResolver = platformResolver,
         downloadEngine = downloadEngine,
-        audioUploadPlanner = AudioUploadPlanner(uploadLimits),
-        uploadLimits = uploadLimits,
+        standard = StandardMediaChoicePlanner(choices),
+        instagram = InstagramChoicePlanner(choices, telegramMessages()),
         messages = telegramMessages(),
         youtubePlaylistPlanner = youtubePlaylistPlanner,
     )
@@ -50,16 +57,18 @@ class DownloadChoicePlannerTest {
         val video = resolved(OutputType.VIDEO)
         val audio = resolved(OutputType.AUDIO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
-            formats = listOf(
-                videoFormat("v1440", 1440, 600_000_000),
-                videoFormat("v1080", 1080, 400_000_000),
-                videoFormat("v720", 720, 250_000_000),
-                videoFormat("v480", 480, 150_000_000),
-                videoFormat("v360", 360, 100_000_000),
-                audioFormat("a1", 20_000_000),
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns prepared(
+            metadata(
+                formats = listOf(
+                    videoFormat("v1440", 1440, 600_000_000),
+                    videoFormat("v1080", 1080, 400_000_000),
+                    videoFormat("v720", 720, 250_000_000),
+                    videoFormat("v480", 480, 150_000_000),
+                    videoFormat("v360", 360, 100_000_000),
+                    audioFormat("a1", 20_000_000),
+                ),
             ),
-        ))
+        )
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
@@ -78,20 +87,22 @@ class DownloadChoicePlannerTest {
         assertEquals(DownloadPlatform.YOUTUBE, actual.options.last().spec.platform)
         assertEquals(actual.options.size, actual.options.map { it.spec.cacheKey }.distinct().size)
         assertEquals(DownloadChoiceMediaInfo(title = "Title", durationSeconds = 120), actual.mediaInfo)
-        coVerify(exactly = 1) { downloadEngine.prepare(video, catalog = true) }
+        coVerify(exactly = 1) { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) }
     }
 
     @Test
     fun omitsUnavailableResolutionAndMarksOversizedOriginalUnavailable() = runTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
-            formats = listOf(
-                videoFormat("v1440", 1440, 1_990_000_000),
-                videoFormat("v720", 720, 200_000_000),
-                audioFormat("a1", 20_000_000),
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns prepared(
+            metadata(
+                formats = listOf(
+                    videoFormat("v1440", 1440, 1_990_000_000),
+                    videoFormat("v720", 720, 200_000_000),
+                    audioFormat("a1", 20_000_000),
+                ),
             ),
-        ))
+        )
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
@@ -105,13 +116,15 @@ class DownloadChoicePlannerTest {
     fun omitsNamedQualityWhenItDuplicatesOriginal() = runTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
-            formats = listOf(
-                videoFormat("v720", 720, 250_000_000),
-                videoFormat("v480", 480, 150_000_000),
-                audioFormat("a1", 20_000_000),
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns prepared(
+            metadata(
+                formats = listOf(
+                    videoFormat("v720", 720, 250_000_000),
+                    videoFormat("v480", 480, 150_000_000),
+                    audioFormat("a1", 20_000_000),
+                ),
             ),
-        ))
+        )
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
@@ -127,12 +140,14 @@ class DownloadChoicePlannerTest {
     fun usesApproximateBitrateSizeWhenFormatSizeIsMissing() = runTest {
         val video = resolved(OutputType.VIDEO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(
-            formats = listOf(
-                videoFormat("v720", 720, size = null, bitrate = 1_000),
-                audioFormat("a1", size = null, bitrate = 100),
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns prepared(
+            metadata(
+                formats = listOf(
+                    videoFormat("v720", 720, size = null, bitrate = 1_000),
+                    audioFormat("a1", size = null, bitrate = 100),
+                ),
             ),
-        ))
+        )
 
         val option = planner.plan(URL, BotLanguage.RU).options.first { it.key == "video_original" }
 
@@ -151,12 +166,12 @@ class DownloadChoicePlannerTest {
             ),
         )
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(catalog)
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns prepared(catalog)
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
         assertEquals(DownloadPlatform.INSTAGRAM, actual.options.first().spec.platform)
-        coVerify(exactly = 1) { downloadEngine.prepare(video, catalog = true) }
+        coVerify(exactly = 1) { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) }
     }
 
     @Test
@@ -170,13 +185,8 @@ class DownloadChoicePlannerTest {
             uploader = "owner",
             channel = null,
         )
-        val instagram = InstagramPreparedDownload(
-            shortcode = "ABC_123",
-            mediaUri = null,
-            metadata = metadata,
-        )
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns PreparedDownload(metadata, instagram)
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns YtDlpPreparedSource(metadata)
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
@@ -184,7 +194,8 @@ class DownloadChoicePlannerTest {
         val post = actual.options.first()
         val original = actual.options[1]
         assertEquals("Пост целиком", post.label)
-        assertEquals(original.spec.cacheKey, post.spec.cacheKey)
+        assertEquals(OutputType.POST, post.spec.outputType)
+        assertTrue(original.spec.cacheKey != post.spec.cacheKey)
         assertEquals("Post text", post.spec.postText)
         assertEquals("owner", actual.mediaInfo.authorUsername)
         assertEquals("Оригинал · 1280p", original.label)
@@ -198,7 +209,7 @@ class DownloadChoicePlannerTest {
         val video = resolved(OutputType.VIDEO)
         val audio = resolved(OutputType.AUDIO)
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns prepared(metadata(formats = emptyList()))
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns prepared(metadata(formats = emptyList()))
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
@@ -210,26 +221,36 @@ class DownloadChoicePlannerTest {
         val video = resolved(OutputType.VIDEO).withInstagramPlatform()
         val audio = resolved(OutputType.AUDIO).withInstagramPlatform()
         val metadata = metadata(formats = emptyList()).copy(description = "Post text", channel = "owner")
-        val instagram = InstagramPreparedDownload(
-            shortcode = "ABC_123",
-            mediaUri = null,
-            imageUris = listOf(
-                URI("https://scontent-a.cdninstagram.com/1.jpg"),
-                URI("https://scontent-b.cdninstagram.com/2.jpg"),
-            ),
-            metadata = metadata,
-        )
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
-        coEvery { downloadEngine.prepare(video, catalog = true) } returns PreparedDownload(metadata, instagram)
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns YtDlpPreparedSource(metadata.copy(contentType = MediaContentType.IMAGES))
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
         assertEquals(listOf("post"), actual.options.map { it.key })
         assertEquals("Пост целиком", actual.options.single().label)
-        assertEquals(OutputType.IMAGES, actual.options.single().spec.outputType)
-        assertEquals("instagram_images", actual.options.single().spec.presetName)
+        assertEquals(OutputType.POST, actual.options.single().spec.outputType)
+        assertEquals("instagram_post", actual.options.single().spec.presetName)
         assertEquals("Post text", actual.options.single().spec.postText)
         assertEquals("owner", actual.mediaInfo.authorUsername)
+    }
+
+    @Test
+    fun preservesPlanningErrorMessagesAndCauses() = runTest {
+        val video = resolved(OutputType.VIDEO).withInstagramPlatform()
+        every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO).withInstagramPlatform())
+        val categories = mapOf(
+            DownloadFailureReason.SOURCE_UNAVAILABLE to TelegramMessage.ERROR_SOURCE_UNAVAILABLE,
+            DownloadFailureReason.SOURCE_RATE_LIMITED to TelegramMessage.ERROR_INSTAGRAM_RATE_LIMITED,
+            DownloadFailureReason.SOURCE_REQUEST_FAILED to TelegramMessage.ERROR_INSTAGRAM_UNAVAILABLE,
+            DownloadFailureReason.METADATA_UNAVAILABLE to TelegramMessage.ERROR_METADATA_UNAVAILABLE,
+        )
+        for ((reason, message) in categories) {
+            val failure = DownloadFailure(reason, "Diagnostic details")
+            coEvery { downloadEngine.prepare(any(), any()) } throws failure
+            val error = assertFailsWith<DownloadChoicePlanningException> { planner.plan(URL, BotLanguage.RU) }
+            assertEquals(telegramMessages().text(BotLanguage.RU, message), error.userMessage)
+            assertSame(failure, error.cause)
+        }
     }
 
     private fun resolved(outputType: OutputType): DownloadSpec {
@@ -261,14 +282,14 @@ class DownloadChoicePlannerTest {
         )
     }
 
-    private fun prepared(metadata: YtDlpMetadataDto) = PreparedDownload(metadata)
+    private fun prepared(metadata: MediaMetadata) = YtDlpPreparedSource(metadata)
 
     private fun videoFormat(
         id: String,
         height: Int,
         size: Long?,
         bitrate: Long = 2_000,
-    ): YtDlpFormatDto {
+    ): MediaFormat {
         return format(
             id = id,
             height = height,
@@ -279,7 +300,7 @@ class DownloadChoicePlannerTest {
         )
     }
 
-    private fun audioFormat(id: String, size: Long?, bitrate: Long = 128): YtDlpFormatDto {
+    private fun audioFormat(id: String, size: Long?, bitrate: Long = 128): MediaFormat {
         return format(
             id = id,
             height = null,
@@ -297,8 +318,8 @@ class DownloadChoicePlannerTest {
         vcodec: String,
         acodec: String,
         tbr: Long,
-    ): YtDlpFormatDto {
-        return YtDlpFormatDto(
+    ): MediaFormat {
+        return MediaFormat(
             formatId = id,
             ext = if (height == null) "m4a" else "mp4",
             height = height,
@@ -313,8 +334,8 @@ class DownloadChoicePlannerTest {
         )
     }
 
-    private fun metadata(formats: List<YtDlpFormatDto>): YtDlpMetadataDto {
-        return YtDlpMetadataDto(
+    private fun metadata(formats: List<MediaFormat>): MediaMetadata {
+        return MediaMetadata(
             title = "Title",
             thumbnail = "https://i.ytimg.com/vi/id/maxresdefault.jpg",
             duration = BigDecimal.valueOf(120),

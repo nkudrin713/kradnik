@@ -41,6 +41,8 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
                 sourcePostText = spec.postText,
                 workloadType = spec.workloadType,
                 playlistEntries = spec.playlistEntries,
+                playlistDeliveryMode = spec.playlistDeliveryMode,
+                playlistTitle = spec.playlistTitle,
                 telegramStatusMessageId = command.telegramStatusMessageId,
                 telegramInlineMessageId = command.telegramInlineMessageId,
             ),

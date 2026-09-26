@@ -14,6 +14,8 @@ data class DownloadSpec(
     val presetName: String,
     val postText: String? = null,
     val workloadType: DownloadWorkloadType = DownloadWorkloadType.SINGLE,
+    val playlistDeliveryMode: PlaylistDeliveryMode = PlaylistDeliveryMode.AUDIO_MESSAGES,
+    val playlistTitle: String? = null,
     val playlistEntries: List<PlaylistAudioEntry> = emptyList(),
 ) {
     fun withAudioQuality(audioQuality: String): DownloadSpec {
@@ -38,6 +40,8 @@ data class DownloadSpec(
                 postText = job.sourcePostText,
                 workloadType = job.workloadType,
                 playlistEntries = job.playlistEntries,
+                playlistDeliveryMode = job.playlistDeliveryMode,
+                playlistTitle = job.playlistTitle,
             )
         }
 

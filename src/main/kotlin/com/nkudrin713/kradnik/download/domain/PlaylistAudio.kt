@@ -13,3 +13,9 @@ data class PlaylistAudioResult(
     val fileId: String? = null,
     val error: String? = null,
 )
+
+/** Delivery does not change the downloaded media or the playlist queue. */
+enum class PlaylistDeliveryMode {
+    AUDIO_MESSAGES,
+    ZIP,
+}

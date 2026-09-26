@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.service
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import io.mockk.every
@@ -44,6 +45,10 @@ class DownloadJobServiceTest {
         assertEquals("format", actual.selectedFormat)
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.downloadExtraArgs)
         assertEquals("Post text", actual.sourcePostText)
+        assertEquals(PlaylistDeliveryMode.ZIP, actual.playlistDeliveryMode)
+        assertEquals("My playlist", actual.playlistTitle)
+        assertEquals("My playlist", DownloadSpec.fromJob(actual).playlistTitle)
+        assertEquals(PlaylistDeliveryMode.ZIP, DownloadSpec.fromJob(actual).playlistDeliveryMode)
         assertEquals(10, actual.telegramStatusMessageId)
         verify { repository.lockTelegramUpdate(3) }
     }
@@ -89,6 +94,8 @@ class DownloadJobServiceTest {
                 formatSelector = "format",
                 extraArgs = listOf("-x", "--audio-format", "mp3"),
                 postText = "Post text",
+                playlistDeliveryMode = PlaylistDeliveryMode.ZIP,
+                playlistTitle = "My playlist",
             ),
             telegramStatusMessageId = 10,
         )

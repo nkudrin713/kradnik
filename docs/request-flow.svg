@@ -101,6 +101,6 @@
   <path d="M 750 596 H 800" class="arrow"/>
   <path d="M 990 596 H 1040" class="arrow"/>
 
-  <path d="M 1140 632 V 680 H 655 V 497" class="arrow"/>
-  <text x="895" y="673" text-anchor="middle" class="note">COMPLETED or FAILED</text>
+  <path d="M 1140 560 V 461 H 750" class="arrow"/>
+  <text x="945" y="448" text-anchor="middle" class="note">COMPLETED or FAILED</text>
 </svg>

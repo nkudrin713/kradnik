@@ -1,9 +1,11 @@
 package com.nkudrin713.kradnik.download.limit
 
-import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.DownloadRejectedException
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.MediaFormat
+import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.ytdlp.YtDlpFormatDto
-import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
+import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
 import org.springframework.stereotype.Service
 import java.util.Locale
 
@@ -20,8 +22,8 @@ class DownloadPreflightService(
 ) {
     /** Returns an adjusted [DownloadPreflightDecision]; unknown source size remains allowed for the final file-size check. */
     fun check(
-        spec: DownloadSpec,
-        metadata: YtDlpMetadataDto,
+        spec: SingleMediaRequest,
+        metadata: MediaMetadata,
     ): DownloadPreflightDecision {
         if (spec.outputType == OutputType.COVER || spec.outputType == OutputType.IMAGES) {
             return DownloadPreflightDecision.Allowed(spec)
@@ -55,13 +57,22 @@ class DownloadPreflightService(
         )
     }
 
-    private fun selectedSize(metadata: YtDlpMetadataDto): Long? {
+    fun requireAllowed(request: SingleMediaRequest, metadata: MediaMetadata): SingleMediaRequest = when (val decision = check(request, metadata)) {
+        is DownloadPreflightDecision.Allowed -> decision.spec
+        is DownloadPreflightDecision.Rejected -> throw DownloadRejectedException(decision.reason)
+    }
+
+    fun validateFile(file: DownloadedFile) {
+        if (file.sizeBytes > uploadLimits.maxUploadBytes) throw DownloadRejectedException("File exceeds Telegram upload limit")
+    }
+
+    private fun selectedSize(metadata: MediaMetadata): Long? {
         return metadata.filesize
             ?: metadata.requestedFormats?.totalSize()
             ?: metadata.filesizeApprox
     }
 
-    private fun List<YtDlpFormatDto>.totalSize(): Long? {
+    private fun List<MediaFormat>.totalSize(): Long? {
         if (isEmpty()) {
             return null
         }
@@ -75,7 +86,7 @@ class DownloadPreflightService(
         return total
     }
 
-    private fun YtDlpMetadataDto.isVertical(): Boolean {
+    private fun MediaMetadata.isVertical(): Boolean {
         val width = width ?: return false
         val height = height ?: return false
         return height > width
@@ -92,7 +103,7 @@ class DownloadPreflightService(
 
 sealed interface DownloadPreflightDecision {
     data class Allowed(
-        val spec: DownloadSpec,
+        val spec: SingleMediaRequest,
     ) : DownloadPreflightDecision
 
     data class Rejected(

@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.platform
 
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.identity.extractQueryParameter
 import com.nkudrin713.kradnik.download.identity.parseHttpUrl
@@ -51,7 +52,7 @@ class PlatformResolver {
             video = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "youtube:video:$youtubeVideoId:video:youtube_h264_mobile_2gb",
+                cacheKey = ResultKeyFactory.source("youtube:video:$youtubeVideoId", OutputType.VIDEO, "youtube_h264_mobile_2gb"),
                 outputType = OutputType.VIDEO,
                 platform = DownloadPlatform.YOUTUBE,
                 presetName = "youtube_h264_mobile_2gb",
@@ -64,7 +65,7 @@ class PlatformResolver {
             audio = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "youtube:video:$youtubeVideoId:audio:youtube_audio",
+                cacheKey = ResultKeyFactory.source("youtube:video:$youtubeVideoId", OutputType.AUDIO, "youtube_audio"),
                 outputType = OutputType.AUDIO,
                 platform = DownloadPlatform.YOUTUBE,
                 presetName = "youtube_audio",
@@ -110,7 +111,7 @@ class PlatformResolver {
             video = DownloadSpec(
                 originalUrl = mediaUrl.original,
                 normalizedUrl = mediaUrl.normalized,
-                cacheKey = "$cacheKeyPrefix:video:instagram_mobile_video",
+                cacheKey = ResultKeyFactory.source(cacheKeyPrefix, OutputType.VIDEO, "instagram_mobile_video"),
                 outputType = OutputType.VIDEO,
                 platform = DownloadPlatform.INSTAGRAM,
                 presetName = "instagram_mobile_video",
@@ -123,7 +124,7 @@ class PlatformResolver {
             audio = DownloadSpec(
                 originalUrl = mediaUrl.original,
                 normalizedUrl = mediaUrl.normalized,
-                cacheKey = "$cacheKeyPrefix:audio:instagram_audio",
+                cacheKey = ResultKeyFactory.source(cacheKeyPrefix, OutputType.AUDIO, "instagram_audio"),
                 outputType = OutputType.AUDIO,
                 platform = DownloadPlatform.INSTAGRAM,
                 presetName = "instagram_audio",
@@ -150,7 +151,7 @@ class PlatformResolver {
             video = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "$cacheKeyPrefix:video:$VK_VIDEO_PRESET",
+                cacheKey = ResultKeyFactory.source(cacheKeyPrefix, OutputType.VIDEO, VK_VIDEO_PRESET),
                 outputType = OutputType.VIDEO,
                 platform = DownloadPlatform.VK,
                 presetName = VK_VIDEO_PRESET,
@@ -163,7 +164,7 @@ class PlatformResolver {
             audio = DownloadSpec(
                 originalUrl = originalUrl,
                 normalizedUrl = normalizedUrl,
-                cacheKey = "$cacheKeyPrefix:audio:$VK_AUDIO_PRESET",
+                cacheKey = ResultKeyFactory.source(cacheKeyPrefix, OutputType.AUDIO, VK_AUDIO_PRESET),
                 outputType = OutputType.AUDIO,
                 platform = DownloadPlatform.VK,
                 presetName = VK_AUDIO_PRESET,

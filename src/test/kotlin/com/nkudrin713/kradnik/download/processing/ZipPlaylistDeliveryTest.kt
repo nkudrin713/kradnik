@@ -10,11 +10,16 @@ import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.playlist.PlaylistEntryDownloader
+import com.nkudrin713.kradnik.download.playlist.PlaylistWorkspaceBudget
 import com.nkudrin713.kradnik.download.playlist.PlaylistZipBuilder
+import com.nkudrin713.kradnik.download.playlist.ZipPlaylistWorkflow
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.download.telegram.TelegramJobProgress
+import com.nkudrin713.kradnik.download.telegram.TelegramPlaylistSender
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
 import com.nkudrin713.kradnik.telegram.TelegramSender
+import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.nkudrin713.kradnik.ytdlp.YtDlpException
 import com.nkudrin713.kradnik.ytdlp.YtDlpFileSizeLimitException
@@ -201,11 +206,10 @@ class ZipPlaylistDeliveryTest {
     private fun processor(limit: Long = 10_000, builder: PlaylistZipBuilder = PlaylistZipBuilder(), timeout: Duration = Duration.ofHours(2)): PlaylistJobProcessor {
         val cleaner = WorkDirCleaner(root.toString())
         return PlaylistJobProcessor(
-            jobs,
             mockk(),
-            ZipPlaylistDelivery(jobs, downloader, builder, sender, TelegramUploadLimits(limit), cleaner, timeout = timeout),
-            telegram,
-            telegramMessages(),
+            ZipPlaylistWorkflow(jobs, downloader, builder, TelegramPlaylistSender(sender, TelegramBotProperties(token = "test")), TelegramUploadLimits(limit), cleaner, PlaylistWorkspaceBudget(TelegramUploadLimits(limit)), timeout = timeout),
+            JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages())),
+            TelegramJobProgress(telegram, telegramMessages()),
             cleaner,
         )
     }

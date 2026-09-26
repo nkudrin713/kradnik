@@ -9,6 +9,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
+import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.identity.extractQueryParameter
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
@@ -82,7 +83,7 @@ class YouTubePlaylistPlanner(
                 spec = DownloadSpec(
                     originalUrl = originalUrl,
                     normalizedUrl = normalizedUrl,
-                    cacheKey = "youtube:playlist:$playlistId:audio:96:${range.key}",
+                    cacheKey = ResultKeyFactory.playlist(playlistId, range.key),
                     outputType = OutputType.AUDIO,
                     platform = DownloadPlatform.YOUTUBE,
                     formatSelector = YtDlpPresets.YOUTUBE_AUDIO_FORMAT,
@@ -102,7 +103,7 @@ class YouTubePlaylistPlanner(
                 available = !zipTooLarge,
                 unavailableReason = if (zipTooLarge) messages.text(language, TelegramMessage.ERROR_PLAYLIST_ZIP_TOO_LARGE) else null,
                 spec = audioOption.spec.copy(
-                    cacheKey = "${audioOption.spec.cacheKey}:zip",
+                    cacheKey = ResultKeyFactory.playlistZip(audioOption.spec.cacheKey),
                     playlistDeliveryMode = PlaylistDeliveryMode.ZIP,
                 ),
             )

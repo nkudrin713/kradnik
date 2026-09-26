@@ -2,8 +2,10 @@ package com.nkudrin713.kradnik.download.instagram
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -23,13 +25,18 @@ class InstagramEmbedDownloader(
     private val objectMapper = jacksonObjectMapper()
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    suspend fun prepare(spec: DownloadSpec): InstagramPreparedDownload {
+    suspend fun prepare(spec: SourceRequest): InstagramPreparedDownload {
         val shortcode = parseInstagramMediaUrl(spec.originalUrl)?.shortcode
             ?: throw InstagramEmbedException("Instagram URL is not supported by embed downloader")
         val embedUri = URI.create("https://www.instagram.com/p/$shortcode/embed/captioned/")
         val html = try {
             httpClient.getText(embedUri)
         } catch (error: InstagramEmbedException) {
+            throw error
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
             throw error
         } catch (error: Exception) {
             throw InstagramEmbedException("Instagram embed request failed", error)
@@ -79,7 +86,7 @@ class InstagramEmbedDownloader(
     }
 
     fun prepareImages(
-        spec: DownloadSpec,
+        spec: SourceRequest,
         metadata: YtDlpMetadataDto,
     ): InstagramPreparedDownload? {
         val entries = metadata.entries.orEmpty()
@@ -316,10 +323,14 @@ data class InstagramPreparedDownload(
     val metadata: YtDlpMetadataDto,
 )
 
-open class InstagramEmbedException : RuntimeException {
-    constructor(message: String) : super(message)
+open class InstagramEmbedException(
+    message: String,
+    cause: Throwable? = null,
+    reason: DownloadFailureReason = DownloadFailureReason.METADATA_UNAVAILABLE,
+) : DownloadFailure(reason, message, cause)
 
-    constructor(message: String, cause: Throwable) : super(message, cause)
-}
-
-class InstagramContentUnavailableException : InstagramEmbedException("Instagram content is unavailable without authentication")
+class InstagramContentUnavailableException :
+    InstagramEmbedException(
+        "Instagram content is unavailable without authentication",
+        reason = DownloadFailureReason.SOURCE_UNAVAILABLE,
+    )

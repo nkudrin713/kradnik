@@ -3,10 +3,12 @@ package com.nkudrin713.kradnik.ytdlp
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
@@ -75,13 +77,13 @@ class YtDlpService(
         require(cloudMaxWorkspaceBytes > 0) { "download.yt-dlp.cloud-max-workspace-bytes must be positive" }
     }
 
-    /** Extracts metadata for [DownloadSpec.formatSelector], including selected-format data used by preflight checks. */
-    suspend fun extractMetadata(spec: DownloadSpec): YtDlpMetadataDto {
+    /** Extracts metadata for [SourceRequest.formatSelector], including selected-format data used by preflight checks. */
+    suspend fun extractMetadata(spec: SourceRequest): YtDlpMetadataDto {
         return extractMetadata(spec, spec.formatSelector)
     }
 
     /** Leaves the format selector unset so [DownloadChoicePlanner][com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner] receives the complete catalog. */
-    suspend fun extractCatalogMetadata(spec: DownloadSpec): YtDlpMetadataDto {
+    suspend fun extractCatalogMetadata(spec: SourceRequest): YtDlpMetadataDto {
         return extractMetadata(spec, formatSelector = null)
     }
 
@@ -103,7 +105,7 @@ class YtDlpService(
     }
 
     /** Extracts image-only Instagram posts and carousels without treating absent video formats as an error. */
-    suspend fun extractInstagramImageMetadata(spec: DownloadSpec): YtDlpMetadataDto {
+    suspend fun extractInstagramImageMetadata(spec: SourceRequest): YtDlpMetadataDto {
         val result = processRunner.run(
             YtDlpCommand(
                 args = listOf(
@@ -120,7 +122,7 @@ class YtDlpService(
     }
 
     private suspend fun extractMetadata(
-        spec: DownloadSpec,
+        spec: SourceRequest,
         formatSelector: String?,
     ): YtDlpMetadataDto {
         val result = processRunner.run(
@@ -160,7 +162,7 @@ class YtDlpService(
      * Timeout, process failure, local workspace growth, missing marker, and missing file are reported as typed failures.
      */
     suspend fun download(
-        spec: DownloadSpec,
+        spec: SourceRequest,
         outputDir: Path,
     ): DownloadedFile {
         val args = buildList {
@@ -278,8 +280,8 @@ class YtDlpService(
     }
 }
 
-open class YtDlpException(message: String) : RuntimeException(message)
+open class YtDlpException(message: String, reason: DownloadFailureReason = DownloadFailureReason.SOURCE_FAILED) : DownloadFailure(reason, message)
 
-class YtDlpAuthenticationRequiredException(message: String) : YtDlpException(message)
+class YtDlpAuthenticationRequiredException(message: String) : YtDlpException(message, DownloadFailureReason.AUTHENTICATION_REQUIRED)
 
-class YtDlpFileSizeLimitException : YtDlpException("yt-dlp working directory exceeded safe size limit")
+class YtDlpFileSizeLimitException : YtDlpException("yt-dlp working directory exceeded safe size limit", DownloadFailureReason.TOO_LARGE)

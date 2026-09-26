@@ -19,7 +19,6 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
-import jakarta.persistence.Transient
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.Instant
@@ -68,15 +67,6 @@ class DownloadJob(
     @Convert(converter = DownloadJobStatusConverter::class)
     @Column(nullable = false)
     var status: DownloadJobStatus = DownloadJobStatus.QUEUED,
-
-    @Transient
-    var sourceDurationSeconds: Int? = null,
-
-    @Transient
-    var sourceAudioTitle: String? = null,
-
-    @Transient
-    var sourceAudioPerformer: String? = null,
 
     @Column(name = "source_post_text", columnDefinition = "TEXT")
     var sourcePostText: String? = null,

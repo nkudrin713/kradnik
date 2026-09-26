@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.admin.AdminRuntime
 import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
@@ -38,7 +39,8 @@ class DownloadChoiceCoordinatorTest {
             }
         }
         every { messages.text(BotLanguage.EN, TelegramMessage.ERROR_CHOICE_PREPARATION) } returns "Preparation failed"
-        val coordinator = DownloadChoiceCoordinator(planner, sessions, sender, messages)
+        val runtime = AdminRuntime(true)
+        val coordinator = DownloadChoiceCoordinator(planner, sessions, sender, messages, runtime)
         fun request(id: Int) = PrepareDownloadChoiceCommand(
             telegramUserId = 1,
             telegramChatId = 2,
@@ -54,11 +56,17 @@ class DownloadChoiceCoordinatorTest {
             for (id in 3..34) coordinator.prepare(request(id))
             coordinator.prepare(request(35))
             assertEquals(2, active.get())
+            assertEquals(2, runtime.snapshot().workers.count { it.state == "BUSY" })
+            assertEquals(32, runtime.snapshot().metadataQueued)
+            assertEquals(1L, runtime.snapshot().errors.first().counts["METADATA_REJECTED"])
             verify(exactly = 1) { sender.editMessage(any(), "Preparation failed") }
         } finally {
             coordinator.shutdown()
         }
         assertTrue(stopped.await(10, TimeUnit.SECONDS))
         assertEquals(0, active.get())
+        assertEquals(0, runtime.snapshot().metadataQueued)
+        assertTrue(runtime.snapshot().workers.all { it.state == "STOPPED" })
+        assertEquals(0L, runtime.snapshot().errors.first().counts["METADATA"])
     }
 }

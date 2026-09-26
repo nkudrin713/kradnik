@@ -2,6 +2,8 @@ package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.observability.BotTelemetry
+import com.nkudrin713.kradnik.observability.RuntimeError
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.runBlocking
@@ -22,6 +24,7 @@ class DownloadQueueWorker(
     private val workDirCleaner: WorkDirCleaner,
     @Value($$"${download.workers:3}") private val workers: Int,
     @Value($$"${download.worker-delay-ms:1000}") private val pollDelayMs: Long = 1000,
+    private val runtime: BotTelemetry = BotTelemetry.NONE,
 ) {
     init {
         require(workers > 0) { "download.workers must be positive" }
@@ -42,37 +45,52 @@ class DownloadQueueWorker(
         workDirCleaner.cleanInterruptedJobs()
         val recovered = downloadJobService.recoverInterruptedJobs()
         logger.info("Starting {} download workers; recovered {} interrupted jobs", workers, recovered)
-        repeat(workers) { executor.execute(::work) }
+        repeat(workers) { index ->
+            val id = "download-${index + 1}"
+            runtime.register(id, "download")
+            executor.execute { work(id) }
+        }
     }
 
-    private fun work() {
-        while (!executor.isShutdown && !Thread.currentThread().isInterrupted) {
-            try {
-                val job = downloadJobService.claimNextQueuedJob()
-                if (job == null) {
-                    Thread.sleep(pollDelayMs)
-                } else {
-                    // Blocking bridge to the existing suspend-based external I/O adapters.
-                    runBlocking {
-                        activeDownloads.run(job.requiredId()) {
-                            if (downloadJobService.isProcessing(job.requiredId())) {
-                                downloadJobProcessor.process(job)
+    private fun work(id: String) {
+        try {
+            while (!executor.isShutdown && !Thread.currentThread().isInterrupted) {
+                try {
+                    runtime.state(id, "IDLE")
+                    val job = downloadJobService.claimNextQueuedJob()
+                    if (job == null) {
+                        Thread.sleep(pollDelayMs)
+                    } else {
+                        runtime.busy(id, job.requiredId(), job.platform.name)
+                        try {
+                            runBlocking {
+                                activeDownloads.run(job.requiredId()) {
+                                    if (downloadJobService.isProcessing(job.requiredId())) {
+                                        downloadJobProcessor.process(job)
+                                    }
+                                }
                             }
+                        } finally {
+                            runtime.state(id, "IDLE")
                         }
                     }
-                }
-            } catch (error: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return
-            } catch (error: Exception) {
-                logger.error("Download worker iteration failed", error)
-                try {
-                    Thread.sleep(pollDelayMs)
-                } catch (interrupted: InterruptedException) {
+                } catch (error: InterruptedException) {
                     Thread.currentThread().interrupt()
                     return
+                } catch (error: Exception) {
+                    runtime.error(RuntimeError.WORKER)
+                    runtime.state(id, "BACKOFF")
+                    logger.error("Download worker iteration failed", error)
+                    try {
+                        Thread.sleep(pollDelayMs)
+                    } catch (interrupted: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return
+                    }
                 }
             }
+        } finally {
+            runtime.state(id, "STOPPED")
         }
     }
 

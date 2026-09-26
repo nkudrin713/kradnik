@@ -12,16 +12,12 @@ import com.nkudrin713.kradnik.download.telegram.DeliveryContext
 import com.nkudrin713.kradnik.download.telegram.TelegramPlaylistSender
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
@@ -42,13 +38,12 @@ class ZipPlaylistWorkflow(
     private val uploadLimits: TelegramUploadLimits,
     private val workDirCleaner: WorkDirCleaner,
     private val budget: PlaylistWorkspaceBudget,
-    @Value($$"${download.playlist-item-parallelism:2}") private val itemParallelism: Int = 2,
     @Value($$"${download.playlist-zip-timeout:2h}") private val timeout: Duration = Duration.ofHours(2),
+    private val items: PlaylistItems = PlaylistItems(),
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     init {
-        require(itemParallelism > 0) { "download.playlist-item-parallelism must be positive" }
         require(timeout.isPositive) { "download.playlist-zip-timeout must be positive" }
     }
 
@@ -86,30 +81,23 @@ class ZipPlaylistWorkflow(
     }
 
     private suspend fun downloadAndSend(jobId: Long, request: PlaylistAudioRequest, context: DeliveryContext, root: Path, progress: JobProgress): PlaylistDeliveryResult? {
-        val semaphore = Semaphore(itemParallelism)
         val totalBytes = AtomicLong()
         // Local results belong to this attempt. Startup cleanup removes all files, so retries rebuild the archive.
-        val files = coroutineScope {
-            request.entries.map { entry ->
-                async {
-                    semaphore.withPermit {
-                        val directory = withContext(Dispatchers.IO) { Files.createDirectory(root.resolve(entry.position.toString())) }
-                        val file = try {
-                            entryDownloader.download(entry, directory)
-                        } catch (error: DownloadFailure) {
-                            if (error.reason == DownloadFailureReason.TOO_LARGE) throw PlaylistSizeLimitException(error)
-                            if (error.reason !in SOURCE_FAILURES) throw error
-                            budget.check(root)
-                            logger.warn("PLAYLIST_JOB[{}] item {} unavailable: {}", jobId, entry.position, error.message, error)
-                            workDirCleaner.deleteRecursively(directory)
-                            return@withPermit null
-                        }
-                        val size = withContext(Dispatchers.IO) { Files.size(file.file) }
-                        if (totalBytes.addAndGet(size) > uploadLimits.maxUploadBytes) throw PlaylistSizeLimitException()
-                        PlaylistLocalFile(entry, file.file)
-                    }
-                }
-            }.awaitAll().filterNotNull()
+        val files = items.map(jobId, request.entries) { entry ->
+            val directory = withContext(Dispatchers.IO) { Files.createDirectory(root.resolve(entry.position.toString())) }
+            val file = try {
+                entryDownloader.download(entry, directory)
+            } catch (error: DownloadFailure) {
+                if (error.reason == DownloadFailureReason.TOO_LARGE) throw PlaylistSizeLimitException(error)
+                if (error.reason !in SOURCE_FAILURES) throw error
+                budget.check(root)
+                logger.warn("PLAYLIST_JOB[{}] item {} unavailable: {}", jobId, entry.position, error.message, error)
+                workDirCleaner.deleteRecursively(directory)
+                return@map null
+            }
+            val size = withContext(Dispatchers.IO) { Files.size(file.file) }
+            if (totalBytes.addAndGet(size) > uploadLimits.maxUploadBytes) throw PlaylistSizeLimitException()
+            PlaylistLocalFile(entry, file.file)
         }
         if (!downloadJobService.isProcessing(jobId)) return null
         check(files.isNotEmpty()) { "No playlist items could be downloaded" }

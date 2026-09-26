@@ -7,6 +7,8 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
+import com.nkudrin713.kradnik.observability.BotTelemetry
+import com.nkudrin713.kradnik.observability.RuntimeError
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -31,6 +33,7 @@ class DownloadChoiceCoordinator(
     private val sessionService: DownloadChoiceSessionService,
     private val telegramSender: TelegramSender,
     private val messages: TelegramMessages,
+    private val runtime: BotTelemetry = BotTelemetry.NONE,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val executor = ThreadPoolExecutor(
@@ -43,12 +46,18 @@ class DownloadChoiceCoordinator(
         ThreadPoolExecutor.AbortPolicy(),
     )
 
+    init {
+        repeat(2) { runtime.register("metadata-${it + 1}", "metadata") }
+    }
+
     @PreDestroy
     fun shutdown() {
-        executor.shutdownNow()
+        runtime.metadataQueue(-executor.shutdownNow().size)
         try {
             if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
                 logger.warn("Metadata workers did not stop within 30 seconds")
+            } else {
+                repeat(2) { runtime.state("metadata-${it + 1}", "STOPPED") }
             }
         } catch (error: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -82,11 +91,19 @@ class DownloadChoiceCoordinator(
     }
 
     private fun submit(command: PrepareDownloadChoiceCommand, messageAddress: TelegramMessageAddress) {
+        runtime.metadataQueue(1)
         try {
             executor.execute {
-                runBlocking { prepareAsync(command, messageAddress) }
+                val id = runtime.metadataStarted()
+                try {
+                    runBlocking { prepareAsync(command, messageAddress) }
+                } finally {
+                    id?.let { runtime.state(it, "IDLE") }
+                }
             }
         } catch (error: RejectedExecutionException) {
+            runtime.metadataQueue(-1)
+            runtime.error(RuntimeError.METADATA_REJECTED)
             telegramSender.editMessage(
                 address = messageAddress,
                 text = messages.text(command.language, TelegramMessage.ERROR_CHOICE_PREPARATION),
@@ -122,6 +139,7 @@ class DownloadChoiceCoordinator(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            runtime.error(RuntimeError.METADATA)
             logger.warn(
                 "Download choice preparation failed: chatId={}, updateId={}",
                 command.telegramChatId,

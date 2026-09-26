@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.domain
 
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.ytdlp.YtDlpPresets.AUDIO_QUALITY_ARG
 
 data class DownloadSpec(
     val originalUrl: String,
@@ -39,8 +40,6 @@ data class DownloadSpec(
                 playlistEntries = job.playlistEntries,
             )
         }
-
-        private const val AUDIO_QUALITY_ARG = "--audio-quality"
 
         private fun List<String>.withoutAudioQuality(): List<String> {
             val result = mutableListOf<String>()

@@ -9,6 +9,7 @@ import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments
 import com.nkudrin713.kradnik.download.instagram.isInstagramHost
 import com.nkudrin713.kradnik.download.instagram.parseInstagramMediaUrl
+import com.nkudrin713.kradnik.ytdlp.YtDlpPresets
 import org.springframework.stereotype.Service
 import java.net.URI
 import java.net.URLDecoder
@@ -58,7 +59,7 @@ class PlatformResolver {
                 "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
                     "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
                     "b[height<=1280]/best",
-                extraArgs = listOf("--merge-output-format", "mp4"),
+                extraArgs = YtDlpPresets.MERGE_MP4_ARGS,
             ),
             audio = DownloadSpec(
                 originalUrl = originalUrl,
@@ -67,16 +68,8 @@ class PlatformResolver {
                 outputType = OutputType.AUDIO,
                 platform = DownloadPlatform.YOUTUBE,
                 presetName = "youtube_audio",
-                formatSelector = "ba/bestaudio",
-                extraArgs = listOf(
-                    "-x",
-                    "--audio-format",
-                    "mp3",
-                    "--embed-metadata",
-                    "--embed-thumbnail",
-                    "--convert-thumbnails",
-                    "jpg",
-                ),
+                formatSelector = YtDlpPresets.YOUTUBE_AUDIO_FORMAT,
+                extraArgs = YtDlpPresets.YOUTUBE_AUDIO_ARGS,
             ),
         )
     }
@@ -125,7 +118,7 @@ class PlatformResolver {
                 "bv*[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]/" +
                     "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
                     "b[height<=1280]/best",
-                extraArgs = listOf("--merge-output-format", "mp4"),
+                extraArgs = YtDlpPresets.MERGE_MP4_ARGS,
             ),
             audio = DownloadSpec(
                 originalUrl = mediaUrl.original,
@@ -134,8 +127,8 @@ class PlatformResolver {
                 outputType = OutputType.AUDIO,
                 platform = DownloadPlatform.INSTAGRAM,
                 presetName = "instagram_audio",
-                formatSelector = "ba/bestaudio/best",
-                extraArgs = listOf("-x", "--audio-format", "mp3"),
+                formatSelector = YtDlpPresets.AUDIO_FORMAT_WITH_VIDEO_FALLBACK,
+                extraArgs = YtDlpPresets.MP3_AUDIO_ARGS,
             ),
         )
     }
@@ -165,7 +158,7 @@ class PlatformResolver {
                 "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/" +
                     "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
                     "b[height<=1280]/best",
-                extraArgs = listOf("--merge-output-format", "mp4"),
+                extraArgs = YtDlpPresets.MERGE_MP4_ARGS,
             ),
             audio = DownloadSpec(
                 originalUrl = originalUrl,
@@ -174,8 +167,8 @@ class PlatformResolver {
                 outputType = OutputType.AUDIO,
                 platform = DownloadPlatform.VK,
                 presetName = VK_AUDIO_PRESET,
-                formatSelector = "ba/bestaudio/best",
-                extraArgs = listOf("-x", "--audio-format", "mp3"),
+                formatSelector = YtDlpPresets.AUDIO_FORMAT_WITH_VIDEO_FALLBACK,
+                extraArgs = YtDlpPresets.MP3_AUDIO_ARGS,
             ),
         )
     }

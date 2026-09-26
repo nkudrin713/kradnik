@@ -15,13 +15,16 @@ import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.ytdlp.YtDlpPresets
 import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -102,7 +105,9 @@ class PlaylistJobProcessor(
             val fileId = if (cached != null) {
                 cached
             } else {
-                val itemDir = Files.createDirectory(root.resolve(entry.position.toString()))
+                val itemDir = withContext(Dispatchers.IO) {
+                    Files.createDirectory(root.resolve(entry.position.toString()))
+                }
                 outputDir = itemDir
                 val spec = DownloadSpec(
                     originalUrl = entry.url,
@@ -110,8 +115,8 @@ class PlaylistJobProcessor(
                     cacheKey = cacheKey,
                     outputType = OutputType.AUDIO,
                     platform = DownloadPlatform.YOUTUBE,
-                    formatSelector = "ba/bestaudio",
-                    extraArgs = PLAYLIST_AUDIO_ARGS,
+                    formatSelector = YtDlpPresets.YOUTUBE_AUDIO_FORMAT,
+                    extraArgs = YtDlpPresets.PLAYLIST_AUDIO_ARGS,
                     presetName = "youtube_audio",
                 )
                 val file = ytDlpService.download(spec, itemDir)
@@ -162,15 +167,4 @@ class PlaylistJobProcessor(
     }
 
     private fun address(job: DownloadJob): TelegramMessageAddress = TelegramMessageAddress.Chat(job.telegramChatId, requireNotNull(job.telegramStatusMessageId))
-
-    private companion object {
-        val PLAYLIST_AUDIO_ARGS = listOf(
-            "-x",
-            "--audio-format", "mp3",
-            "--audio-quality", "96K",
-            "--embed-metadata",
-            "--embed-thumbnail",
-            "--convert-thumbnails", "jpg",
-        )
-    }
 }

@@ -70,8 +70,8 @@ class YtDlpService(
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
 
     init {
-        require(metadataTimeout.isPositive()) { "download.yt-dlp.metadata-timeout must be positive" }
-        require(downloadTimeout.isPositive()) { "download.yt-dlp.download-timeout must be positive" }
+        require(metadataTimeout.isPositive) { "download.yt-dlp.metadata-timeout must be positive" }
+        require(downloadTimeout.isPositive) { "download.yt-dlp.download-timeout must be positive" }
         require(cloudMaxWorkspaceBytes > 0) { "download.yt-dlp.cloud-max-workspace-bytes must be positive" }
     }
 

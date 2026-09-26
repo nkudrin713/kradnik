@@ -15,6 +15,7 @@ import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.ytdlp.YtDlpPresets
 import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
@@ -83,8 +84,8 @@ class YouTubePlaylistPlanner(
                     cacheKey = "youtube:playlist:$playlistId:audio:96:${range.key}",
                     outputType = OutputType.AUDIO,
                     platform = DownloadPlatform.YOUTUBE,
-                    formatSelector = "ba/bestaudio",
-                    extraArgs = PLAYLIST_AUDIO_ARGS,
+                    formatSelector = YtDlpPresets.YOUTUBE_AUDIO_FORMAT,
+                    extraArgs = YtDlpPresets.PLAYLIST_AUDIO_ARGS,
                     presetName = "youtube_playlist_audio_96",
                     workloadType = DownloadWorkloadType.PLAYLIST_AUDIO,
                     playlistEntries = range.entries,
@@ -115,13 +116,5 @@ class YouTubePlaylistPlanner(
         const val MAX_PLAYLIST_ITEMS = 100
         const val AUDIO_BITRATE_KBPS = 96L
         val YOUTUBE_HOSTS = setOf("youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be")
-        val PLAYLIST_AUDIO_ARGS = listOf(
-            "-x",
-            "--audio-format", "mp3",
-            "--audio-quality", "96K",
-            "--embed-metadata",
-            "--embed-thumbnail",
-            "--convert-thumbnails", "jpg",
-        )
     }
 }

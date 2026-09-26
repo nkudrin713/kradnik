@@ -31,7 +31,7 @@ class AudioMessagesPlaylistWorkflow(
     private val telegramFileSender: TelegramPlaylistSender,
     private val cache: TelegramResultCache,
     private val workDirCleaner: WorkDirCleaner,
-    @Value("\${download.playlist-item-parallelism:2}") private val itemParallelism: Int = 2,
+    @Value($$"${download.playlist-item-parallelism:2}") private val itemParallelism: Int = 2,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -39,6 +39,14 @@ class AudioMessagesPlaylistWorkflow(
         require(itemParallelism > 0) { "download.playlist-item-parallelism must be positive" }
     }
 
+    /**
+     * Processes entries without a recorded result using bounded parallelism, then delivers successful audio files.
+     * Each entry reuses a cached Telegram file or stages a download and persists its success or failure.
+     * Recorded positions, including failures, are skipped on resume; cancellation still propagates.
+     *
+     * Returns null if the job is no longer processing or no longer exists before delivery.
+     * Fails if no successful files remain. Item directories are cleaned after staging; the caller owns [root].
+     */
     suspend fun run(jobId: Long, request: PlaylistAudioRequest, context: DeliveryContext, root: Path, progress: JobProgress): PlaylistDeliveryResult? {
         val completedPositions = request.completedEntries.map(PlaylistAudioResult::position).toSet()
         val pending = request.entries.filterNot { it.position in completedPositions }

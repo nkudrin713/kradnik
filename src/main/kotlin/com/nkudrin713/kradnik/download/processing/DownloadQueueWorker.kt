@@ -20,8 +20,8 @@ class DownloadQueueWorker(
     private val downloadJobProcessor: DownloadJobProcessor,
     private val activeDownloads: ActiveDownloadRegistry,
     private val workDirCleaner: WorkDirCleaner,
-    @Value("\${download.workers:3}") private val workers: Int,
-    @Value("\${download.worker-delay-ms:1000}") private val pollDelayMs: Long = 1000,
+    @Value($$"${download.workers:3}") private val workers: Int,
+    @Value($$"${download.worker-delay-ms:1000}") private val pollDelayMs: Long = 1000,
 ) {
     init {
         require(workers > 0) { "download.workers must be positive" }
@@ -33,6 +33,10 @@ class DownloadQueueWorker(
         Thread(task, "download-worker")
     }
 
+    /**
+     * Cleans interrupted workspaces and recovers persisted jobs before starting the fixed worker pool.
+     * Each worker claims its next job only after the previous job has finished.
+     */
     @PostConstruct
     fun start() {
         workDirCleaner.cleanInterruptedJobs()
@@ -72,6 +76,10 @@ class DownloadQueueWorker(
         }
     }
 
+    /**
+     * Interrupts polling and active coroutine bridges, then waits up to 30 seconds for workers to exit.
+     * Logs a timeout and preserves interruption of the shutdown thread.
+     */
     @PreDestroy
     fun shutdown() {
         // Interrupts polling and runBlocking; process adapters terminate child processes in finally.

@@ -28,7 +28,7 @@ class TelegramVideoPreparer(
     private val processRunner: ProcessRunner,
     private val videoMetadataProbe: VideoMetadataProbe,
     private val videoPolicy: TelegramVideoPolicy,
-    @Value("\${download.video.ffmpeg-timeout:20m}")
+    @Value($$"${download.video.ffmpeg-timeout:20m}")
     private val ffmpegTimeout: JavaDuration = JavaDuration.ofMinutes(20),
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -39,6 +39,14 @@ class TelegramVideoPreparer(
         }
     }
 
+    /**
+     * Probes [file] and returns it unchanged when [TelegramVideoPolicy] accepts it.
+     * Otherwise, transcodes once into `telegram-video.mp4` under [outputDir] and validates the result again.
+     * The caller owns both the input and output workspace; this method does not delete either file.
+     *
+     * @throws VideoTooLargeException if the policy rejects the source or prepared file for its size.
+     * @throws VideoPrepareException if ffmpeg fails or the prepared file remains incompatible.
+     */
     suspend fun prepare(
         file: DownloadedFile,
         outputDir: Path,

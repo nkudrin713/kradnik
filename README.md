@@ -20,12 +20,55 @@ Playlist video downloads, playlists from other platforms, private content, and a
 
 The diagram shows the single-media path. Playlist jobs use `PlaylistQueueWorker` and `PlaylistJobProcessor` with the same persisted queue and job states.
 
+`DownloadChoicePlanner` routes planning to the standard media, Instagram, or YouTube playlist planner. Standard and Instagram options share `MediaChoiceBuilder`; `DownloadEngine` delegates source metadata and downloads to explicit yt-dlp and Instagram adapters.
+
 - Metadata is loaded before enqueueing to build the available format menu and estimate sizes.
 - Metadata work uses 2 threads and accepts at most 32 pending requests.
 - YouTube playlists offer audio messages or ZIP for all tracks when there are at most 100 entries; larger playlists offer the first 100 or last 100. Both delivery modes use 96 kbps MP3.
 - ZIP archives are named `<file count> – <playlist title>.zip`; numbered entries preserve playlist order. The count includes only successfully downloaded tracks. Archives exceeding the configured Telegram upload limit are rejected without splitting.
 - Instagram videos keep the video/audio menu and add a full-post option; static posts expose one full-post option.
 - Menu snapshots, ownership, and language preferences are stored in PostgreSQL, so callbacks survive restarts.
+
+### Single-media production
+
+`DownloadRequestMapper` reads the saved selection into `SingleMediaRequest`. `DownloadJobProcessor` checks `TelegramResultCache` first. On a miss, it creates a workspace and selects a handler through `SingleMediaHandlers`. An invalid cached Telegram file reference falls back to a fresh download; other delivery errors fail the job.
+
+![Video, audio, cover, and image production](docs/single-media-production.svg)
+
+| Handler | Production and validation | Result |
+| --- | --- | --- |
+| `VideoHandler` | Metadata and preflight, source video download, `TelegramVideoPreparer`, final size check | `MediaArtifact.Video` |
+| `AudioHandler` | Metadata and audio preflight, quality adjustment when needed, source audio download, final size check | `MediaArtifact.Audio` with title, performer, and duration |
+| `CoverHandler` | Catalog metadata, thumbnail URL, `CoverDownloader`, final size check | `MediaArtifact.Document` |
+| `ImagesHandler` | Instagram image metadata and ordered downloads with per-photo limits; no aggregate single-file size check | `MediaArtifact.Photos` |
+
+Audio preflight still checks selected source sizes when duration-based estimation is unavailable. `InstagramSourceAdapter` uses embed metadata, falling back to yt-dlp image metadata for image posts. It downloads video directly when a media URL is available; audio and video without that URL use yt-dlp.
+
+### Telegram delivery
+
+![Direct-chat and inline Telegram delivery](docs/telegram-delivery-flow.svg)
+
+`TelegramFileSender` delivers fresh `MediaArtifact` results or typed `CachedMedia` references using `DeliveryContext`. Direct chats receive media followed by optional monospace post text. Fresh inline results are uploaded to the configured storage chat before the inline message is edited; cached inline results reuse the file ID directly. Photo groups and full Instagram posts are direct-chat only. `TelegramMediaSender` owns the API calls; the processor passes the delivery receipt to `JobLifecycle`.
+
+### Playlist audio messages
+
+![YouTube playlist audio-message workflow](docs/playlist-audio-flow.svg)
+
+`PlaylistJobProcessor` maps the persisted job to `PlaylistAudioRequest` and selects `AudioMessagesPlaylistWorkflow`. The workflow skips recorded positions, including failures, and processes remaining tracks with bounded parallelism. It reuses cached audio or downloads 96 kbps MP3 through `PlaylistEntryDownloader` and stages it with `TelegramPlaylistSender` in the storage chat.
+
+Each item saves a file ID or an error before its temporary directory is removed. Once all pending entries finish, the workflow checks that the job is still processing, reloads saved results, and delivers successful tracks in playlist order. No successful tracks means failure. A summary of skipped tracks is sent only after conditional completion succeeds. Restart resumes entries without a recorded outcome; user cancellation propagates without recording a new item failure.
+
+### Playlist ZIP
+
+![YouTube playlist ZIP workflow](docs/playlist-zip-flow.svg)
+
+`ZipPlaylistWorkflow` downloads tracks with bounded parallelism, packages successful local files with `PlaylistZipBuilder`, and sends the archive directly through `TelegramPlaylistSender`. This path does not reuse Telegram track file IDs or require a storage chat. Every attempt rebuilds local files, including after restart.
+
+One timeout covers downloading, packaging, and uploading. `PlaylistWorkspaceBudget` checks workspace size and free space throughout the attempt; the sum of downloaded track sizes and the final archive must each fit the upload limit. Recognized source failures skip individual tracks; size limits, disk failures, and other non-source errors abort the job. An empty result also fails. State checks precede packaging and upload, conditional completion precedes the partial-success summary, and the processor cleans all local files in `finally`.
+
+### Runtime models and cache
+
+`DownloadJob` remains the persistence model and `DownloadSpec` the stored menu snapshot. Runtime requests separate single-media and playlist data; `SourceRequest` contains source download options. `ResultKeyFactory` centralizes result identities, while `TelegramReceiptCodec` preserves the stored file-ID and photo-group formats and keeps playlist completion markers separate from cached media. Existing queued selections and keys are read without reconstruction or re-versioning.
 
 ## Queue and lifecycle
 
@@ -36,6 +79,8 @@ The diagram shows the single-media path. Playlist jobs use `PlaylistQueueWorker`
 - Pending jobs stay in PostgreSQL. Workers claim them with `FOR UPDATE SKIP LOCKED` and `UPDATE ... RETURNING`.
 - Claiming and state changes use short transactions; download and Telegram upload I/O run outside them.
 - Job states are `QUEUED`, `PROCESSING`, `COMPLETED`, `FAILED`, and `CANCELLED_BY_USER`.
+- Both processors use `JobLifecycle` for conditional completion and failure through `DownloadJobService`. A cancelled job cannot be completed or failed by a late result; the playlist summary is sent only when completion succeeds.
+- Handlers and workflows report `JobProgress` phases. `TelegramJobProgress` maps phases and semantic `DownloadFailure` reasons to Telegram statuses; processors own cancellation handling and workspace cleanup in `finally`.
 - Failed jobs are not retried automatically; users can submit the link again. A playlist can complete with partial results when individual tracks fail.
 - Startup removes abandoned work directories and returns `PROCESSING` jobs to `QUEUED`.
 - Shutdown interrupts external I/O and waits up to 30 seconds for each worker pool.
@@ -51,26 +96,34 @@ Paths are relative to `src/main/kotlin/com/nkudrin713/kradnik/`.
 | --- | --- |
 | `telegram/handler/TelegramUpdateHandler.kt` | Commands, links, and callbacks |
 | `download/platform/PlatformResolver.kt` | URL validation, normalization, and source routing |
-| `download/choice/DownloadChoicePlanner.kt` | Format and size menu options |
+| `download/choice/DownloadChoicePlanner.kt`, `StandardMediaChoicePlanner.kt`, `InstagramChoicePlanner.kt`, `MediaChoiceBuilder.kt` | Planning routing, platform-specific options, shared format selection and size estimates |
 | `telegram/DownloadChoiceCoordinator.kt` | Bounded metadata execution and menu publication |
 | `download/service/DownloadJobService.kt` | Enqueue, claim, completion, failure, cancellation, and startup recovery |
 | `download/repository/DownloadJobRepository.kt` | Queue SQL and reusable Telegram file lookup |
 | `download/processing/DownloadQueueWorker.kt` | Single-media worker pool and polling loops |
-| `download/processing/DownloadJobProcessor.kt` | Download-to-delivery flow and cleanup |
+| `download/processing/DownloadJobProcessor.kt` | Cache lookup, handler selection, delivery, lifecycle, and cleanup |
+| `download/single/` | Video, audio, cover, and images production through `SingleMediaHandler` |
+| `download/domain/DownloadRequest.kt`, `MediaArtifact.kt`, `MediaMetadata.kt` | Runtime requests, typed local results, and source-neutral metadata |
+| `download/repository/DownloadRequestMapper.kt` | Saved menu/job selection to runtime request mapping |
 | `download/playlist/YouTubePlaylistPlanner.kt` | Playlist metadata, track ranges, and audio options |
-| `download/processing/PlaylistQueueWorker.kt`, `download/processing/PlaylistJobProcessor.kt` | Separate playlist workers, bounded track processing, and ordered delivery |
+| `download/processing/PlaylistQueueWorker.kt`, `download/processing/PlaylistJobProcessor.kt` | Separate playlist workers and delivery-mode orchestration |
+| `download/playlist/AudioMessagesPlaylistWorkflow.kt`, `ZipPlaylistWorkflow.kt` | Track processing, checkpoints or ZIP packaging, and playlist delivery |
+| `download/playlist/PlaylistWorkspaceBudget.kt` | ZIP workspace size and free-space checks |
+| `download/processing/JobLifecycle.kt`, `download/telegram/TelegramJobProgress.kt` | Conditional terminal transitions, progress, user-facing errors, and playlist summaries |
 | `download/processing/ActiveDownloadRegistry.kt` | Running coroutine registry for user cancellation |
-| `download/DownloadEngine.kt` | yt-dlp, Instagram video/image, and cover branches |
+| `download/DownloadEngine.kt`, `download/source/` | Explicit source registry, source requests, metadata adaptation, and yt-dlp/Instagram download routing |
 | `download/instagram/InstagramEmbedDownloader.kt` | Instagram metadata and media download |
 | `ytdlp/YtDlpService.kt`, `ytdlp/YtDlpPresets.kt`, `process/DefaultProcessRunner.kt` | Download presets, external commands, timeouts, diagnostics, and process termination |
-| `download/telegram/TelegramFileSender.kt`, `telegram/TelegramMediaSender.kt` | Telegram delivery, cached files, and photo albums |
+| `download/telegram/TelegramFileSender.kt`, `TelegramPlaylistSender.kt`, `telegram/TelegramMediaSender.kt` | Single-media and playlist delivery through the Telegram API |
+| `download/telegram/TelegramResultCache.kt`, `TelegramReceiptCodec.kt`, `download/identity/ResultKeyFactory.kt` | Cache lookup, stored Telegram references, and result keys |
+| `download/limit/`, `download/cover/` | Preflight/upload limits and cover downloads |
 | `download/video/` | Video probing and Telegram compatibility normalization |
 
 Runtime ownership:
 
 - PostgreSQL stores jobs, choice sessions, and user language preferences.
 - Flyway owns schema changes.
-- HTTP clients are shared; metadata is loaded before enqueueing, while download processes and work directories belong to a job or playlist entry.
+- HTTP clients are shared. Planning reads metadata before enqueueing; single-media cache misses prepare it again for preflight and download. Download processes and work directories belong to a job or playlist entry.
 - PostgreSQL owns job state; `ActiveDownloadRegistry` holds running coroutine handles in memory so cancellation can reach active I/O.
 
 ## Stack
@@ -125,7 +178,7 @@ Operational notes:
 
 - Local Bot API endpoints require a media volume shared with the application; point `DOWNLOAD_WORK_DIR` to it.
 - Guest mode requires BotFather enablement and permission to use the configured storage chat.
-- Playlist downloads also require access to the storage chat for uploading new tracks before ordered delivery.
+- Audio-message playlists also require access to the storage chat for uploading new tracks before ordered delivery; ZIP playlists upload the archive directly.
 - Cached `file_id` values do not need an intermediate upload.
 - `/language` changes the persisted user language.
 

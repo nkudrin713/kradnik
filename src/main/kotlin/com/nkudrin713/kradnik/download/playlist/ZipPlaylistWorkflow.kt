@@ -31,6 +31,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.time.Duration.Companion.milliseconds
 
 @Component
 class ZipPlaylistWorkflow(
@@ -41,8 +42,8 @@ class ZipPlaylistWorkflow(
     private val uploadLimits: TelegramUploadLimits,
     private val workDirCleaner: WorkDirCleaner,
     private val budget: PlaylistWorkspaceBudget,
-    @Value("\${download.playlist-item-parallelism:2}") private val itemParallelism: Int = 2,
-    @Value("\${download.playlist-zip-timeout:2h}") private val timeout: Duration = Duration.ofHours(2),
+    @Value($$"${download.playlist-item-parallelism:2}") private val itemParallelism: Int = 2,
+    @Value($$"${download.playlist-zip-timeout:2h}") private val timeout: Duration = Duration.ofHours(2),
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -51,14 +52,23 @@ class ZipPlaylistWorkflow(
         require(timeout.isPositive) { "download.playlist-zip-timeout must be positive" }
     }
 
+    /**
+     * Downloads entries, builds a ZIP, and sends it under one timeout with periodic workspace-budget checks.
+     * Retries rebuild all local files. Recognized source failures skip individual entries; size-limit and
+     * other failures abort the attempt. Both downloaded files and the final archive must fit the upload limit.
+     *
+     * Returns null when a job-state check before packing or sending finds the job is no longer processing.
+     * An empty result fails the attempt. The workflow timeout becomes an [IllegalStateException], while
+     * parent cancellation propagates. The caller owns cleanup of [root], including partial files and the ZIP.
+     */
     suspend fun run(jobId: Long, request: PlaylistAudioRequest, context: DeliveryContext, root: Path, progress: JobProgress): PlaylistDeliveryResult? {
         try {
-            return withTimeout(timeout.toMillis()) {
+            return withTimeout(timeout.toMillis().milliseconds) {
                 coroutineScope {
                     budget.check(root)
                     val monitor = launch {
                         while (true) {
-                            delay(250)
+                            delay(250.milliseconds)
                             budget.check(root)
                         }
                     }

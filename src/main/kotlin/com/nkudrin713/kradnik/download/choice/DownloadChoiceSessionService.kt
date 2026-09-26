@@ -21,16 +21,20 @@ class DownloadChoiceSessionService(
     private val repository: DownloadChoiceSessionRepository,
     private val messages: TelegramMessages,
     private val clock: Clock,
-    @Value("\${download.choice-session-ttl:30m}")
+    @Value($$"${download.choice-session-ttl:30m}")
     private val consumedSessionTtl: Duration = Duration.ofMinutes(30),
-    @Value("\${download.choice-session-max-age:30d}")
+    @Value($$"${download.choice-session-max-age:30d}")
     private val unselectedSessionMaxAge: Duration = Duration.ofDays(30),
 ) {
     init {
-        require(consumedSessionTtl.isPositive()) { "download.choice-session-ttl must be positive" }
-        require(unselectedSessionMaxAge.isPositive()) { "download.choice-session-max-age must be positive" }
+        require(consumedSessionTtl.isPositive) { "download.choice-session-ttl must be positive" }
+        require(unselectedSessionMaxAge.isPositive) { "download.choice-session-max-age must be positive" }
     }
 
+    /**
+     * Persists the offered options, owner, language, and Telegram message identifiers for later callbacks.
+     * Unselected menus expire by creation age; their initial cleanup deadline does not consume the session.
+     */
     @Transactional
     fun create(command: CreateDownloadChoiceSessionCommand): DownloadChoiceSession {
         val now = clock.instant()
@@ -51,6 +55,8 @@ class DownloadChoiceSessionService(
 
     /**
      * Locks the session and marks a valid, available option as selected before job creation.
+     * Validates the owner, originating menu, session age, and option availability under the same row lock.
+     * Rejected selections return a [DownloadChoiceSelection] outcome without consuming the menu.
      * The consumed-session cleanup deadline starts at selection; call [release] if downstream job creation fails.
      */
     @Transactional
@@ -66,8 +72,8 @@ class DownloadChoiceSessionService(
             session.telegramInlineMessageId == command.telegramInlineMessageId
         } else {
             session.telegramInlineMessageId == null &&
-                    session.telegramChatId == command.telegramChatId &&
-                    session.telegramMenuMessageId == command.telegramMenuMessageId
+                session.telegramChatId == command.telegramChatId &&
+                session.telegramMenuMessageId == command.telegramMenuMessageId
         }
         if (!sameMessage) {
             return DownloadChoiceSelection.Invalid
@@ -97,6 +103,10 @@ class DownloadChoiceSessionService(
         )
     }
 
+    /**
+     * Consumes an unselected menu after validating its owner, originating message, and age under a row lock.
+     * Uses the same consumed-session lifetime as [select]; this does not cancel an already enqueued job.
+     */
     @Transactional
     fun cancel(command: CancelDownloadChoiceCommand): DownloadChoiceCancellation {
         val session = repository.findForUpdate(command.token)
@@ -127,13 +137,18 @@ class DownloadChoiceSessionService(
      * Makes a selected option available after
      * [TelegramDownloadStarter][com.nkudrin713.kradnik.telegram.TelegramDownloadStarter] fails to enqueue it.
      * Clearing [DownloadChoiceSession.selectedAt] returns the row to the absolute unselected-session lifetime.
+     * A missing session is ignored; releasing an existing session does not reset its creation time.
      */
     @Transactional
     fun release(token: UUID) {
         repository.findForUpdate(token)?.selectedAt = null
     }
 
-    @Scheduled(fixedDelayString = "\${download.choice-session-cleanup-delay-ms:600000}")
+    /**
+     * Deletes selected or cancelled sessions past their cleanup deadline and unused menus past their maximum age.
+     * Removes database rows only; Telegram menu messages are left unchanged.
+     */
+    @Scheduled(fixedDelayString = $$"${download.choice-session-cleanup-delay-ms:600000}")
     @Transactional
     fun deleteExpiredSessions() {
         val now = clock.instant()

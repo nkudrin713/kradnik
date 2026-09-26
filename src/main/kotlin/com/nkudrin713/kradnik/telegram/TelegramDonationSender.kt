@@ -19,14 +19,14 @@ class TelegramDonationSender(
     fun sendMessage(chatId: Long, donationUrl: String, language: BotLanguage = BotLanguage.EN) {
         apiClient.execute(
             SendMessage(chatId, messages.text(language, TelegramMessage.DONATION_MESSAGE))
-                .replyMarkup(donationKeyboard(donationUrl, language))
+                .replyMarkup(donationKeyboard(donationUrl, language)),
         )
     }
 
     fun sendPin(channelId: String, donationUrl: String, language: BotLanguage = BotLanguage.EN): Int {
         val response = apiClient.execute(
             SendMessage(channelId, messages.text(language, TelegramMessage.DONATION_PIN))
-                .replyMarkup(donationKeyboard(donationUrl, language))
+                .replyMarkup(donationKeyboard(donationUrl, language)),
         )
         val messageId = response.message()?.messageId()
             ?: throw TelegramSendException("Telegram response does not contain donation message")
@@ -49,7 +49,7 @@ class TelegramDonationSender(
         try {
             apiClient.execute(
                 EditMessageText(channelId, messageId, messages.text(language, TelegramMessage.DONATION_PIN))
-                    .replyMarkup(donationKeyboard(donationUrl, language))
+                    .replyMarkup(donationKeyboard(donationUrl, language)),
             )
         } catch (error: TelegramSendException) {
             if (error.kind != TelegramSendFailureKind.MESSAGE_NOT_MODIFIED) {
@@ -60,19 +60,19 @@ class TelegramDonationSender(
 
     private fun donationKeyboard(donationUrl: String, language: BotLanguage): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
-            InlineKeyboardButton(messages.text(language, TelegramMessage.DONATION_BUTTON)).url(donationUrl)
+            InlineKeyboardButton(messages.text(language, TelegramMessage.DONATION_BUTTON)).url(donationUrl),
         )
     }
 
     private fun pinMessage(channelId: String, messageId: Int) {
         apiClient.execute(
-            PinChatMessage(channelId, messageId).disableNotification(true)
+            PinChatMessage(channelId, messageId).disableNotification(true),
         )
     }
 
     private fun unpinMessage(channelId: String, messageId: Int) {
         apiClient.execute(
-            UnpinChatMessage(channelId).messageId(messageId)
+            UnpinChatMessage(channelId).messageId(messageId),
         )
     }
 }

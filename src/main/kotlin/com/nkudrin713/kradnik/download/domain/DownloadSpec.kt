@@ -1,7 +1,9 @@
 package com.nkudrin713.kradnik.download.domain
 
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.ytdlp.YtDlpPresets
 
+/** Persisted menu snapshot. Runtime execution uses separate single-media and playlist requests. */
 data class DownloadSpec(
     val originalUrl: String,
     val normalizedUrl: String,
@@ -13,15 +15,11 @@ data class DownloadSpec(
     val presetName: String,
     val postText: String? = null,
     val workloadType: DownloadWorkloadType = DownloadWorkloadType.SINGLE,
+    val playlistDeliveryMode: PlaylistDeliveryMode = PlaylistDeliveryMode.AUDIO_MESSAGES,
+    val playlistTitle: String? = null,
     val playlistEntries: List<PlaylistAudioEntry> = emptyList(),
 ) {
-    fun withAudioQuality(audioQuality: String): DownloadSpec {
-        val args = extraArgs
-            .withoutAudioQuality()
-            .plus(listOf(AUDIO_QUALITY_ARG, audioQuality))
-
-        return copy(extraArgs = args)
-    }
+    fun withAudioQuality(audioQuality: String): DownloadSpec = copy(extraArgs = YtDlpPresets.withAudioQuality(extraArgs, audioQuality))
 
     companion object {
         fun fromJob(job: DownloadJob): DownloadSpec {
@@ -37,24 +35,9 @@ data class DownloadSpec(
                 postText = job.sourcePostText,
                 workloadType = job.workloadType,
                 playlistEntries = job.playlistEntries,
+                playlistDeliveryMode = job.playlistDeliveryMode,
+                playlistTitle = job.playlistTitle,
             )
-        }
-
-        private const val AUDIO_QUALITY_ARG = "--audio-quality"
-
-        private fun List<String>.withoutAudioQuality(): List<String> {
-            val result = mutableListOf<String>()
-            var index = 0
-            while (index < size) {
-                if (this[index] == AUDIO_QUALITY_ARG) {
-                    index += 2
-                } else {
-                    result += this[index]
-                    index += 1
-                }
-            }
-
-            return result
         }
     }
 }

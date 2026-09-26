@@ -4,6 +4,7 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
@@ -14,6 +15,19 @@ import kotlin.test.assertFailsWith
 
 class TelegramDownloadChoiceViewTest {
     private val view = TelegramDownloadChoiceView(telegramMessages())
+
+    @Test
+    fun displaysArchiveModeAndUnavailableMarkerWithoutFullSizeEstimate() {
+        val audio = option("audio", "Все 100 в ZIP", null, approximate = true)
+        val archive = audio.copy(
+            key = "playlist_first_zip",
+            available = false,
+            spec = audio.spec.copy(playlistDeliveryMode = PlaylistDeliveryMode.ZIP),
+        )
+        val button = view.keyboard(UUID.randomUUID(), listOf(archive), BotLanguage.RU).inlineKeyboard()[0][0]
+        assertEquals("📦 Все 100 в ZIP · недоступно", button.text)
+        assertEquals("playlist_first_zip", DownloadChoiceCallback.parse(requireNotNull(button.callbackData))?.optionKey)
+    }
 
     @Test
     fun createsPreformattedEscapedTitleAndNonClickableDuration() {

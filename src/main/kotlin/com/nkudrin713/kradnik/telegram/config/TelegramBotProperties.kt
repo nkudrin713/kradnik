@@ -27,7 +27,7 @@ data class TelegramBotProperties(
         }
         require(localApi || maxUploadBytes <= TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES) {
             "telegram.bot.max-upload-bytes must not exceed ${TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES} " +
-                    "when the cloud API is used"
+                "when the cloud API is used"
         }
         require(!connectTimeout.isNegative && !connectTimeout.isZero) {
             "telegram.bot.connect-timeout must be positive"

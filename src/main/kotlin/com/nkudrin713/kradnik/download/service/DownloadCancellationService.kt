@@ -41,6 +41,7 @@ class DownloadCancellationService(
             telegramInlineMessageId == null &&
                 telegramChatId == address.chatId &&
                 telegramStatusMessageId == address.messageId
+
         is TelegramMessageAddress.Inline -> telegramInlineMessageId == address.inlineMessageId
     }
 }

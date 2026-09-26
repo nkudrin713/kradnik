@@ -19,17 +19,19 @@ class VideoMetadataProbe(
         val result = processRunner.run(
             FfprobeCommand(
                 args = listOf(
-                    "-v", "error",
+                    "-v",
+                    "error",
                     "-show_entries",
                     "format=format_name:" +
-                            "stream=codec_type,codec_name,codec_tag_string,profile,level,width,height,pix_fmt," +
-                            "r_frame_rate,avg_frame_rate,sample_aspect_ratio,display_aspect_ratio," +
-                            "color_space,color_transfer,color_primaries",
-                    "-of", "json",
+                        "stream=codec_type,codec_name,codec_tag_string,profile,level,width,height,pix_fmt," +
+                        "r_frame_rate,avg_frame_rate,sample_aspect_ratio,display_aspect_ratio," +
+                        "color_space,color_transfer,color_primaries",
+                    "-of",
+                    "json",
                     file.toString(),
                 ),
                 timeout = 1.minutes,
-            )
+            ),
         )
 
         if (result.timedOut || result.exitCode != 0) {
@@ -112,30 +114,6 @@ class VideoMetadataProbe(
         private const val VIDEO = "video"
         private const val AUDIO = "audio"
     }
-}
-
-data class VideoMetadata(
-    val width: Int,
-    val height: Int,
-    val sampleAspectRatio: String?,
-    val displayAspectRatio: String?,
-    val containerFormat: String? = null,
-    val videoCodec: String? = null,
-    val audioCodec: String? = null,
-    val codecTag: String? = null,
-    val codecProfile: String? = null,
-    val codecLevel: Int? = null,
-    val pixelFormat: String? = null,
-    val frameRate: String? = null,
-    val colorSpace: String? = null,
-    val colorTransfer: String? = null,
-    val colorPrimaries: String? = null,
-) {
-    val isVertical: Boolean = height > width
-    val isMp4Container: Boolean = containerFormat
-        ?.split(',')
-        ?.any { it.equals("mp4", ignoreCase = true) }
-        ?: false
 }
 
 private data class FfprobeCommand(

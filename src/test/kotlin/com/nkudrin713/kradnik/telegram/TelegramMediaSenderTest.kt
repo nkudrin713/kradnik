@@ -8,17 +8,17 @@ import com.pengrad.telegrambot.model.Document
 import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.PhotoSize
 import com.pengrad.telegrambot.model.Video
-import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.model.request.ParseMode
+import com.pengrad.telegrambot.model.request.ReplyParameters
 import com.pengrad.telegrambot.request.EditMessageMedia
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendDocument
 import com.pengrad.telegrambot.request.SendMediaGroup
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendVideo
-import com.pengrad.telegrambot.response.SendResponse
 import com.pengrad.telegrambot.response.BaseResponse
 import com.pengrad.telegrambot.response.MessagesResponse
+import com.pengrad.telegrambot.response.SendResponse
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.coEvery
@@ -304,9 +304,11 @@ class TelegramMediaSenderTest {
             every { isOk } returns true
             every { messages() } returns fileIds.map { fileId ->
                 mockk<Message> {
-                    every { photo() } returns arrayOf(mockk<PhotoSize> {
-                        every { fileId() } returns fileId
-                    })
+                    every { photo() } returns arrayOf(
+                        mockk<PhotoSize> {
+                            every { fileId() } returns fileId
+                        },
+                    )
                 }
             }.toTypedArray()
         }

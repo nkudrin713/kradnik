@@ -33,8 +33,7 @@ enum class DownloadJobAction(val value: String) {
 
 data class DownloadJobCallback(val action: DownloadJobAction, val jobId: Long) {
     companion object {
-        fun encode(action: DownloadJobAction, jobId: Long): String =
-            "$JOB_CALLBACK_PREFIX:${action.value}:$jobId"
+        fun encode(action: DownloadJobAction, jobId: Long): String = "$JOB_CALLBACK_PREFIX:${action.value}:$jobId"
 
         fun parse(value: String): DownloadJobCallback? {
             val parts = value.split(':')

@@ -7,7 +7,7 @@ import kotlin.test.assertIs
 
 class TelegramVideoPolicyTest {
     private val policy = TelegramVideoPolicy(
-        TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
+        TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES),
     )
 
     @Test
@@ -26,7 +26,7 @@ class TelegramVideoPolicyTest {
             policy.evaluate(
                 metadata = compatibleMetadata().copy(videoCodec = "vp9", codecTag = "vp09"),
                 sizeBytes = 1_000,
-            )
+            ),
         )
 
         assertEquals(setOf(TelegramVideoIssue.VIDEO_CODEC), result.issues)
@@ -42,7 +42,7 @@ class TelegramVideoPolicyTest {
                     audioCodec = "opus",
                 ),
                 sizeBytes = 1_000,
-            )
+            ),
         )
 
         assertEquals(
@@ -71,7 +71,7 @@ class TelegramVideoPolicyTest {
             policy.evaluate(
                 metadata = compatibleMetadata(),
                 sizeBytes = TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES + 1,
-            )
+            ),
         )
 
         assertEquals(setOf(TelegramVideoIssue.FILE_SIZE), result.issues)
@@ -93,7 +93,7 @@ class TelegramVideoPolicyTest {
             TelegramUploadLimits(
                 maxUploadBytes = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES,
                 localMode = true,
-            )
+            ),
         )
 
         val result = localPolicy.evaluate(

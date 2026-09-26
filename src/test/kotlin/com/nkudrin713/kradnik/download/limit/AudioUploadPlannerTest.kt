@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.download.limit
 
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -8,7 +8,7 @@ import kotlin.test.assertIs
 
 class AudioUploadPlannerTest {
     private val planner = AudioUploadPlanner(
-        TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES)
+        TelegramUploadLimits(TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES),
     )
 
     @Test
@@ -46,8 +46,8 @@ class AudioUploadPlannerTest {
         assertIs<AudioUploadPlan.Unavailable>(actual)
     }
 
-    private fun metadata(durationSeconds: Long?): YtDlpMetadataDto {
-        return YtDlpMetadataDto(
+    private fun metadata(durationSeconds: Long?): MediaMetadata {
+        return MediaMetadata(
             title = "title",
             thumbnail = null,
             duration = durationSeconds?.let { BigDecimal.valueOf(it) },

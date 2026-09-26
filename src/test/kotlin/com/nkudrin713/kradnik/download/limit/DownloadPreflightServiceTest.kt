@@ -1,10 +1,12 @@
 package com.nkudrin713.kradnik.download.limit
 
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.MediaFormat
+import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpFormatDto
-import com.nkudrin713.kradnik.ytdlp.dto.YtDlpMetadataDto
+import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,7 +51,7 @@ class DownloadPreflightServiceTest {
 
         assertEquals(
             listOf("-x", "--audio-format", "mp3", "--audio-quality", "40K"),
-            assertIs<DownloadPreflightDecision.Allowed>(actual).spec.extraArgs,
+            assertIs<DownloadPreflightDecision.Allowed>(actual).spec.source.extraArgs,
         )
     }
 
@@ -179,7 +181,7 @@ class DownloadPreflightServiceTest {
                         filesize = 1,
                         filesizeApprox = null,
                     ),
-                )
+                ),
             ),
         )
 
@@ -329,9 +331,9 @@ class DownloadPreflightServiceTest {
         width: Int? = 1920,
         height: Int? = 1080,
         durationSeconds: Long? = 120,
-        requestedFormats: List<YtDlpFormatDto>? = null,
-    ): YtDlpMetadataDto {
-        return YtDlpMetadataDto(
+        requestedFormats: List<MediaFormat>? = null,
+    ): MediaMetadata {
+        return MediaMetadata(
             title = "title",
             thumbnail = null,
             duration = durationSeconds?.let { BigDecimal.valueOf(it) },
@@ -353,8 +355,8 @@ class DownloadPreflightServiceTest {
         height: Int?,
         filesize: Long?,
         filesizeApprox: Long?,
-    ): YtDlpFormatDto {
-        return YtDlpFormatDto(
+    ): MediaFormat {
+        return MediaFormat(
             formatId = formatId,
             ext = ext,
             height = height,
@@ -369,31 +371,33 @@ class DownloadPreflightServiceTest {
         )
     }
 
-    private fun videoRequest(): DownloadSpec {
+    private fun videoRequest(): SingleMediaRequest {
         return request(OutputType.VIDEO)
     }
 
-    private fun audioRequest(): DownloadSpec {
+    private fun audioRequest(): SingleMediaRequest {
         return request(OutputType.AUDIO)
     }
 
-    private fun audioRequest(extraArgs: List<String>): DownloadSpec {
+    private fun audioRequest(extraArgs: List<String>): SingleMediaRequest {
         return request(OutputType.AUDIO, extraArgs)
     }
 
     private fun request(
         outputType: OutputType,
         extraArgs: List<String> = emptyList(),
-    ): DownloadSpec {
-        return DownloadSpec(
-            originalUrl = "https://example.com",
-            normalizedUrl = "https://example.com",
-            cacheKey = "video",
-            outputType = outputType,
-            platform = DownloadPlatform.YOUTUBE,
-            formatSelector = "format",
-            extraArgs = extraArgs,
-            presetName = "preset",
+    ): SingleMediaRequest {
+        return DownloadRequestMapper.single(
+            DownloadSpec(
+                originalUrl = "https://example.com",
+                normalizedUrl = "https://example.com",
+                cacheKey = "video",
+                outputType = outputType,
+                platform = DownloadPlatform.YOUTUBE,
+                formatSelector = "format",
+                extraArgs = extraArgs,
+                presetName = "preset",
+            ),
         )
     }
 }

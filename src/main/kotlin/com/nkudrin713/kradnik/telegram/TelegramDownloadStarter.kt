@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.video.TelegramVideoPolicy
@@ -36,16 +36,14 @@ class TelegramDownloadStarter(
                 TelegramDownloadStatus.QUEUED,
                 language,
             )
+
             is TelegramMessageAddress.Inline -> {
                 telegramSender.editStatus(messageAddress, TelegramDownloadStatus.QUEUED, language)
                 null
             }
         }
         val jobSpec = spec.copy(
-            cacheKey = when (spec.outputType) {
-                OutputType.VIDEO -> TelegramVideoPolicy.versionCacheKey(spec.cacheKey)
-                OutputType.AUDIO, OutputType.COVER, OutputType.IMAGES -> spec.cacheKey
-            },
+            cacheKey = ResultKeyFactory.forNewJob(spec.cacheKey, spec.outputType),
         )
         val command = CreateDownloadJobCommand(
             telegramUserId = telegramUserId,

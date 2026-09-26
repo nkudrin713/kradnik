@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service
 @Service
 class TelegramPollingService(
     private val bot: TelegramBot,
-    private val updateHandler: TelegramUpdateHandler
+    private val updateHandler: TelegramUpdateHandler,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)

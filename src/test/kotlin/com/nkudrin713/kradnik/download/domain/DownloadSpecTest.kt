@@ -17,7 +17,7 @@ class DownloadSpecTest {
                 downloadPreset = "preset",
                 selectedFormat = "format",
                 downloadExtraArgs = listOf("-x", "--audio-format", "mp3"),
-            )
+            ),
         )
 
         assertEquals("https://example.com/raw", actual.originalUrl)

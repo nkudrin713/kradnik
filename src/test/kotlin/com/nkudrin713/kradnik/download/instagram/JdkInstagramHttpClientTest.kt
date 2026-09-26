@@ -99,7 +99,7 @@ class JdkInstagramHttpClientTest {
         }
         val outputFile = tempDir.resolve("video.mp4")
         val limitedClient = JdkInstagramHttpClient(
-            TelegramUploadLimits(maxUploadBytes = 3, localMode = true)
+            TelegramUploadLimits(maxUploadBytes = 3, localMode = true),
         )
 
         assertFailsWith<InstagramMediaTooLargeException> {
@@ -119,7 +119,7 @@ class JdkInstagramHttpClientTest {
         }
         val outputFile = tempDir.resolve("video.mp4")
         val limitedClient = JdkInstagramHttpClient(
-            TelegramUploadLimits(maxUploadBytes = 3, localMode = true)
+            TelegramUploadLimits(maxUploadBytes = 3, localMode = true),
         )
 
         assertFailsWith<InstagramMediaTooLargeException> {

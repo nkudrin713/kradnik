@@ -22,6 +22,8 @@ The diagram shows the single-media path. Playlist jobs use `PlaylistQueueWorker`
 
 `DownloadChoicePlanner` routes planning to the standard media, Instagram, or YouTube playlist planner. Standard and Instagram options share `MediaChoiceBuilder`; `DownloadEngine` delegates source metadata and downloads to explicit yt-dlp and Instagram adapters.
 
+`TelegramUpdateHandler` validates and routes links and inline queries. `DownloadChoiceCoordinator` runs the bounded metadata task, persists the choice session, and publishes the menu. The saved `DownloadSpec` contains the selected format, source arguments, output type, and cache identity. `DownloadChoiceHandler` accepts a saved selection, and `TelegramDownloadStarter` creates a queued job through `DownloadJobService`. `DownloadQueueWorker` atomically claims it as `PROCESSING`.
+
 - Metadata is loaded before enqueueing to build the available format menu and estimate sizes.
 - Metadata work uses 2 threads and accepts at most 32 pending requests.
 - YouTube playlists offer audio messages or ZIP for all tracks when there are at most 100 entries; larger playlists offer the first 100 or last 100. Both delivery modes use 96 kbps MP3.
@@ -34,14 +36,16 @@ The diagram shows the single-media path. Playlist jobs use `PlaylistQueueWorker`
 
 `DownloadRequestMapper` reads the saved selection into `SingleMediaRequest`. `DownloadJobProcessor` checks `TelegramResultCache` first. On a miss, it creates a workspace and selects a handler through `SingleMediaHandlers`. An invalid cached Telegram file reference falls back to a fresh download; other delivery errors fail the job.
 
+`SingleMediaHandlers` selects by `OutputType`; each row below is an independent production path. `DownloadEngine` selects the source adapter, using yt-dlp for YouTube/VK and the Instagram adapter for Instagram. `DeliveryContext` carries the Telegram destination and post text through delivery.
+
 ![Video, audio, cover, and post production](docs/single-media-production.svg)
 
 | Handler | Production and validation | Result |
 | --- | --- | --- |
 | `VideoHandler` | Metadata and preflight, source video download, `TelegramVideoPreparer`, final size check | `MediaArtifact.Video` |
 | `AudioHandler` | Metadata and audio preflight, quality adjustment when needed, source audio download, final size check | `MediaArtifact.Audio` with title, performer, and duration |
-| `CoverHandler` | Catalog metadata, thumbnail URL, `CoverDownloader`, final size check | `MediaArtifact.Document` |
-| `InstagramPostHandler` | Ordered Instagram photo/video downloads, per-video preparation, total media size bounded by the configured Telegram upload limit | `MediaArtifact.Post` |
+| `CoverHandler` | Catalog metadata and preflight, required thumbnail URL, `CoverDownloader`, final size check | `MediaArtifact.Document` |
+| `InstagramPostHandler` | Metadata and preflight, ordered Instagram photo/video downloads in isolated item directories, per-video preparation, total media size bounded by the configured Telegram upload limit | `MediaArtifact.Post` |
 | `ImagesHandler` | Instagram image metadata and ordered downloads with per-photo limits; no aggregate single-file size check | `MediaArtifact.Photos` |
 
 Audio preflight still checks selected source sizes when duration-based estimation is unavailable. `InstagramSourceAdapter` uses embed metadata, falling back to yt-dlp post metadata when the embed is unavailable. Carousel fallback downloads select one position at a time. It downloads video directly when a media URL is available; audio and video without that URL use yt-dlp.
@@ -52,13 +56,19 @@ Audio preflight still checks selected source sizes when duration-based estimatio
 
 `TelegramFileSender` delivers fresh `MediaArtifact` results or typed `CachedMedia` references using `DeliveryContext`. Full posts are delivered by `TelegramPostSender` as one Rich Message with a caption and ordered media; cached posts retain each media type and file ID. Fresh inline results are uploaded to the configured storage chat before the inline message is edited; cached inline results reuse the file ID directly. Photo groups and full Instagram posts are direct-chat only. `TelegramMediaSender` owns ordinary media API calls; the processor passes the delivery receipt to `JobLifecycle`.
 
+Fresh artifacts hold local file paths; cached media hold Telegram file references. Inline delivery supports video, audio, and documents through the corresponding inline-edit methods. The delivery receipt contains the reusable file IDs, including ordered media types for full posts, and is persisted only if `JobLifecycle.complete` succeeds.
+
 ### Playlist audio messages
 
 ![YouTube playlist audio-message workflow](docs/playlist-audio-flow.svg)
 
 `PlaylistJobProcessor` maps the persisted job to `PlaylistAudioRequest` and selects `AudioMessagesPlaylistWorkflow`. The workflow skips recorded positions, including failures, and processes remaining tracks with bounded parallelism. It reuses cached audio or downloads 96 kbps MP3 through `PlaylistEntryDownloader` and stages it with `TelegramPlaylistSender` in the storage chat.
 
+The saved playlist selection contains the track range prepared by `YouTubePlaylistPlanner` and the `AUDIO_MESSAGES` delivery mode; `PlaylistQueueWorker` claims the job after enqueueing. Track cache keys share the single-audio identity. A fresh track is uploaded to the configured storage chat before `DownloadJobService.savePlaylistResult` records its file ID.
+
 Each item saves a file ID or an error before its temporary directory is removed. Once all pending entries finish, the workflow checks that the job is still processing, reloads saved results, and delivers successful tracks in playlist order, with up to 50 audio blocks per Rich Message (100 tracks produce two messages). No successful tracks means failure. A summary of skipped tracks is sent only after conditional completion succeeds. Restart resumes entries without a recorded outcome; user cancellation propagates without recording a new item failure.
+
+Item directories are removed in `finally` after staging or failure; other entries continue after individual item errors. Delivery errors fail the job. Cancellation suppresses late completion and the summary, and the processor cleans the job workspace in `finally`.
 
 ### Playlist ZIP
 
@@ -66,7 +76,9 @@ Each item saves a file ID or an error before its temporary directory is removed.
 
 `ZipPlaylistWorkflow` downloads tracks with bounded parallelism, packages successful local files with `PlaylistZipBuilder`, and sends the archive directly through `TelegramPlaylistSender`. This path does not reuse Telegram track file IDs or require a storage chat. Every attempt rebuilds local files, including after restart.
 
-One timeout covers downloading, packaging, and uploading. `PlaylistWorkspaceBudget` checks workspace size and free space throughout the attempt; the sum of downloaded track sizes and the final archive must each fit the upload limit. Recognized source failures skip individual tracks; size limits, disk failures, and other non-source errors abort the job. An empty result also fails. State checks precede packaging and upload, conditional completion precedes the partial-success summary, and the processor cleans all local files in `finally`.
+Planning saves the selected track range and `ZIP` delivery mode. `PlaylistQueueWorker` claims the job, and `PlaylistJobProcessor` maps it to `PlaylistAudioRequest` and creates the workspace. `PlaylistEntryDownloader` produces a local 96 kbps MP3 for each successful entry. Packaging reports the `PACKING` phase; archive delivery reports `UPLOADING` and sends a document to the user.
+
+One timeout covers downloading, packaging, and uploading; exceeding it fails the attempt. `PlaylistWorkspaceBudget` checks workspace size and free space before starting and every 250 ms throughout the attempt; the sum of downloaded track sizes and the final archive must each fit the upload limit. Recognized source failures skip individual tracks; size limits, disk failures, and other non-source errors abort the job. An empty result also fails. State checks precede packaging and upload, conditional completion precedes the partial-success summary, and the processor cleans all local files in `finally`, including after failure or cancellation.
 
 ### Runtime models and cache
 

@@ -124,16 +124,15 @@ class InstagramEmbedDownloaderTest {
     }
 
     @Test
-    fun rejectsEmbedPayloadWithoutVideo() = runTest {
+    fun preparesStaticPhotoWithoutRequiringVideo() = runTest {
         val embedUri = URI.create("https://www.instagram.com/p/ABC_123/embed/captioned/")
         coEvery { httpClient.getText(embedUri) } returns embedHtml(
             mediaUrl = null,
             isVideo = false,
         )
 
-        assertFailsWith<InstagramEmbedException> {
-            downloader.prepare(request("https://www.instagram.com/reel/ABC_123/"))
-        }
+        val prepared = downloader.prepare(request("https://www.instagram.com/reel/ABC_123/"))
+        assertEquals(listOf(URI(THUMBNAIL_URL)), prepared.imageUris)
     }
 
     @Test
@@ -145,7 +144,7 @@ class InstagramEmbedDownloaderTest {
             ),
         )
 
-        val prepared = assertNotNull(downloader.prepareImages(request("https://www.instagram.com/p/ABC_123/"), metadata))
+        val prepared = assertNotNull(downloader.prepareFromMetadata(request("https://www.instagram.com/p/ABC_123/"), metadata))
 
         assertEquals(
             listOf(
@@ -167,7 +166,7 @@ class InstagramEmbedDownloaderTest {
             ),
         )
 
-        assertNull(downloader.prepareImages(request("https://www.instagram.com/p/ABC_123/"), metadata))
+        assertNull(downloader.prepareFromMetadata(request("https://www.instagram.com/p/ABC_123/"), metadata))
     }
 
     @Test

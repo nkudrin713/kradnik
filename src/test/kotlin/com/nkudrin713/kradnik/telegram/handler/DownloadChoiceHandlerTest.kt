@@ -170,13 +170,13 @@ class DownloadChoiceHandlerTest {
     }
 
     @Test
-    fun rejectsVideoPostWithTextInInlineModeAndReleasesSelection() {
+    fun rejectsPostWithoutTextInInlineModeAndReleasesSelection() {
         val base = readySelection()
         val selection = base.copy(
             option = base.option.copy(
                 key = "post",
                 label = "Пост целиком",
-                spec = base.option.spec.copy(postText = "Post text"),
+                spec = base.option.spec.copy(outputType = OutputType.POST, postText = null),
             ),
         ).apply {
             session.telegramMenuMessageId = null

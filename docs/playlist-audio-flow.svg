@@ -67,7 +67,7 @@
 <rect x="470" y="689" width="340" height="116" class="external"/>
 <text x="640.0" y="719" class="name" text-anchor="middle">TelegramPlaylistSender</text>
 <text x="640.0" y="746" class="small" text-anchor="middle">sendPlaylistAudios sorts by position</text>
-<text x="640.0" y="770" class="small" text-anchor="middle">send successful file IDs to the user</text>
+<text x="640.0" y="770" class="small" text-anchor="middle">up to 50 tracks per Rich Message</text>
 <rect x="900" y="689" width="340" height="116" class="box"/>
 <text x="1070.0" y="719" class="name" text-anchor="middle">JobLifecycle.complete</text>
 <text x="1070.0" y="746" class="small" text-anchor="middle">conditional transition to COMPLETED</text>

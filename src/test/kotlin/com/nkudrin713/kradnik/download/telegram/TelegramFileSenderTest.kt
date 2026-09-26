@@ -5,7 +5,10 @@ import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PostMedia
+import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
+import com.nkudrin713.kradnik.telegram.TelegramPostSender
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.telegram.TelegramSendFailureKind
 import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
@@ -22,8 +25,10 @@ import kotlin.test.assertFailsWith
 
 class TelegramFileSenderTest {
     private val telegramMediaSender: TelegramMediaSender = mockk()
+    private val postSender: TelegramPostSender = mockk()
     private val sender = TelegramFileSender(
         telegramMediaSender = telegramMediaSender,
+        postSender = postSender,
         properties = TelegramBotProperties(token = "token", fileStorageChatId = 900),
     )
 
@@ -129,33 +134,14 @@ class TelegramFileSenderTest {
     }
 
     @Test
-    fun sendsFullPostTextAfterVideo() = runTest {
-        val job = job(OutputType.VIDEO).apply { sourcePostText = "Post <text>" }
-        coEvery {
-            telegramMediaSender.sendCachedVideo(
-                chatId = 100,
-                fileId = "cached-id",
-                replyToMessageId = 200,
-            )
-        } returns "video-id"
-        coEvery {
-            telegramMediaSender.sendMonospaceText(
-                chatId = 100,
-                text = "Post <text>",
-                replyToMessageId = 200,
-            )
-        } returns Unit
-
-        val actual = sender.sendCached(DeliveryContext.fromJob(job), TelegramReceiptCodec.decode(job.outputType, "cached-id"))
-
-        assertEquals("video-id", actual)
-        coVerify {
-            telegramMediaSender.sendMonospaceText(
-                chatId = 100,
-                text = "Post <text>",
-                replyToMessageId = 200,
-            )
-        }
+    fun attachesTextToLegacyCachedVideoPost() = runTest {
+        val context = DeliveryContext(100, 200, postText = "Post <text>")
+        val items = listOf(CachedPostItem(PostMediaKind.VIDEO, "cached-id"))
+        coEvery { postSender.sendCached(context, items) } returns items
+        val actual = sender.sendCached(context, TelegramReceiptCodec.decode(OutputType.VIDEO, "cached-id"))
+        assertEquals(TelegramReceiptCodec.post(items), actual)
+        coVerify(exactly = 0) { telegramMediaSender.sendMonospaceText(any(), any(), any()) }
+        coVerify(exactly = 0) { telegramMediaSender.sendCachedVideo(any(), any(), any()) }
     }
 
     @Test
@@ -255,6 +241,7 @@ class TelegramFileSenderTest {
     fun rejectsFreshInlineFileWithoutStorageChat(@TempDir tempDir: Path) = runTest {
         val unconfiguredSender = TelegramFileSender(
             telegramMediaSender = telegramMediaSender,
+            postSender = postSender,
             properties = TelegramBotProperties(token = "token"),
         )
         val job = job(OutputType.COVER).apply { telegramInlineMessageId = "inline-message" }
@@ -297,31 +284,26 @@ class TelegramFileSenderTest {
     }
 
     @Test
-    fun sendsSavedPostTextAfterFreshPhotos(@TempDir tempDir: Path) = runTest {
+    fun sendsLegacyPhotosAndCaptionTogether(@TempDir tempDir: Path) = runTest {
         val files = listOf(tempDir.resolve("01.jpg"), tempDir.resolve("02.jpg"))
-        coEvery { telegramMediaSender.sendPhotos(100, files, 200) } returns listOf("one", "two")
-        coEvery { telegramMediaSender.sendMonospaceText(100, "Saved <text>", 200) } returns Unit
-
-        val receipt = sender.send(DeliveryContext(100, 200, postText = "Saved <text>"), MediaArtifact.Photos(files))
-
-        assertEquals("photo-group:[\"one\",\"two\"]", receipt)
-        coVerifyOrder {
-            telegramMediaSender.sendPhotos(100, files, 200)
-            telegramMediaSender.sendMonospaceText(100, "Saved <text>", 200)
-        }
+        val context = DeliveryContext(100, 200, postText = "Saved <text>")
+        val items = files.map { PostMedia(PostMediaKind.PHOTO, it) }
+        val cached = listOf(CachedPostItem(PostMediaKind.PHOTO, "one"), CachedPostItem(PostMediaKind.PHOTO, "two"))
+        coEvery { postSender.send(context, items) } returns cached
+        assertEquals(TelegramReceiptCodec.post(cached), sender.send(context, MediaArtifact.Photos(files)))
+        coVerify(exactly = 0) { telegramMediaSender.sendPhotos(any(), any(), any()) }
+        coVerify(exactly = 0) { telegramMediaSender.sendMonospaceText(any(), any(), any()) }
     }
 
     @Test
-    fun propagatesPostTextFailureAfterFreshMediaWithoutResending(@TempDir tempDir: Path) = runTest {
+    fun propagatesPostFailureWithoutSendingSeparateMedia(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("video.mp4")
-        coEvery { telegramMediaSender.sendVideo(100, file, 200) } returns "video"
-        coEvery { telegramMediaSender.sendMonospaceText(100, "Saved text", 200) } throws TelegramSendException("Text failed")
-
+        coEvery { postSender.send(any(), any()) } throws TelegramSendException("Post failed")
         assertFailsWith<TelegramSendException> {
             sender.send(DeliveryContext(100, 200, postText = "Saved text"), MediaArtifact.Video(file))
         }
-
-        coVerify(exactly = 1) { telegramMediaSender.sendVideo(100, file, 200) }
+        coVerify(exactly = 1) { postSender.send(any(), any()) }
+        coVerify(exactly = 0) { telegramMediaSender.sendVideo(any(), any(), any()) }
     }
 
     private fun job(outputType: OutputType): DownloadJob {

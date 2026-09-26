@@ -117,7 +117,7 @@ class YtDlpService(
     }
 
     /**
-     * Extracts image-only Instagram posts and carousels without treating absent video formats as an error.
+     * Extracts Instagram posts and mixed carousels without treating absent video formats as an error.
      * Applies the metadata timeout and normal process/output checks; this does not download the images.
      */
     suspend fun extractInstagramImageMetadata(spec: SourceRequest): YtDlpMetadataDto {

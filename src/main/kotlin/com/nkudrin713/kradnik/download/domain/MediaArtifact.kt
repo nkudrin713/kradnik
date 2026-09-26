@@ -10,12 +10,22 @@ sealed interface MediaArtifact {
 
     data class Document(val file: Path) : MediaArtifact
 
+    data class Post(val items: List<PostMedia>) : MediaArtifact {
+        init {
+            require(items.size in 1..20) { "A post must contain 1 to 20 media items" }
+        }
+    }
+
     data class Photos(val files: List<Path>) : MediaArtifact {
         init {
             require(files.isNotEmpty()) { "At least one photo is required" }
         }
     }
 }
+
+enum class PostMediaKind { PHOTO, VIDEO }
+
+data class PostMedia(val kind: PostMediaKind, val file: Path)
 
 data class AudioMetadata(
     val title: String?,

@@ -78,11 +78,11 @@
   <text x="205" y="665" text-anchor="middle" class="name">TelegramResultCache</text>
   <text x="205" y="695" text-anchor="middle" class="note">lookup by the persisted key</text>
   <text x="205" y="723" text-anchor="middle" class="small">TelegramReceiptCodec decodes</text>
-  <text x="205" y="746" text-anchor="middle" class="small">file IDs or ordered photo IDs</text>
+  <text x="205" y="746" text-anchor="middle" class="small">single, photo, or typed post IDs</text>
 
   <rect x="410" y="630" width="430" height="150" class="box"/>
   <text x="625" y="661" text-anchor="middle" class="name">SingleMediaHandler</text>
-  <text x="625" y="687" text-anchor="middle" class="note">VideoHandler · AudioHandler · CoverHandler · ImagesHandler</text>
+  <text x="625" y="687" text-anchor="middle" class="note">Video · Audio · Cover · Images · InstagramPost</text>
   <text x="625" y="716" text-anchor="middle" class="small">prepare metadata → preflight → download → process</text>
   <text x="625" y="743" text-anchor="middle" class="small">DownloadEngine / source adapters · cover downloader</text>
   <text x="625" y="765" text-anchor="middle" class="small">video preparation · upload limits</text>
@@ -90,8 +90,8 @@
   <rect x="910" y="630" width="300" height="150" class="external"/>
   <text x="1060" y="665" text-anchor="middle" class="name">TelegramFileSender</text>
   <text x="1060" y="695" text-anchor="middle" class="note">MediaArtifact or CachedMedia</text>
-  <text x="1060" y="723" text-anchor="middle" class="small">TelegramMediaSender → Bot API</text>
-  <text x="1060" y="746" text-anchor="middle" class="small">media, then optional post text</text>
+  <text x="1060" y="723" text-anchor="middle" class="small">MediaSender / PostSender → API</text>
+  <text x="1060" y="746" text-anchor="middle" class="small">post media and caption together</text>
   <path d="M 340 705 H 410" class="arrow"/>
   <text x="375" y="692" text-anchor="middle" class="small">miss</text>
   <path d="M 840 705 H 910" class="arrow"/>

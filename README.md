@@ -5,12 +5,12 @@ Kradnik retrieves public media from YouTube, Instagram, and VK and delivers it d
 It supports:
 
 - video quality selection, audio-only downloads, and cover images;
-- YouTube playlist audio as 96 kbps MP3, delivered as audio messages or a ZIP archive, up to 100 tracks per job;
-- full Instagram posts with the video or photo album followed by copyable monospace post text;
+- YouTube playlist audio as 96 kbps MP3, delivered in Rich Messages of up to 50 tracks or a ZIP archive, up to 100 tracks per job;
+- full Instagram posts with an image, video, or mixed carousel and its caption in one Telegram Rich Message;
 - direct chats and inline guest mode; playlists and full Instagram posts are available only in direct chats;
 - cancellation of queued and running downloads;
 - English and Russian interfaces;
-- Telegram `file_id` reuse and cloud or local Bot API delivery.
+- Telegram `file_id` reuse and cloud or local Bot API delivery (Bot API 10.2 or newer for Rich Messages).
 
 Playlist video downloads, playlists from other platforms, private content, and authentication bypasses are not supported.
 
@@ -26,29 +26,31 @@ The diagram shows the single-media path. Playlist jobs use `PlaylistQueueWorker`
 - Metadata work uses 2 threads and accepts at most 32 pending requests.
 - YouTube playlists offer audio messages or ZIP for all tracks when there are at most 100 entries; larger playlists offer the first 100 or last 100. Both delivery modes use 96 kbps MP3.
 - ZIP archives are named `<file count> – <playlist title>.zip`; numbered entries preserve playlist order. The count includes only successfully downloaded tracks. Archives exceeding the configured Telegram upload limit are rejected without splitting.
-- Instagram videos keep the video/audio menu and add a full-post option; static posts expose one full-post option.
+- Instagram videos keep the video/audio menu and add a full-post option; static posts and carousels expose one full-post option. Up to 20 ordered photos/videos are supported. Native Instagram music that is absent from public metadata is not downloaded; no Instagram login is used.
+- Download buttons use blue for full posts/video, green for audio, the theme default for covers/ZIP, and red for cancellation. Unavailable options keep the default style.
 - Menu snapshots, ownership, and language preferences are stored in PostgreSQL, so callbacks survive restarts.
 
 ### Single-media production
 
 `DownloadRequestMapper` reads the saved selection into `SingleMediaRequest`. `DownloadJobProcessor` checks `TelegramResultCache` first. On a miss, it creates a workspace and selects a handler through `SingleMediaHandlers`. An invalid cached Telegram file reference falls back to a fresh download; other delivery errors fail the job.
 
-![Video, audio, cover, and image production](docs/single-media-production.svg)
+![Video, audio, cover, and post production](docs/single-media-production.svg)
 
 | Handler | Production and validation | Result |
 | --- | --- | --- |
 | `VideoHandler` | Metadata and preflight, source video download, `TelegramVideoPreparer`, final size check | `MediaArtifact.Video` |
 | `AudioHandler` | Metadata and audio preflight, quality adjustment when needed, source audio download, final size check | `MediaArtifact.Audio` with title, performer, and duration |
 | `CoverHandler` | Catalog metadata, thumbnail URL, `CoverDownloader`, final size check | `MediaArtifact.Document` |
+| `InstagramPostHandler` | Ordered Instagram photo/video downloads, per-video preparation, total media size bounded by the configured Telegram upload limit | `MediaArtifact.Post` |
 | `ImagesHandler` | Instagram image metadata and ordered downloads with per-photo limits; no aggregate single-file size check | `MediaArtifact.Photos` |
 
-Audio preflight still checks selected source sizes when duration-based estimation is unavailable. `InstagramSourceAdapter` uses embed metadata, falling back to yt-dlp image metadata for image posts. It downloads video directly when a media URL is available; audio and video without that URL use yt-dlp.
+Audio preflight still checks selected source sizes when duration-based estimation is unavailable. `InstagramSourceAdapter` uses embed metadata, falling back to yt-dlp post metadata when the embed is unavailable. Carousel fallback downloads select one position at a time. It downloads video directly when a media URL is available; audio and video without that URL use yt-dlp.
 
 ### Telegram delivery
 
 ![Direct-chat and inline Telegram delivery](docs/telegram-delivery-flow.svg)
 
-`TelegramFileSender` delivers fresh `MediaArtifact` results or typed `CachedMedia` references using `DeliveryContext`. Direct chats receive media followed by optional monospace post text. Fresh inline results are uploaded to the configured storage chat before the inline message is edited; cached inline results reuse the file ID directly. Photo groups and full Instagram posts are direct-chat only. `TelegramMediaSender` owns the API calls; the processor passes the delivery receipt to `JobLifecycle`.
+`TelegramFileSender` delivers fresh `MediaArtifact` results or typed `CachedMedia` references using `DeliveryContext`. Full posts are delivered by `TelegramPostSender` as one Rich Message with a caption and ordered media; cached posts retain each media type and file ID. Fresh inline results are uploaded to the configured storage chat before the inline message is edited; cached inline results reuse the file ID directly. Photo groups and full Instagram posts are direct-chat only. `TelegramMediaSender` owns ordinary media API calls; the processor passes the delivery receipt to `JobLifecycle`.
 
 ### Playlist audio messages
 
@@ -56,7 +58,7 @@ Audio preflight still checks selected source sizes when duration-based estimatio
 
 `PlaylistJobProcessor` maps the persisted job to `PlaylistAudioRequest` and selects `AudioMessagesPlaylistWorkflow`. The workflow skips recorded positions, including failures, and processes remaining tracks with bounded parallelism. It reuses cached audio or downloads 96 kbps MP3 through `PlaylistEntryDownloader` and stages it with `TelegramPlaylistSender` in the storage chat.
 
-Each item saves a file ID or an error before its temporary directory is removed. Once all pending entries finish, the workflow checks that the job is still processing, reloads saved results, and delivers successful tracks in playlist order. No successful tracks means failure. A summary of skipped tracks is sent only after conditional completion succeeds. Restart resumes entries without a recorded outcome; user cancellation propagates without recording a new item failure.
+Each item saves a file ID or an error before its temporary directory is removed. Once all pending entries finish, the workflow checks that the job is still processing, reloads saved results, and delivers successful tracks in playlist order, with up to 50 audio blocks per Rich Message (100 tracks produce two messages). No successful tracks means failure. A summary of skipped tracks is sent only after conditional completion succeeds. Restart resumes entries without a recorded outcome; user cancellation propagates without recording a new item failure.
 
 ### Playlist ZIP
 

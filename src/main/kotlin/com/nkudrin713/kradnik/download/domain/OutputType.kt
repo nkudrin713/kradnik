@@ -5,6 +5,7 @@ enum class OutputType(val dbValue: String) {
     AUDIO("audio"),
     COVER("cover"),
     IMAGES("images"),
+    POST("post"),
     ;
 
     companion object {

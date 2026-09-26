@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="850" viewBox="0 0 1280 850" role="img" aria-labelledby="title description">
 <title id="title">Single-media production</title>
-<desc id="description">Video, audio, cover, and Instagram images use separate handlers. Each prepares source metadata and validates the relevant limits before returning a typed MediaArtifact. Delivery and lifecycle belong to DownloadJobProcessor.</desc>
+<desc id="description">Video, audio, cover, and full Instagram posts use separate handlers. Each prepares source metadata and validates the relevant limits before returning a typed MediaArtifact. Delivery and lifecycle belong to DownloadJobProcessor.</desc>
 <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
@@ -79,26 +79,26 @@
 <rect x="1000" y="432" width="240" height="110" class="external"/>
 <text x="1120.0" y="462" class="name" text-anchor="middle">MediaArtifact.Document</text>
 <text x="1120.0" y="489" class="small" text-anchor="middle">local cover path</text>
-<text x="40" y="633" class="name">ImagesHandler</text>
+<text x="40" y="633" class="name">InstagramPostHandler</text>
 <rect x="220" y="574" width="240" height="110" class="box"/>
 <text x="340.0" y="604" class="name" text-anchor="middle">Metadata + preflight</text>
-<text x="340.0" y="631" class="small" text-anchor="middle">Instagram image metadata</text>
-<text x="340.0" y="655" class="small" text-anchor="middle">prepare the image list</text>
+<text x="340.0" y="631" class="small" text-anchor="middle">Instagram post metadata</text>
+<text x="340.0" y="655" class="small" text-anchor="middle">ordered photos and videos</text>
 <path d="M 460 629 H 480" class="arrow"/>
 <rect x="480" y="574" width="240" height="110" class="box"/>
-<text x="600.0" y="604" class="name" text-anchor="middle">Download images</text>
+<text x="600.0" y="604" class="name" text-anchor="middle">Download post items</text>
 <text x="600.0" y="631" class="small" text-anchor="middle">InstagramSourceAdapter</text>
-<text x="600.0" y="655" class="small" text-anchor="middle">per-photo limits enforced</text>
+<text x="600.0" y="655" class="small" text-anchor="middle">isolated item directories</text>
 <path d="M 720 629 H 740" class="arrow"/>
 <rect x="740" y="574" width="240" height="110" class="box"/>
-<text x="860.0" y="604" class="name" text-anchor="middle">Keep ordered files</text>
-<text x="860.0" y="631" class="small" text-anchor="middle">no aggregate single-file</text>
-<text x="860.0" y="655" class="small" text-anchor="middle">upload-size check</text>
+<text x="860.0" y="604" class="name" text-anchor="middle">Prepare and validate</text>
+<text x="860.0" y="631" class="small" text-anchor="middle">prepare each video; enforce</text>
+<text x="860.0" y="655" class="small" text-anchor="middle">total media size limit</text>
 <path d="M 980 629 H 1000" class="arrow"/>
 <rect x="1000" y="574" width="240" height="110" class="external"/>
-<text x="1120.0" y="604" class="name" text-anchor="middle">MediaArtifact.Photos</text>
-<text x="1120.0" y="631" class="small" text-anchor="middle">ordered local photo paths</text>
-<text x="40" y="755" class="note">Sources: yt-dlp for YouTube/VK; Instagram embed metadata with image-metadata fallback.</text>
+<text x="1120.0" y="604" class="name" text-anchor="middle">MediaArtifact.Post</text>
+<text x="1120.0" y="631" class="small" text-anchor="middle">ordered typed media paths</text>
+<text x="40" y="755" class="note">Sources: yt-dlp for YouTube/VK; Instagram embed metadata with yt-dlp post fallback.</text>
 <text x="40" y="781" class="note">Instagram video uses the direct media URL when available; audio and other video downloads use yt-dlp.</text>
-<text x="40" y="814" class="note">DownloadJobProcessor → TelegramFileSender → TelegramMediaSender; full posts add text after media in direct chats.</text>
+<text x="40" y="814" class="note">DownloadJobProcessor → TelegramFileSender → TelegramMediaSender; TelegramPostSender combines post media and caption.</text>
 </svg>

@@ -162,7 +162,7 @@ class DownloadChoiceHandler(
             )
             return
         }
-        if (address is TelegramMessageAddress.Inline && selection.option.spec.outputType == OutputType.IMAGES) {
+        if (address is TelegramMessageAddress.Inline && selection.option.spec.outputType in setOf(OutputType.IMAGES, OutputType.POST)) {
             sessionService.release(callback.sessionToken)
             answer(
                 callbackQueryId = callbackQueryId,

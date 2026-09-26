@@ -8,6 +8,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
+import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.identity.extractQueryParameter
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
@@ -57,18 +58,18 @@ class YouTubePlaylistPlanner(
         val estimatedSize = durationSeconds.takeIf { it > 0 }?.let(::estimatedSize)
         val normalizedUrl = "https://www.youtube.com/playlist?list=$playlistId"
         val ranges = if (entries.size <= MAX_PLAYLIST_ITEMS) {
-            listOf(PlaylistRange("playlist_all", entries, TelegramMessage.CHOICE_PLAYLIST_ALL))
+            listOf(PlaylistRange("playlist_all", entries, TelegramMessage.CHOICE_PLAYLIST_ALL, TelegramMessage.CHOICE_PLAYLIST_ZIP_ALL))
         } else {
             listOf(
-                PlaylistRange("playlist_first", entries.take(MAX_PLAYLIST_ITEMS), TelegramMessage.CHOICE_PLAYLIST_FIRST),
-                PlaylistRange("playlist_last", entries.takeLast(MAX_PLAYLIST_ITEMS), TelegramMessage.CHOICE_PLAYLIST_LAST),
+                PlaylistRange("playlist_first", entries.take(MAX_PLAYLIST_ITEMS), TelegramMessage.CHOICE_PLAYLIST_FIRST, TelegramMessage.CHOICE_PLAYLIST_ZIP_FIRST),
+                PlaylistRange("playlist_last", entries.takeLast(MAX_PLAYLIST_ITEMS), TelegramMessage.CHOICE_PLAYLIST_LAST, TelegramMessage.CHOICE_PLAYLIST_ZIP_LAST),
             )
         }
-        val options = ranges.map { range ->
+        val options = ranges.flatMap { range ->
             val oversized = range.entries.firstOrNull { entry ->
                 entry.durationSeconds?.let { estimatedSize(it.toLong()) > uploadLimits.maxUploadBytes } == true
             }
-            DownloadChoiceOptionSnapshot(
+            val audioOption = DownloadChoiceOptionSnapshot(
                 key = range.key,
                 label = messages.text(language, range.label, range.entries.size),
                 sizeBytes = range.entries.mapNotNull(PlaylistAudioEntry::durationSeconds)
@@ -89,8 +90,23 @@ class YouTubePlaylistPlanner(
                     presetName = "youtube_playlist_audio_96",
                     workloadType = DownloadWorkloadType.PLAYLIST_AUDIO,
                     playlistEntries = range.entries,
+                    playlistTitle = metadata.title,
                 ),
             )
+            val knownSize = range.entries.mapNotNull(PlaylistAudioEntry::durationSeconds).sumOf { estimatedSize(it.toLong()) }
+            val zipTooLarge = knownSize > uploadLimits.maxUploadBytes
+            val zipOption = audioOption.copy(
+                key = "${range.key}_zip",
+                label = messages.text(language, range.zipLabel, range.entries.size),
+                sizeBytes = knownSize.takeIf { range.entries.all { it.durationSeconds != null } },
+                available = !zipTooLarge,
+                unavailableReason = if (zipTooLarge) messages.text(language, TelegramMessage.ERROR_PLAYLIST_ZIP_TOO_LARGE) else null,
+                spec = audioOption.spec.copy(
+                    cacheKey = "${audioOption.spec.cacheKey}:zip",
+                    playlistDeliveryMode = PlaylistDeliveryMode.ZIP,
+                ),
+            )
+            listOf(audioOption, zipOption)
         }
         return DownloadChoicePlan(
             mediaInfo = DownloadChoiceMediaInfo(
@@ -110,6 +126,7 @@ class YouTubePlaylistPlanner(
         val key: String,
         val entries: List<PlaylistAudioEntry>,
         val label: TelegramMessage,
+        val zipLabel: TelegramMessage,
     )
 
     private companion object {

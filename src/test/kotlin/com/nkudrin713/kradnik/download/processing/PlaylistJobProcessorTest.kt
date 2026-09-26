@@ -4,8 +4,10 @@ import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
+import com.nkudrin713.kradnik.download.playlist.PlaylistEntryDownloader
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.telegram.TelegramSender
@@ -18,11 +20,14 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Collections
 import kotlin.io.path.exists
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class PlaylistJobProcessorTest {
     @TempDir lateinit var root: Path
@@ -74,11 +79,56 @@ class PlaylistJobProcessorTest {
 
     private fun processor() = PlaylistJobProcessor(
         downloadJobService = jobs,
-        ytDlpService = ytDlp,
-        telegramFileSender = fileSender,
+        telegramDelivery = TelegramPlaylistDelivery(jobs, PlaylistEntryDownloader(ytDlp), fileSender, WorkDirCleaner(root.toString())),
+        zipDelivery = mockk(),
         telegramSender = telegram,
         messages = telegramMessages(),
         workDirCleaner = WorkDirCleaner(root.toString()),
-        itemParallelism = 2,
     )
+
+    @Test
+    fun resumesAudioResultsAndDeletesNewFilesOnlyAfterStaging() = runTest {
+        val job = DownloadJob(
+            id = 1,
+            telegramChatId = 20,
+            telegramStatusMessageId = 22,
+            workloadType = DownloadWorkloadType.PLAYLIST_AUDIO,
+            status = DownloadJobStatus.PROCESSING,
+            playlistEntries = listOf(
+                PlaylistAudioEntry(1, "one", "https://youtu.be/one", "One", 60),
+                PlaylistAudioEntry(2, "two", "https://youtu.be/two", "Two", 60),
+            ),
+            playlistResults = listOf(PlaylistAudioResult(1, "saved-file")),
+        )
+        every { jobs.findCachedFileId(any()) } returns null
+        every { jobs.isProcessing(1) } returns true
+        every { jobs.findJob(1) } returns job
+        every { jobs.markCompleted(job, "playlist:2") } returns true
+        every { jobs.savePlaylistResult(1, any()) } answers {
+            assertTrue(Files.exists(root.resolve("1/2/track.mp3")))
+            job.playlistResults += secondArg<PlaylistAudioResult>()
+            true
+        }
+        coEvery { ytDlp.download(any(), any()) } answers {
+            val spec = firstArg<com.nkudrin713.kradnik.download.domain.DownloadSpec>()
+            assertEquals(listOf("--audio-quality", "96K"), spec.extraArgs.drop(3).take(2))
+            val path = Files.write(secondArg<Path>().resolve("track.mp3"), byteArrayOf(1))
+            DownloadedFile(path, 1)
+        }
+        coEvery { fileSender.stagePlaylistAudio(any(), any()) } answers {
+            assertTrue(firstArg<DownloadedFile>().file.exists())
+            "new-file"
+        }
+        coEvery { fileSender.sendPlaylistAudios(any(), any()) } answers {
+            assertFalse(Files.exists(root.resolve("1/2")))
+            listOf("saved-file", "new-file")
+        }
+
+        processor().process(job)
+
+        coVerify(exactly = 1) { ytDlp.download(match { it.originalUrl == "https://youtu.be/two" }, any()) }
+        coVerify { fileSender.sendPlaylistAudios(job, match { it.map(PlaylistAudioResult::fileId) == listOf("saved-file", "new-file") }) }
+        verify { jobs.markCompleted(job, "playlist:2") }
+        assertFalse(root.resolve("1").exists())
+    }
 }

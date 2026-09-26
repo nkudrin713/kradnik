@@ -5,7 +5,7 @@ Kradnik retrieves public media from YouTube, Instagram, and VK and delivers it d
 It supports:
 
 - video quality selection, audio-only downloads, and cover images;
-- YouTube playlist audio as 96 kbps MP3, up to 100 tracks per job;
+- YouTube playlist audio as 96 kbps MP3, delivered as audio messages or a ZIP archive, up to 100 tracks per job;
 - full Instagram posts with the video or photo album followed by copyable monospace post text;
 - direct chats and inline guest mode; playlists and full Instagram posts are available only in direct chats;
 - cancellation of queued and running downloads;
@@ -22,7 +22,8 @@ The diagram shows the single-media path. Playlist jobs use `PlaylistQueueWorker`
 
 - Metadata is loaded before enqueueing to build the available format menu and estimate sizes.
 - Metadata work uses 2 threads and accepts at most 32 pending requests.
-- YouTube playlists expose one 96 kbps MP3 option for all tracks when there are at most 100 entries; larger playlists offer the first 100 or last 100.
+- YouTube playlists offer audio messages or ZIP for all tracks when there are at most 100 entries; larger playlists offer the first 100 or last 100. Both delivery modes use 96 kbps MP3.
+- ZIP archives are named `<file count> – <playlist title>.zip`; numbered entries preserve playlist order. The count includes only successfully downloaded tracks. Archives exceeding the configured Telegram upload limit are rejected without splitting.
 - Instagram videos keep the video/audio menu and add a full-post option; static posts expose one full-post option.
 - Menu snapshots, ownership, and language preferences are stored in PostgreSQL, so callbacks survive restarts.
 
@@ -38,7 +39,7 @@ The diagram shows the single-media path. Playlist jobs use `PlaylistQueueWorker`
 - Failed jobs are not retried automatically; users can submit the link again. A playlist can complete with partial results when individual tracks fail.
 - Startup removes abandoned work directories and returns `PROCESSING` jobs to `QUEUED`.
 - Shutdown interrupts external I/O and waits up to 30 seconds for each worker pool.
-- Interrupted jobs are retried after restart; playlists retain recorded track results and process only remaining entries.
+- Interrupted jobs are retried after restart. Audio-message playlists retain recorded Telegram file IDs and process remaining entries; ZIP playlists rebuild from scratch because their local files are temporary.
 - A crash after Telegram accepts a file but before `COMPLETED` can produce a duplicate message.
 - Overlapping application instances are not supported.
 
@@ -107,10 +108,11 @@ Run the complete verification:
 
 - `POSTGRES_*`: database connection.
 - `TELEGRAM_BOT_*`, `TELEGRAM_MAX_UPLOAD_BYTES`: Telegram endpoints and file-size limit.
-- `TELEGRAM_FILE_STORAGE_CHAT_ID`: storage chat for fresh guest-mode uploads and playlist tracks.
+- `TELEGRAM_FILE_STORAGE_CHAT_ID`: storage chat for fresh guest-mode uploads and playlist audio messages; ZIP delivery does not require it.
 - `DOWNLOAD_WORKERS`: concurrent single-media jobs; default 3.
 - `DOWNLOAD_PLAYLIST_WORKERS`: additional concurrent playlist jobs; default 1.
 - `DOWNLOAD_PLAYLIST_ITEM_PARALLELISM`: concurrent track downloads inside one playlist; default 2.
+- `DOWNLOAD_PLAYLIST_ZIP_TIMEOUT`: total ZIP job timeout, including download, packaging and upload; default `2h`. ZIP workspaces are monitored against three times `TELEGRAM_MAX_UPLOAD_BYTES` and require at least 64 MiB of free disk space. The polling guard may briefly overshoot while external processes write.
 - `DOWNLOAD_WORK_DIR`: writable media directory with one subdirectory per job.
 - `DOWNLOAD_*_TIMEOUT`: external-process and HTTP timeouts.
 - `DOWNLOAD_YT_DLP_CLOUD_MAX_WORKSPACE_BYTES`: per-process cloud download workspace cap.

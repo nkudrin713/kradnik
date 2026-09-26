@@ -13,6 +13,8 @@ import com.nkudrin713.kradnik.telegram.localization.BotLanguageConverter
 import jakarta.persistence.Column
 import jakarta.persistence.Convert
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
@@ -82,6 +84,13 @@ class DownloadJob(
     @Convert(converter = DownloadWorkloadTypeConverter::class)
     @Column(name = "workload_type", nullable = false)
     var workloadType: DownloadWorkloadType = DownloadWorkloadType.SINGLE,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "playlist_delivery_mode", nullable = false)
+    var playlistDeliveryMode: PlaylistDeliveryMode = PlaylistDeliveryMode.AUDIO_MESSAGES,
+
+    @Column(name = "playlist_title", columnDefinition = "TEXT")
+    var playlistTitle: String? = null,
 
     @Convert(converter = PlaylistAudioEntriesJsonConverter::class)
     @Column(name = "playlist_entries_json", nullable = false, columnDefinition = "TEXT")

@@ -228,6 +228,7 @@ enum class TelegramDownloadStatus(val message: TelegramMessage) {
     ANALYZING(TelegramMessage.STATUS_ANALYZING),
     QUEUED(TelegramMessage.STATUS_QUEUED),
     DOWNLOADING(TelegramMessage.STATUS_DOWNLOADING),
+    PACKING(TelegramMessage.STATUS_PACKING),
     UPLOADING(TelegramMessage.STATUS_UPLOADING),
     REJECTED_TOO_LARGE(TelegramMessage.STATUS_REJECTED_TOO_LARGE),
     AUTHENTICATION_REQUIRED(TelegramMessage.STATUS_AUTHENTICATION_REQUIRED),

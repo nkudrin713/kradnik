@@ -10,6 +10,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
+import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -260,6 +261,8 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         val playlist = repository.saveAndFlush(
             job("playlist").apply {
                 workloadType = DownloadWorkloadType.PLAYLIST_AUDIO
+                playlistDeliveryMode = PlaylistDeliveryMode.ZIP
+                playlistTitle = "Playlist archive"
                 playlistEntries = listOf(
                     PlaylistAudioEntry(1, "video-1", "https://youtu.be/video-1", "Episode", 60),
                 )
@@ -270,6 +273,9 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         val claimedPlaylist = downloadJobService.claimNextQueuedPlaylistJob()
         assertEquals(playlist.id, claimedPlaylist?.id)
         assertEquals(DownloadWorkloadType.PLAYLIST_AUDIO, claimedPlaylist?.workloadType)
+        assertEquals(PlaylistDeliveryMode.ZIP, claimedPlaylist?.playlistDeliveryMode)
+        assertEquals("Playlist archive", claimedPlaylist?.playlistTitle)
+        assertEquals(PlaylistDeliveryMode.AUDIO_MESSAGES, single.playlistDeliveryMode)
     }
 
     @Test

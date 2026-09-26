@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.telegram
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -86,15 +87,16 @@ class TelegramDownloadChoiceView(
     }
 
     private fun buttonText(option: DownloadChoiceOptionSnapshot, language: BotLanguage): String {
-        val label = "${option.spec.outputType.icon} ${option.label}"
-        val size = option.sizeBytes ?: return label
+        val icon = if (option.spec.playlistDeliveryMode == PlaylistDeliveryMode.ZIP) "📦" else option.spec.outputType.icon
+        val label = "$icon ${option.label}"
+        val size = option.sizeBytes
         val prefix = if (option.approximateSize) "≈ " else ""
         val unavailable = if (option.available) {
             ""
         } else {
             " · ${messages.text(language, TelegramMessage.CHOICE_UNAVAILABLE)}"
         }
-        return "$label · $prefix${formatSize(size, language)}$unavailable"
+        return if (size == null) "$label$unavailable" else "$label · $prefix${formatSize(size, language)}$unavailable"
     }
 
     private fun formatSize(bytes: Long, language: BotLanguage): String {

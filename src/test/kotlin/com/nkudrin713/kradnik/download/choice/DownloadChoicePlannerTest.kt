@@ -194,7 +194,8 @@ class DownloadChoicePlannerTest {
         val post = actual.options.first()
         val original = actual.options[1]
         assertEquals("Пост целиком", post.label)
-        assertEquals(original.spec.cacheKey, post.spec.cacheKey)
+        assertEquals(OutputType.POST, post.spec.outputType)
+        assertTrue(original.spec.cacheKey != post.spec.cacheKey)
         assertEquals("Post text", post.spec.postText)
         assertEquals("owner", actual.mediaInfo.authorUsername)
         assertEquals("Оригинал · 1280p", original.label)
@@ -227,8 +228,8 @@ class DownloadChoicePlannerTest {
 
         assertEquals(listOf("post"), actual.options.map { it.key })
         assertEquals("Пост целиком", actual.options.single().label)
-        assertEquals(OutputType.IMAGES, actual.options.single().spec.outputType)
-        assertEquals("instagram_images", actual.options.single().spec.presetName)
+        assertEquals(OutputType.POST, actual.options.single().spec.outputType)
+        assertEquals("instagram_post", actual.options.single().spec.presetName)
         assertEquals("Post text", actual.options.single().spec.postText)
         assertEquals("owner", actual.mediaInfo.authorUsername)
     }

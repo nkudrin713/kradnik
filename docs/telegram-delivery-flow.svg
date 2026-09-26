@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="title description">
 <title id="title">Telegram delivery · direct chat and inline</title>
-<desc id="description">Direct chat delivery sends fresh media or cached references, followed by optional post text. Fresh inline delivery stages a file in the storage chat before editing the inline message. Cached inline delivery edits the message directly. Photo groups and full posts are direct-chat only.</desc>
+<desc id="description">Direct chat delivery sends fresh media or cached references; full posts include their caption in a Rich Message. Fresh inline delivery stages a file in the storage chat before editing the inline message. Cached inline delivery edits the message directly. Photo groups and full posts are direct-chat only.</desc>
 <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
@@ -28,10 +28,10 @@
 <text x="180.0" y="202" class="small" text-anchor="middle">fresh local media</text>
 <rect x="390" y="145" width="430" height="100" class="box"/>
 <text x="605.0" y="175" class="name" text-anchor="middle">Send media to the user</text>
-<text x="605.0" y="202" class="small" text-anchor="middle">sendVideo / sendAudio / sendDocument / sendPhotos</text>
+<text x="605.0" y="202" class="small" text-anchor="middle">TelegramMediaSender / TelegramPostSender</text>
 <rect x="890" y="145" width="350" height="100" class="external"/>
-<text x="1065.0" y="175" class="name" text-anchor="middle">Optional post text</text>
-<text x="1065.0" y="202" class="small" text-anchor="middle">sendMonospaceText after media</text>
+<text x="1065.0" y="175" class="name" text-anchor="middle">Delivery receipt</text>
+<text x="1065.0" y="202" class="small" text-anchor="middle">typed file IDs for caching</text>
 <path d="M 320 195 H 390" class="arrow"/>
 <path d="M 820 195 H 890" class="arrow"/>
 <rect x="40" y="280" width="280" height="100" class="store"/>
@@ -39,10 +39,10 @@
 <text x="180.0" y="337" class="small" text-anchor="middle">typed Telegram references</text>
 <rect x="390" y="280" width="430" height="100" class="box"/>
 <text x="605.0" y="310" class="name" text-anchor="middle">Reuse Telegram file IDs</text>
-<text x="605.0" y="337" class="small" text-anchor="middle">sendCachedVideo / Audio / Document / Photos</text>
+<text x="605.0" y="337" class="small" text-anchor="middle">ordinary media or captioned Rich Message</text>
 <rect x="890" y="280" width="350" height="100" class="external"/>
-<text x="1065.0" y="310" class="name" text-anchor="middle">Optional post text</text>
-<text x="1065.0" y="337" class="small" text-anchor="middle">taken from the current DeliveryContext</text>
+<text x="1065.0" y="310" class="name" text-anchor="middle">Delivery receipt</text>
+<text x="1065.0" y="337" class="small" text-anchor="middle">ordered media types and file IDs</text>
 <path d="M 320 330 H 390" class="arrow"/>
 <path d="M 820 330 H 890" class="arrow"/>
 <text x="40" y="427" class="stage">Inline guest mode</text>
@@ -68,6 +68,6 @@
 <text x="1065.0" y="649" class="small" text-anchor="middle">editInlineVideo / Audio / Document</text>
 <path d="M 320 642 H 390" class="arrow"/>
 <path d="M 820 642 H 890" class="arrow"/>
-<text x="40" y="742" class="note">Photo groups and full Instagram posts are direct-chat only. Full-post text is sent separately after successful media delivery.</text>
+<text x="40" y="742" class="note">Photo groups and full Instagram posts are direct-chat only. Full-post captions are part of the same Rich Message.</text>
 <text x="40" y="772" class="note">TelegramMediaSender performs API calls. The returned receipt is persisted only when JobLifecycle.complete succeeds.</text>
 </svg>

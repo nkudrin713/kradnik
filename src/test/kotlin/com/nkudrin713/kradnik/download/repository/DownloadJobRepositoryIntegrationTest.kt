@@ -124,6 +124,8 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 sourcePostText = "Post text"
             },
         )
+        val postJob = repository.saveAndFlush(job("post").apply { outputType = OutputType.POST })
+        assertEquals(OutputType.POST, repository.findById(requireNotNull(postJob.id)).orElseThrow().outputType)
         val preference = preferenceRepository.saveAndFlush(
             TelegramUserPreference(
                 telegramUserId = 1,

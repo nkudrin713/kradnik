@@ -200,7 +200,7 @@ class PlatformIdentityTest {
         return when (outputType) {
             OutputType.VIDEO -> specs.video
             OutputType.AUDIO -> specs.audio
-            OutputType.COVER, OutputType.IMAGES -> error("Derived specs are built from Instagram metadata")
+            OutputType.COVER, OutputType.IMAGES, OutputType.POST -> error("Derived specs are built from Instagram metadata")
         }
     }
 }

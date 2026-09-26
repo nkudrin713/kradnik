@@ -75,12 +75,22 @@ class TelegramDownloadChoiceView(
         val rows = options.map { option ->
             arrayOf(
                 InlineKeyboardButton(buttonText(option, language))
-                    .callbackData(DownloadChoiceCallback.encode(sessionToken, option.key)),
+                    .callbackData(DownloadChoiceCallback.encode(sessionToken, option.key))
+                    .apply {
+                        if (option.available && option.spec.playlistDeliveryMode != PlaylistDeliveryMode.ZIP) {
+                            when (option.spec.outputType) {
+                                OutputType.VIDEO, OutputType.POST -> style("primary")
+                                OutputType.AUDIO -> style("success")
+                                else -> Unit
+                            }
+                        }
+                    },
             )
         } + listOf(
             arrayOf(
                 InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_CANCEL))
-                    .callbackData(DownloadChoiceCallback.encode(sessionToken, CANCEL_OPTION_KEY)),
+                    .callbackData(DownloadChoiceCallback.encode(sessionToken, CANCEL_OPTION_KEY))
+                    .style("danger"),
             ),
         )
         return InlineKeyboardMarkup(*rows.toTypedArray())
@@ -143,7 +153,7 @@ class TelegramDownloadChoiceView(
                 OutputType.VIDEO -> "🎬"
                 OutputType.AUDIO -> "🎧"
                 OutputType.COVER -> "🖼"
-                OutputType.IMAGES -> "🖼"
+                OutputType.IMAGES, OutputType.POST -> "🖼"
             }
     }
 }

@@ -25,6 +25,7 @@ class TelegramDownloadChoiceViewTest {
             spec = audio.spec.copy(playlistDeliveryMode = PlaylistDeliveryMode.ZIP),
         )
         val button = view.keyboard(UUID.randomUUID(), listOf(archive), BotLanguage.RU).inlineKeyboard()[0][0]
+        assertEquals(null, button.style)
         assertEquals("📦 Все 100 в ZIP · недоступно", button.text)
         assertEquals("playlist_first_zip", DownloadChoiceCallback.parse(requireNotNull(button.callbackData))?.optionKey)
     }
@@ -105,6 +106,7 @@ class TelegramDownloadChoiceViewTest {
             ),
             keyboard.map { it.single().text },
         )
+        assertEquals(listOf("primary", "primary", "success", null, "danger"), keyboard.map { it.single().style })
         assertEquals(listOf("🎬 Original · ≈ 1.42 GB", "Cancel"), englishKeyboard.map { it.single().text })
         assertEquals(
             listOf("video_original", "video_720", "audio", "cover", "cancel"),

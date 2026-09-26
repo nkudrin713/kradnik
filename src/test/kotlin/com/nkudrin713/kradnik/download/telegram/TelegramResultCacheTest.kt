@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.telegram
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.playlist.PlaylistCompletion
 import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
@@ -13,6 +14,15 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class TelegramResultCacheTest {
+    @Test
+    fun roundTripsMixedPostReceiptsAndVersionsPostCacheSeparately() {
+        val items = listOf(CachedPostItem(PostMediaKind.VIDEO, "video"), CachedPostItem(PostMediaKind.PHOTO, "photo"))
+        val receipt = TelegramReceiptCodec.post(items)
+        assertEquals(CachedMedia.Post(items), TelegramReceiptCodec.decode(OutputType.POST, receipt))
+        assertEquals(CachedMedia.Post(items), TelegramReceiptCodec.decode(OutputType.VIDEO, receipt))
+        kotlin.test.assertNotEquals(ResultKeyFactory.forNewJob("key", OutputType.VIDEO), ResultKeyFactory.forNewJob("key", OutputType.POST))
+    }
+
     @Test
     fun decodesTheLegacyMediaKindWithoutUsingCachedPostText() {
         val jobs = mockk<DownloadJobService>()

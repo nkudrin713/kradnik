@@ -16,9 +16,11 @@ import com.pengrad.telegrambot.request.SendDocument
 import com.pengrad.telegrambot.request.SendMediaGroup
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendVideo
+import com.pengrad.telegrambot.request.richmessages.SendRichMessage
 import com.pengrad.telegrambot.response.BaseResponse
 import com.pengrad.telegrambot.response.MessagesResponse
 import com.pengrad.telegrambot.response.SendResponse
+import com.pengrad.telegrambot.utility.BotUtils
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.coEvery
@@ -131,25 +133,48 @@ class TelegramMediaSenderTest {
     }
 
     @Test
-    fun sendsCachedAudiosInGroupsOfTen() = runTest {
-        val groupRequest = slot<SendMediaGroup>()
-        val audioRequest = slot<SendAudio>()
-        coEvery { apiClient.executeIo(capture(groupRequest), any()) } returns
-            audioMessagesResponse(*(1..10).map { "audio-$it" }.toTypedArray())
-        coEvery { apiClient.executeIo(capture(audioRequest), any()) } returns
-            sendResponse(audio = audio("audio-11", 456))
-
+    fun sendsOneHundredCachedAudiosInTwoRichMessages() = runTest {
+        val requests = mutableListOf<SendRichMessage>()
+        coEvery { apiClient.executeIo(capture(requests), any()) } returnsMany listOf(
+            richAudioResponse(1..50),
+            richAudioResponse(51..100),
+        )
         val result = sender.sendCachedAudios(
             chatId = 100,
-            audios = (1..11).map { index ->
-                TelegramAudio("cached-$index", "Episode $index", durationSeconds = index * 60)
-            },
+            audios = (1..100).map { TelegramAudio("cached-$it", "Episode $it", "Artist", it * 60) },
             replyToMessageId = 200,
         )
+        requests.size shouldBe 2
+        result shouldBe (1..100).map { "audio-$it" }
+        requests[0].parameters["reply_parameters"].shouldBeInstanceOf<ReplyParameters>()
+        requests[1].parameters.containsKey("reply_parameters") shouldBe false
+        for ((index, request) in requests.withIndex()) {
+            request.isMultipart shouldBe false
+            val json = com.fasterxml.jackson.module.kotlin.jacksonObjectMapper().readTree(BotUtils.toJson(request.parameters["rich_message"]))
+            json.path("blocks").size() shouldBe 50
+            val first = json.path("blocks")[0].path("audio")
+            first.path("media").asText() shouldBe "cached-${index * 50 + 1}"
+            first.path("title").asText() shouldBe "Episode ${index * 50 + 1}"
+            first.path("duration").asInt() shouldBe (index * 50 + 1) * 60
+            first.path("performer").asText() shouldBe "Artist"
+        }
+    }
 
-        groupRequest.captured.getParameters()["reply_parameters"].shouldBeInstanceOf<ReplyParameters>()
-        audioRequest.captured.getParameters()["audio"] shouldBe "cached-11"
-        result shouldBe (1..11).map { "audio-$it" }
+    @Test
+    fun sendsPartialFinalRichAudioBatchAndRejectsIncompleteResponse() = runTest {
+        val requests = mutableListOf<SendRichMessage>()
+        coEvery { apiClient.executeIo(capture(requests), any()) } returnsMany listOf(richAudioResponse(1..50), richAudioResponse(51..51))
+        sender.sendCachedAudios(100, (1..51).map { TelegramAudio("id-$it", "Track $it") }).size shouldBe 51
+        requests.size shouldBe 2
+        coEvery { apiClient.executeIo(any<SendRichMessage>(), any()) } returns richAudioResponse(1..1)
+        kotlin.test.assertFailsWith<TelegramSendException> {
+            sender.sendCachedAudios(100, listOf(TelegramAudio("one", "One"), TelegramAudio("two", "Two")))
+        }
+    }
+
+    private fun richAudioResponse(range: IntRange): SendResponse {
+        val blocks = range.joinToString(",") { """{"type":"audio","audio":{"file_id":"audio-$it","file_unique_id":"unique-$it","duration":60}}""" }
+        return BotUtils.fromJson("""{"ok":true,"result":{"message_id":1,"rich_message":{"blocks":[$blocks]}}}""", SendResponse::class.java)
     }
 
     @Test
@@ -309,17 +334,6 @@ class TelegramMediaSenderTest {
                             every { fileId() } returns fileId
                         },
                     )
-                }
-            }.toTypedArray()
-        }
-    }
-
-    private fun audioMessagesResponse(vararg fileIds: String): MessagesResponse {
-        return mockk {
-            every { isOk } returns true
-            every { messages() } returns fileIds.map { fileId ->
-                mockk<Message> {
-                    every { audio() } returns audio(fileId, 456)
                 }
             }.toTypedArray()
         }

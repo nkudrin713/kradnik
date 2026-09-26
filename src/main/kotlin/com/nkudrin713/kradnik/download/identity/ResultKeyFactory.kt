@@ -13,5 +13,9 @@ object ResultKeyFactory {
     fun playlist(id: String, range: String): String = "youtube:playlist:$id:audio:96:$range"
     fun playlistZip(base: String): String = "$base:zip"
     fun playlistAudioEntry(videoId: String): String = choice(source("youtube:video:$videoId", OutputType.AUDIO, "youtube_audio"), audioSuffix("96K"))
-    fun forNewJob(menuKey: String, output: OutputType): String = if (output == OutputType.VIDEO) TelegramVideoPolicy.versionCacheKey(menuKey) else menuKey
+    fun forNewJob(menuKey: String, output: OutputType): String = when (output) {
+        OutputType.VIDEO -> TelegramVideoPolicy.versionCacheKey(menuKey)
+        OutputType.POST -> TelegramVideoPolicy.versionCacheKey("$menuKey:post:v1")
+        else -> menuKey
+    }
 }

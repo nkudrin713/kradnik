@@ -56,6 +56,17 @@ class DownloadRequestMapperTest {
     }
 
     @Test
+    fun playlistUsesSavedPresetAndQualityAcrossRestarts() {
+        for (quality in listOf("96K", "320K")) {
+            val job = DownloadJob(workloadType = DownloadWorkloadType.PLAYLIST_AUDIO, selectedFormat = "saved-format", downloadPreset = "saved-preset", downloadExtraArgs = listOf("-x", "--audio-format", "mp3", "--audio-quality", quality))
+            val request = DownloadRequestMapper.playlist(job)
+            assertEquals(job.selectedFormat, request.source?.formatSelector)
+            assertEquals(job.downloadExtraArgs, request.source?.extraArgs)
+            assertEquals(job.downloadPreset, request.source?.presetName)
+        }
+    }
+
+    @Test
     fun playlistSnapshotRetainsFailedPositionsAndDeliveryMode() {
         val entries = listOf(PlaylistAudioEntry(3, "id", "url", "Title", 60))
         val results = listOf(PlaylistAudioResult(3, error = "Unavailable"))

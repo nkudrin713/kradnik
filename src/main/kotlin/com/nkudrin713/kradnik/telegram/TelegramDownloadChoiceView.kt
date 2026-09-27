@@ -43,6 +43,7 @@ class TelegramDownloadChoiceView(
                         ),
                     )
                 }
+                if (bitrate != null && size == null) add(messages.text(language, TelegramMessage.PLAYLIST_SIZE_UNKNOWN, bitrate))
                 add(messages.text(language, TelegramMessage.PLAYLIST_DELIVERY_PARTS))
             }
             return "<pre>${lines.joinToString("\n").escapeHtml()}</pre>"

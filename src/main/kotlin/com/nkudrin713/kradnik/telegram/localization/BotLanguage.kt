@@ -10,6 +10,7 @@ enum class BotLanguage(
 ) {
     EN("en", Locale.ENGLISH),
     RU("ru", Locale.forLanguageTag("ru-RU")),
+    RU_INFORMAL("ru-informal", Locale.forLanguageTag("ru-RU-INFORMAL")),
     ;
 
     companion object {

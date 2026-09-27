@@ -11,4 +11,6 @@ class TelegramResultCache(private val jobs: DownloadJobService) {
     }
 
     fun findAudio(cacheKey: String): String? = jobs.findCachedFileId(cacheKey)
+
+    fun findPlaylistAudio(videoId: String, source: com.nkudrin713.kradnik.download.source.SourceRequest): String? = jobs.findCachedPlaylistFile(videoId, source)
 }

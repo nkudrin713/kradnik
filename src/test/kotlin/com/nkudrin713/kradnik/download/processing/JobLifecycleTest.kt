@@ -19,7 +19,7 @@ import kotlin.test.assertFalse
 class JobLifecycleTest {
     private val jobs = mockk<DownloadJobService>(relaxed = true)
     private val sender = mockk<TelegramSender>(relaxed = true)
-    private val lifecycle = JobLifecycle(jobs, TelegramJobProgress(sender, telegramMessages()))
+    private val lifecycle = JobLifecycle(jobs, TelegramJobProgress(sender, telegramMessages(), jobs))
 
     @Test
     fun failureCannotOverwriteCancellationOrItsStatus() {

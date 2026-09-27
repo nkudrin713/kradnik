@@ -38,6 +38,8 @@ class PlaylistWorkspaceBudget(private val uploadLimits: TelegramUploadLimits) {
                 }
             },
         )
-        check(Files.getFileStore(root).usableSpace >= 64L * 1024 * 1024) { "Not enough disk space for playlist archive" }
+        if (Files.getFileStore(root).usableSpace < 64L * 1024 * 1024) {
+            throw PlaylistOperationException(com.nkudrin713.kradnik.telegram.localization.TelegramMessage.PLAYLIST_DISK_FULL)
+        }
     }
 }

@@ -47,13 +47,14 @@ class TelegramResultCacheTest {
     }
 
     @Test
-    fun playlistTrackIdentityMatchesTheSingleAudioMenuIdentity() {
+    fun legacyPlaylistTracksShareSingleAudioIdentityButNewPlaylistsUse320() {
         val singleKey = ResultKeyFactory.choice(
             ResultKeyFactory.source("youtube:video:track", OutputType.AUDIO, "youtube_audio"),
             ResultKeyFactory.audioSuffix("96K"),
         )
         assertEquals("youtube:video:track:audio:youtube_audio:audio:96K", singleKey)
         assertEquals(singleKey, ResultKeyFactory.playlistAudioEntry("track"))
-        assertEquals("youtube:playlist:PL:audio:96:playlist_first:zip", ResultKeyFactory.playlistZip(ResultKeyFactory.playlist("PL", "playlist_first")))
+        kotlin.test.assertNotEquals(singleKey, ResultKeyFactory.playlistAudioEntry("track", "320K"))
+        assertEquals("youtube:playlist:PL:audio:320:cbr:v1:playlist_first:zip", ResultKeyFactory.playlistZip(ResultKeyFactory.playlist("PL", "playlist_first")))
     }
 }

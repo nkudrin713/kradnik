@@ -5,6 +5,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
+import com.nkudrin713.kradnik.download.repository.StringListJsonConverter
+import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -61,6 +63,14 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
 
     @Transactional(readOnly = true)
     fun findCachedFileId(cacheKey: String): String? = downloadJobRepository.findCachedCompletedJob(cacheKey)?.telegramFileId
+
+    @Transactional(readOnly = true)
+    fun findCachedPlaylistFile(videoId: String, source: SourceRequest): String? = downloadJobRepository.findCachedPlaylistFile(
+        videoId,
+        source.presetName,
+        source.formatSelector,
+        StringListJsonConverter().convertToDatabaseColumn(source.extraArgs),
+    )
 
     @Transactional
     fun markCompleted(job: DownloadJob, telegramFileId: String): Boolean = downloadJobRepository.complete(job.requiredId(), telegramFileId) == 1

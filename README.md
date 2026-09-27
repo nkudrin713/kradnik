@@ -5,11 +5,11 @@ Kradnik retrieves public media from YouTube, Instagram, and VK and delivers it d
 It supports:
 
 - video quality selection, audio-only downloads, and cover images;
-- YouTube playlist audio as 96 kbps MP3, delivered in Rich Messages of up to 50 tracks or a ZIP archive, up to 100 tracks per job;
+- YouTube playlist audio as 320 kbps CBR MP3, delivered in audio albums of up to 10 tracks or a ZIP archive, up to 100 tracks per job;
 - full Instagram posts with an image, video, or mixed carousel and its caption in one Telegram Rich Message;
 - direct chats and inline guest mode; playlists and full Instagram posts are available only in direct chats;
 - cancellation of queued and running downloads;
-- English and Russian interfaces;
+- English and Russian interfaces, plus the informal Russian “Свойский” option;
 - Telegram `file_id` reuse and cloud or local Bot API delivery (Bot API 10.2 or newer for Rich Messages).
 
 Playlist video downloads, playlists from other platforms, private content, and authentication bypasses are not supported.
@@ -26,7 +26,7 @@ The diagram shows the single-media path. Playlist jobs use `PlaylistQueueWorker`
 
 - Metadata is loaded before enqueueing to build the available format menu and estimate sizes.
 - Metadata work uses 2 threads and accepts at most 32 pending requests.
-- YouTube playlists offer audio messages or ZIP for all tracks when there are at most 100 entries; larger playlists offer the first 100 or last 100. Both delivery modes use 96 kbps MP3.
+- YouTube playlists offer audio messages or ZIP for all tracks when there are at most 100 entries; larger playlists offer the first 100 or last 100. Both delivery modes use 320 kbps CBR MP3.
 - ZIP archives are named `<file count> – <playlist title>.zip`; numbered entries preserve playlist order. The count includes only successfully downloaded tracks. Archives exceeding the configured Telegram upload limit are rejected without splitting.
 - Instagram videos keep the video/audio menu and add a full-post option; static posts and carousels expose one full-post option. Up to 20 ordered photos/videos are supported. Native Instagram music that is absent from public metadata is not downloaded; no Instagram login is used.
 - Download buttons use blue for full posts/video, green for audio, the theme default for covers/ZIP, and red for cancellation. Unavailable options keep the default style.
@@ -62,13 +62,17 @@ Fresh artifacts hold local file paths; cached media hold Telegram file reference
 
 ![YouTube playlist audio-message workflow](docs/playlist-audio-flow.svg)
 
-`PlaylistJobProcessor` maps the persisted job to `PlaylistAudioRequest` and selects `AudioMessagesPlaylistWorkflow`. The workflow skips recorded positions, including failures, and processes remaining tracks with bounded parallelism. It reuses cached audio or downloads 96 kbps MP3 through `PlaylistEntryDownloader` and stages it with `TelegramPlaylistSender` in the storage chat.
+`PlaylistJobProcessor` maps the persisted job to `PlaylistAudioRequest` and selects `AudioMessagesPlaylistWorkflow`. The workflow skips recorded positions, including failures, and processes remaining tracks with bounded parallelism. It reuses cached audio or downloads 320 kbps CBR MP3 through `PlaylistEntryDownloader` and stages it with `TelegramPlaylistSender` in the storage chat.
 
-The saved playlist selection contains the track range prepared by `YouTubePlaylistPlanner` and the `AUDIO_MESSAGES` delivery mode; `PlaylistQueueWorker` claims the job after enqueueing. Track cache keys share the single-audio identity. A fresh track is uploaded to the configured storage chat before `DownloadJobService.savePlaylistResult` records its file ID.
+The saved playlist selection contains the track range prepared by `YouTubePlaylistPlanner` and the `AUDIO_MESSAGES` delivery mode; `PlaylistQueueWorker` claims the job after enqueueing. New selections save MP3 320 kbps CBR parameters and use a separate cache identity. Previously saved menus and jobs retain their original encoding parameters; legacy 96 kbps entries still share the single-audio identity. Completed audio-message playlists can supply cached tracks only when their saved encoding parameters match. A fresh track is uploaded to the configured storage chat before `DownloadJobService.savePlaylistResult` records its file ID.
 
-Each item saves a file ID or an error before its temporary directory is removed. Once all pending entries finish, the workflow checks that the job is still processing, reloads saved results, and delivers successful tracks in playlist order, with up to 50 audio blocks per Rich Message (100 tracks produce two messages). No successful tracks means failure. A summary of skipped tracks is sent only after conditional completion succeeds. Restart resumes entries without a recorded outcome; user cancellation propagates without recording a new item failure.
+Each item saves a file ID or an error before its temporary directory is removed. Once all pending entries finish, the workflow checks that the job is still processing, reloads saved results, and delivers successful tracks in playlist order, in audio albums of up to 10 tracks (100 tracks produce ten albums). A single remaining track is sent with `sendAudio`; every track has its own message ID. Delivery reuses `file_id` values and pauses for one second between batches. No successful tracks means failure. After conditional completion, a partial-success summary lists failed entries by their original position, with linked titles and localized reasons. If every entry fails, the failure report lists all recorded failures. Long reports are split into Telegram messages. After successful audio delivery with at least two tracks, a localized hint explains the player direction control. Telegram clients determine playback order across albums; the bot preserves source order and does not reverse batches. Restart resumes entries without a recorded outcome; user cancellation propagates without recording a new item failure.
 
-Item directories are removed in `finally` after staging or failure; other entries continue after individual item errors. Delivery errors fail the job. Cancellation suppresses late completion and the summary, and the processor cleans the job workspace in `finally`.
+Storage-chat access is checked before downloading uncached entries. Item directories are removed in `finally` after staging or failure. Recognized source failures and oversized individual audio files are skipped; storage, disk, and delivery errors stop the job. Cancellation suppresses late completion and the summary, and the processor cleans the job workspace in `finally`.
+
+New menu size estimates use 320 kbps and require known durations for every selected entry. Unknown sizes are labeled explicitly; estimates do not disable either delivery mode. Actual output sizes enforce the configured upload limit. Long entries remain whole, without lowering bitrate or trimming. Each entry is monitored during download and conversion, including when source sizes are unknown. Temporary entry data is bounded to three upload limits, with at least 64 MiB free disk space.
+
+Playlist progress shows processed, successful, and skipped counts plus up to two active titles, updating at most once every five seconds. A one-time long-wait warning appears when uncached work starts and includes at least 20 entries or one hour of known duration. Cached-only delivery does not trigger it. Cancellation prevents late progress from replacing the cancelled status.
 
 ### Playlist ZIP
 
@@ -76,9 +80,9 @@ Item directories are removed in `finally` after staging or failure; other entrie
 
 `ZipPlaylistWorkflow` downloads tracks with bounded parallelism, packages successful local files with `PlaylistZipBuilder`, and sends the archive directly through `TelegramPlaylistSender`. This path does not reuse Telegram track file IDs or require a storage chat. Every attempt rebuilds local files, including after restart.
 
-Planning saves the selected track range and `ZIP` delivery mode. `PlaylistQueueWorker` claims the job, and `PlaylistJobProcessor` maps it to `PlaylistAudioRequest` and creates the workspace. `PlaylistEntryDownloader` produces a local 96 kbps MP3 for each successful entry. Packaging reports the `PACKING` phase; archive delivery reports `UPLOADING` and sends a document to the user.
+Planning saves the selected track range and `ZIP` delivery mode. `PlaylistQueueWorker` claims the job, and `PlaylistJobProcessor` maps it to `PlaylistAudioRequest` and creates the workspace. `PlaylistEntryDownloader` produces a local 320 kbps CBR MP3 for each successful entry. Packaging reports the `PACKING` phase; archive delivery reports `UPLOADING` and sends a document to the user.
 
-One timeout covers downloading, packaging, and uploading; exceeding it fails the attempt. `PlaylistWorkspaceBudget` checks workspace size and free space before starting and every 250 ms throughout the attempt; the sum of downloaded track sizes and the final archive must each fit the upload limit. Recognized source failures skip individual tracks; size limits, disk failures, and other non-source errors abort the job. An empty result also fails. State checks precede packaging and upload, conditional completion precedes the partial-success summary, and the processor cleans all local files in `finally`, including after failure or cancellation.
+One timeout covers downloading, packaging, and uploading; exceeding it fails the attempt. `PlaylistWorkspaceBudget` checks workspace size and free space before starting and every 250 ms throughout the attempt; the sum of downloaded track sizes and the final archive must each fit the upload limit. Recognized source failures skip individual tracks; size limits, disk failures, and other non-source errors abort the job. An empty result also fails. State checks precede packaging and upload, conditional completion precedes the linked failure report for this attempt, and the processor cleans all local files in `finally`, including after failure or cancellation.
 
 ### Runtime models and cache
 
@@ -240,7 +244,7 @@ Operational notes:
 - Guest mode requires BotFather enablement and permission to use the configured storage chat.
 - Audio-message playlists also require access to the storage chat for uploading new tracks before ordered delivery; ZIP playlists upload the archive directly.
 - Cached `file_id` values do not need an intermediate upload.
-- `/language` changes the persisted user language.
+- `/language` changes the persisted user language: English, Русский, or Свойский (informal Russian). Existing choices stay unchanged. The selected language is also saved with download menus and jobs. Telegram's command menu uses the standard English/Russian descriptions.
 
 ## Docker and releases
 

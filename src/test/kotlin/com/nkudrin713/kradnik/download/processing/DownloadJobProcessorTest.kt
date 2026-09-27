@@ -65,7 +65,7 @@ class DownloadJobProcessorTest {
     private val prepared = YtDlpPreparedSource(mockk<MediaMetadata>(relaxed = true))
 
     private fun processor(preflightService: DownloadPreflightService = preflight): DownloadJobProcessor {
-        val progress = TelegramJobProgress(telegram, telegramMessages())
+        val progress = TelegramJobProgress(telegram, telegramMessages(), jobs)
         return DownloadJobProcessor(
             SingleMediaHandlers(VideoHandler(engine, preflightService, video), AudioHandler(engine, preflightService), CoverHandler(engine, preflightService, mockk()), ImagesHandler(engine, preflightService), mockk()),
             TelegramResultCache(jobs),

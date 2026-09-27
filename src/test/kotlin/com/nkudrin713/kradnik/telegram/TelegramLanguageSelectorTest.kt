@@ -29,22 +29,34 @@ class TelegramLanguageSelectorTest {
     )
 
     @Test
-    fun showsBilingualPromptWithLanguageButtons() {
+    fun showsPromptWithAllLanguageButtons() {
         val text = slot<String>()
         val keyboard = slot<InlineKeyboardMarkup>()
         every { telegramSender.sendMessage(100, capture(text), capture(keyboard)) } just runs
 
         selector.show(100)
 
-        assertEquals("Please choose your language:\nПожалуйста, выберите язык:", text.captured)
+        assertEquals("Please choose your language:\nПожалуйста, выберите язык:\nДу ю спик инглиш?", text.captured)
         assertEquals(
-            listOf("English", "Русский"),
+            listOf("English", "Русский", "Свойский"),
             keyboard.captured.inlineKeyboard().single().map { it.text },
         )
         assertEquals(
-            listOf("lang:en", "lang:ru"),
+            listOf("lang:en", "lang:ru", "lang:ru-informal"),
             keyboard.captured.inlineKeyboard().single().map { it.callbackData },
         )
+    }
+
+    @Test
+    fun savesInformalLanguageAndUsesItsConfirmation() {
+        every { preferenceService.selectLanguage(300, BotLanguage.RU_INFORMAL) } just runs
+        every { telegramSender.answerCallback("callback-id", "Свойский", false) } just runs
+        every { telegramSender.editMessage(100, 500, any(), any()) } just runs
+
+        assertTrue(selector.handle(callbackQuery("lang:ru-informal")))
+
+        verify { preferenceService.selectLanguage(300, BotLanguage.RU_INFORMAL) }
+        verify { telegramSender.editMessage(100, 500, "Наш человек. Кидай ссылку", any()) }
     }
 
     @Test

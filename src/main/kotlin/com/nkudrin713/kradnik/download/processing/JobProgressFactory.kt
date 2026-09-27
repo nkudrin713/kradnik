@@ -10,9 +10,13 @@ import org.springframework.stereotype.Component
 class JobProgressFactory(private val telegram: TelegramJobProgress, private val telemetry: BotTelemetry = BotTelemetry.NONE) {
     fun forJob(job: DownloadJob): JobProgress {
         val delivery = telegram.forJob(job)
-        return JobProgress { phase ->
-            telemetry.phase(job.requiredId(), phase)
-            delivery.update(phase)
+        return object : JobProgress {
+            override fun update(phase: DownloadPhase) {
+                telemetry.phase(job.requiredId(), phase)
+                delivery.update(phase)
+            }
+
+            override fun playlist(progress: PlaylistProgress) = delivery.playlist(progress)
         }
     }
 }

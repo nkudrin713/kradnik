@@ -82,6 +82,7 @@ class TelegramCommandsInitializer(
     }
 
     private companion object {
-        private val commandLanguages = listOf(null) + BotLanguage.entries
+        // Telegram command language codes cannot represent our custom conversational style.
+        private val commandLanguages = listOf(null, BotLanguage.EN, BotLanguage.RU)
     }
 }

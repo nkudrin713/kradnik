@@ -39,7 +39,7 @@ class PlaylistJobProcessorTest {
     @TempDir lateinit var root: Path
     private val jobs = mockk<DownloadJobService>()
     private val ytDlp = mockk<YtDlpService>()
-    private val fileSender = mockk<TelegramPlaylistSender>()
+    private val fileSender = mockk<TelegramPlaylistSender> { coEvery { checkStorage() } returns Unit }
     private val telegram = mockk<TelegramSender>(relaxed = true)
 
     @Test
@@ -84,11 +84,72 @@ class PlaylistJobProcessorTest {
         assertFalse(root.resolve("1").exists())
     }
 
+    @Test
+    fun inaccessibleStorageStopsBeforeDownloadingAndDoesNotRecordItemFailures() = runTest {
+        val job = DownloadJob(
+            id = 1,
+            telegramChatId = 20,
+            telegramStatusMessageId = 22,
+            workloadType = DownloadWorkloadType.PLAYLIST_AUDIO,
+            playlistEntries = listOf(PlaylistAudioEntry(1, "one", "https://youtu.be/one", "One", 60)),
+        )
+        every { jobs.findCachedFileId(any()) } returns null
+        every { jobs.markFailed(job, any()) } returns true
+        coEvery { fileSender.checkStorage() } throws IllegalStateException("chat not found")
+
+        processor().process(job)
+
+        coVerify(exactly = 0) { ytDlp.download(any(), any()) }
+        verify(exactly = 0) { jobs.savePlaylistResult(any(), any()) }
+        verify { telegram.editMessage(any<com.nkudrin713.kradnik.telegram.TelegramMessageAddress>(), match<String> { it.contains("storage", ignoreCase = true) }, any()) }
+        assertFalse(root.resolve("1").exists())
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = [true, false])
+    fun reportsSourceFailuresForPartialAndEmptyResults(hasSuccess: Boolean) = runTest {
+        val job = DownloadJob(
+            id = 1,
+            telegramChatId = 20,
+            telegramStatusMessageId = 22,
+            workloadType = DownloadWorkloadType.PLAYLIST_AUDIO,
+            playlistEntries = listOf(
+                PlaylistAudioEntry(1, "one", "https://youtu.be/one", "One", 60),
+                PlaylistAudioEntry(2, "two", "https://youtu.be/two", "Two", 60),
+            ),
+        )
+        every { jobs.findCachedFileId(any()) } returns null
+        every { jobs.isProcessing(1) } returns true
+        every { jobs.findJob(1) } returns job
+        every { jobs.markCompleted(job, "playlist:1") } returns true
+        every { jobs.markFailed(job, any()) } returns true
+        every { jobs.savePlaylistResult(1, any()) } answers {
+            synchronized(job) { job.playlistResults += secondArg<PlaylistAudioResult>() }
+            true
+        }
+        coEvery { ytDlp.download(any(), any()) } answers {
+            val spec = firstArg<com.nkudrin713.kradnik.download.source.SourceRequest>()
+            if (!hasSuccess || spec.originalUrl.endsWith("two")) {
+                throw com.nkudrin713.kradnik.download.domain.DownloadFailure(com.nkudrin713.kradnik.download.domain.DownloadFailureReason.SOURCE_UNAVAILABLE, "Private video")
+            }
+            DownloadedFile(Files.write(secondArg<Path>().resolve("track.mp3"), byteArrayOf(1)), 1)
+        }
+        coEvery { fileSender.stagePlaylistAudio(any(), any()) } returns "saved"
+        coEvery { fileSender.sendPlaylistAudios(any(), any(), any()) } returns listOf("saved")
+
+        processor().process(job)
+
+        verify { telegram.sendHtmlMessage(20, match { it.contains("2. <a href=\"https://www.youtube.com/watch?v=two\">Two</a>") && it.contains("private", ignoreCase = true) }) }
+        assertEquals(if (hasSuccess) 1 else 2, job.playlistResults.count { it.fileId == null })
+        coVerify(exactly = if (hasSuccess) 1 else 0) { fileSender.sendPlaylistAudios(any(), any(), any()) }
+        assertFalse(root.resolve("1").exists())
+    }
+
     private fun processor() = PlaylistJobProcessor(
         telegramDelivery = AudioMessagesPlaylistWorkflow(jobs, PlaylistEntryDownloader(ytDlp), fileSender, TelegramResultCache(jobs), WorkDirCleaner(root.toString())),
         zipDelivery = mockk(),
-        lifecycle = JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages())),
-        progress = TelegramJobProgress(telegram, telegramMessages()),
+        lifecycle = JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs)),
+        progress = TelegramJobProgress(telegram, telegramMessages(), jobs),
         workDirCleaner = WorkDirCleaner(root.toString()),
     )
 
@@ -98,11 +159,12 @@ class PlaylistJobProcessorTest {
         val job = DownloadJob(id = 1, telegramChatId = 20, telegramStatusMessageId = 22, workloadType = DownloadWorkloadType.PLAYLIST_AUDIO)
         coEvery { delivery.run(1, any(), any(), any(), any()) } returns PlaylistDeliveryResult(1, 1, PlaylistCompletion.AudioMessages(1))
         every { jobs.markCompleted(job, "playlist:1") } returns false
-        val processor = PlaylistJobProcessor(delivery, mockk(), JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages())), TelegramJobProgress(telegram, telegramMessages()), WorkDirCleaner(root.toString()))
+        val processor = PlaylistJobProcessor(delivery, mockk(), JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs)), TelegramJobProgress(telegram, telegramMessages(), jobs), WorkDirCleaner(root.toString()))
 
         processor.process(job)
 
         verify(exactly = 0) { telegram.sendMessage(any(), any()) }
+        verify(exactly = 0) { telegram.sendHtmlMessage(any(), any()) }
         verify(exactly = 0) { telegram.deleteMessage(any(), any()) }
         verify(exactly = 0) { jobs.markFailed(any(), any()) }
         assertFalse(root.resolve("1").exists())

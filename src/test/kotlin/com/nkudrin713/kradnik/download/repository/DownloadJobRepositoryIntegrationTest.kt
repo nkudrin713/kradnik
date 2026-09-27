@@ -75,6 +75,46 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     }
 
     @Test
+    fun playlistCacheMatchesSavedEncodingAndOnlySuccessfulCompletedItems() {
+        val entries = listOf(PlaylistAudioEntry(1, "video", "url", "Title", 60))
+        val saved = repository.saveAndFlush(
+            job("playlist-cache").apply {
+                workloadType = DownloadWorkloadType.PLAYLIST_AUDIO
+                downloadPreset = "youtube_playlist_audio_320"
+                selectedFormat = "ba/bestaudio"
+                downloadExtraArgs = listOf("--audio-quality", "320K")
+                playlistEntries = entries
+                playlistResults = listOf(PlaylistAudioResult(1, "file-320"))
+                status = DownloadJobStatus.COMPLETED
+                completedAt = Instant.now()
+            },
+        )
+        val args = StringListJsonConverter().convertToDatabaseColumn(saved.downloadExtraArgs)
+        assertEquals("file-320", repository.findCachedPlaylistFile("video", saved.downloadPreset, saved.selectedFormat, args))
+        assertNull(repository.findCachedPlaylistFile("video", saved.downloadPreset, saved.selectedFormat, "[\"--audio-quality\",\"96K\"]"))
+        assertNull(repository.findCachedPlaylistFile("other-video", saved.downloadPreset, saved.selectedFormat, args))
+        saved.status = DownloadJobStatus.FAILED
+        repository.saveAndFlush(saved)
+        assertNull(repository.findCachedPlaylistFile("video", saved.downloadPreset, saved.selectedFormat, args))
+    }
+
+    @Test
+    fun persistsAllLanguagesInPreferencesSessionsAndJobs() {
+        BotLanguage.entries.forEachIndexed { index, language ->
+            val userId = index.toLong() + 1
+            preferenceRepository.saveAndFlush(TelegramUserPreference(telegramUserId = userId, language = language))
+            val session = choiceSessionRepository.saveAndFlush(
+                DownloadChoiceSession(telegramUserId = userId, telegramMenuMessageId = index + 1, language = language),
+            )
+            val savedJob = repository.saveAndFlush(job("language-${language.code}").apply { this.language = language })
+
+            assertEquals(language, preferenceRepository.findById(userId).orElseThrow().language)
+            assertEquals(language, choiceSessionRepository.findById(session.token).orElseThrow().language)
+            assertEquals(language, repository.findById(requireNotNull(savedJob.id)).orElseThrow().language)
+        }
+    }
+
+    @Test
     fun memoryHistoryRestoresNullsAndIgnoresOlderRetriesAndPrunesExpiredRows() {
         val store = AdminStatisticsStore(jdbcTemplate)
         val now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MINUTES).plusSeconds(10)

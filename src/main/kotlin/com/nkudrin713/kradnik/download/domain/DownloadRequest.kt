@@ -18,4 +18,5 @@ data class PlaylistAudioRequest(
     val title: String?,
     val deliveryMode: PlaylistDeliveryMode,
     val completedEntries: List<PlaylistAudioResult>,
+    val source: SourceRequest? = null,
 ) : DownloadRequest

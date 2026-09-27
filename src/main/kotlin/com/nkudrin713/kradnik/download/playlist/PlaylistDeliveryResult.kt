@@ -1,6 +1,8 @@
 package com.nkudrin713.kradnik.download.playlist
 
-data class PlaylistDeliveryResult(val successfulCount: Int, val failedCount: Int, val completion: PlaylistCompletion)
+import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
+
+data class PlaylistDeliveryResult(val successfulCount: Int, val failedCount: Int, val completion: PlaylistCompletion, val failures: List<PlaylistAudioResult> = emptyList())
 
 sealed interface PlaylistCompletion {
     data class AudioMessages(val count: Int) : PlaylistCompletion

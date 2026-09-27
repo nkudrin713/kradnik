@@ -80,8 +80,8 @@ class ZipPlaylistDeliveryTest {
         coVerify(exactly = 3) { downloader.download(any(), any()) }
         verify { jobs.markCompleted(job, "zip-file-id") }
         verify(exactly = 0) { jobs.savePlaylistResult(any(), any()) }
-        verify { telegram.editJobStatus(any(), TelegramDownloadStatus.PACKING, 1, job.language) }
-        verify { telegram.sendMessage(20, match { it.endsWith("1") }) }
+        verify { telegram.editPlaylistProgress(any(), "Creating ZIP archive", 1, job.language, any()) }
+        verify { telegram.sendHtmlMessage(20, match { "2. <a href=" in it && "Track 2" in it && "Recording unavailable" in it }) }
         assertFalse(Files.exists(root.resolve("1")))
     }
 
@@ -208,8 +208,8 @@ class ZipPlaylistDeliveryTest {
         return PlaylistJobProcessor(
             mockk(),
             ZipPlaylistWorkflow(jobs, downloader, builder, TelegramPlaylistSender(sender, TelegramBotProperties(token = "test")), TelegramUploadLimits(limit), cleaner, PlaylistWorkspaceBudget(TelegramUploadLimits(limit)), timeout = timeout),
-            JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages())),
-            TelegramJobProgress(telegram, telegramMessages()),
+            JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs)),
+            TelegramJobProgress(telegram, telegramMessages(), jobs),
             cleaner,
         )
     }

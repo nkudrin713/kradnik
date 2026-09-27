@@ -4,12 +4,15 @@ import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioRequest
+import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.processing.DownloadPhase
 import com.nkudrin713.kradnik.download.processing.JobProgress
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.DeliveryContext
 import com.nkudrin713.kradnik.download.telegram.TelegramPlaylistSender
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelAndJoin
@@ -26,6 +29,7 @@ import org.springframework.stereotype.Component
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -82,42 +86,52 @@ class ZipPlaylistWorkflow(
 
     private suspend fun downloadAndSend(jobId: Long, request: PlaylistAudioRequest, context: DeliveryContext, root: Path, progress: JobProgress): PlaylistDeliveryResult? {
         val totalBytes = AtomicLong()
+        val failures = Collections.synchronizedList(mutableListOf<PlaylistAudioResult>())
+        val tracker = PlaylistProgressTracker(request.entries, progress)
         // Local results belong to this attempt. Startup cleanup removes all files, so retries rebuild the archive.
         val files = items.map(jobId, request.entries) { entry ->
+            tracker.started(entry)
+            tracker.downloading()
             val directory = withContext(Dispatchers.IO) { Files.createDirectory(root.resolve(entry.position.toString())) }
             val file = try {
-                entryDownloader.download(entry, directory)
+                entryDownloader.download(entry, directory, request.source)
             } catch (error: DownloadFailure) {
                 if (error.reason == DownloadFailureReason.TOO_LARGE) throw PlaylistSizeLimitException(error)
-                if (error.reason !in SOURCE_FAILURES) throw error
+                if (!error.isPlaylistSourceFailure()) throw error
                 budget.check(root)
                 logger.warn("PLAYLIST_JOB[{}] item {} unavailable: {}", jobId, entry.position, error.message, error)
+                failures += PlaylistAudioResult(entry.position, error = error.message?.take(1000), failure = PlaylistItemFailure.from(error.message, error.reason))
+                tracker.finished(entry, false)
                 workDirCleaner.deleteRecursively(directory)
                 return@map null
             }
             val size = withContext(Dispatchers.IO) { Files.size(file.file) }
             if (totalBytes.addAndGet(size) > uploadLimits.maxUploadBytes) throw PlaylistSizeLimitException()
+            tracker.finished(entry, true)
             PlaylistLocalFile(entry, file.file)
         }
         if (!downloadJobService.isProcessing(jobId)) return null
-        check(files.isNotEmpty()) { "No playlist items could be downloaded" }
+        if (files.isEmpty()) throw PlaylistEmptyException(failures.toList())
         progress.update(DownloadPhase.PACKING)
-        val archive = zipBuilder.build(files, request.title, root, uploadLimits.maxUploadBytes)
+        val archive = try {
+            zipBuilder.build(files, request.title, root, uploadLimits.maxUploadBytes)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: PlaylistSizeLimitException) {
+            throw error
+        } catch (error: Exception) {
+            throw PlaylistOperationException(TelegramMessage.PLAYLIST_ARCHIVE_FAILED, error)
+        }
         if (!downloadJobService.isProcessing(jobId)) return null
         currentCoroutineContext().ensureActive()
         progress.update(DownloadPhase.UPLOADING)
-        val fileId = telegramMediaSender.sendArchive(context, archive)
-        return PlaylistDeliveryResult(files.size, request.entries.size - files.size, PlaylistCompletion.Archive(fileId))
-    }
-
-    private companion object {
-        val SOURCE_FAILURES = setOf(
-            DownloadFailureReason.SOURCE_FAILED,
-            DownloadFailureReason.AUTHENTICATION_REQUIRED,
-            DownloadFailureReason.SOURCE_UNAVAILABLE,
-            DownloadFailureReason.SOURCE_RATE_LIMITED,
-            DownloadFailureReason.SOURCE_REQUEST_FAILED,
-            DownloadFailureReason.METADATA_UNAVAILABLE,
-        )
+        val fileId = try {
+            telegramMediaSender.sendArchive(context, archive)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            throw PlaylistOperationException(TelegramMessage.PLAYLIST_UPLOAD_FAILED, error)
+        }
+        return PlaylistDeliveryResult(files.size, request.entries.size - files.size, PlaylistCompletion.Archive(fileId), failures.toList())
     }
 }

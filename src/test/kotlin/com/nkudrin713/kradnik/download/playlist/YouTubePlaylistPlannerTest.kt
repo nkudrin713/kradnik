@@ -39,12 +39,12 @@ class YouTubePlaylistPlannerTest {
         assertTrue(plan.options.last().spec.cacheKey.endsWith(":zip"))
         assertEquals(3, plan.mediaInfo.playlistCount)
         assertEquals(180, plan.mediaInfo.durationSeconds)
-        assertEquals(2_160_000, plan.mediaInfo.estimatedSizeBytes)
+        assertEquals(7_200_000, plan.mediaInfo.estimatedSizeBytes)
         assertEquals("Скачать все 3", plan.options.first().label)
         assertEquals(DownloadWorkloadType.PLAYLIST_AUDIO, plan.options.first().spec.workloadType)
         assertEquals(3, plan.options.first().spec.playlistEntries.size)
         assertEquals(
-            listOf("-x", "--audio-format", "mp3", "--audio-quality", "96K", "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg"),
+            listOf("-x", "--audio-format", "mp3", "--audio-quality", "320K", "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg"),
             plan.options.first().spec.extraArgs,
         )
     }
@@ -63,13 +63,13 @@ class YouTubePlaylistPlannerTest {
     }
 
     @Test
-    fun rejectsArchiveByTotalSizeWhileAllowingSeparateTracks() = runTest {
+    fun keepsApproximateOversizeOptionsAvailableForRuntimeChecks() = runTest {
         coEvery { ytDlpService.extractPlaylistMetadata(URL) } returns playlist(3)
         val smallLimitPlanner = YouTubePlaylistPlanner(ytDlpService, TelegramUploadLimits(1_000_000), telegramMessages())
         val plan = assertNotNull(smallLimitPlanner.planOrNull(URL, BotLanguage.RU))
         assertTrue(plan.options.first().available)
-        assertFalse(plan.options.last().available)
-        assertNotNull(plan.options.last().unavailableReason)
+        assertTrue(plan.options.last().available)
+        assertNull(plan.options.last().unavailableReason)
     }
 
     @Test

@@ -39,7 +39,7 @@ class PlaylistJobProcessor(
             } ?: return
             val receipt = TelegramReceiptCodec.playlist(result.completion)
             if (!lifecycle.complete(job, receipt)) return
-            progress.playlistSummary(job, result.failedCount)
+            progress.playlistSummary(job, result)
         } catch (error: CancellationException) {
             if (lifecycle.isUserCancelled(job)) return
             throw error
@@ -48,7 +48,7 @@ class PlaylistJobProcessor(
             throw error
         } catch (error: Exception) {
             logger.error("PLAYLIST_JOB[{}] failed", job.id, error)
-            lifecycle.fail(job, error)
+            if (lifecycle.fail(job, error)) progress.playlistFailure(job, error)
         } finally {
             outputDir?.let(workDirCleaner::deleteRecursively)
         }

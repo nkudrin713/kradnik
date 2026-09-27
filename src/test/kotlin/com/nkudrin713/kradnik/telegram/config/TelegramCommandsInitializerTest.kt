@@ -31,6 +31,7 @@ class TelegramCommandsInitializerTest {
         requests[1].getParameters()["language_code"] shouldBe null
         requests[3].getParameters()["language_code"] shouldBe "en"
         requests[5].getParameters()["language_code"] shouldBe "ru"
+        requests.map { it.getParameters()["language_code"] }.toSet() shouldBe setOf(null, "en", "ru")
     }
 
     private fun okResponse(): BaseResponse {

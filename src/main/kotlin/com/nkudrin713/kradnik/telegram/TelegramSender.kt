@@ -24,6 +24,18 @@ class TelegramSender(
     private val downloadJobView: TelegramDownloadJobView,
     private val messages: TelegramMessages,
 ) {
+    private val jobStatusLocks = Array(64) { Any() }
+
+    fun editPlaylistProgress(address: TelegramMessageAddress, text: String, jobId: Long, language: BotLanguage, isProcessing: () -> Boolean) {
+        synchronized(jobStatusLocks[Math.floorMod(jobId, jobStatusLocks.size.toLong()).toInt()]) {
+            if (isProcessing()) editText(address, text, downloadJobView.cancelKeyboard(jobId, language))
+        }
+    }
+
+    fun sendHtmlMessage(chatId: Long, html: String) {
+        apiClient.execute(SendMessage(chatId, html).parseMode(ParseMode.HTML))
+    }
+
     fun sendMessage(
         chatId: Long,
         text: String,
@@ -98,11 +110,13 @@ class TelegramSender(
         jobId: Long,
         language: BotLanguage = BotLanguage.EN,
     ) {
-        editText(
-            address,
-            messages.text(language, TelegramMessage.STATUS_CANCELLED_BY_USER),
-            downloadJobView.backKeyboard(jobId, language),
-        )
+        synchronized(jobStatusLocks[Math.floorMod(jobId, jobStatusLocks.size.toLong()).toInt()]) {
+            editText(
+                address,
+                messages.text(language, TelegramMessage.STATUS_CANCELLED_BY_USER),
+                downloadJobView.backKeyboard(jobId, language),
+            )
+        }
     }
 
     fun editDownloadChoice(

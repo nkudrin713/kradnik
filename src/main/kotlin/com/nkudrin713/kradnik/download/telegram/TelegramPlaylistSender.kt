@@ -12,6 +12,11 @@ import java.nio.file.Path
 
 @Component
 class TelegramPlaylistSender(private val telegramMediaSender: TelegramMediaSender, private val properties: TelegramBotProperties) {
+    suspend fun checkStorage() {
+        val chatId = properties.fileStorageChatId ?: throw TelegramSendException("Storage chat is not configured")
+        telegramMediaSender.checkChatAccess(chatId)
+    }
+
     suspend fun stagePlaylistAudio(file: DownloadedFile, entry: PlaylistAudioEntry): String {
         val storageChatId = properties.fileStorageChatId ?: throw TelegramSendException(
             errorCode = null,

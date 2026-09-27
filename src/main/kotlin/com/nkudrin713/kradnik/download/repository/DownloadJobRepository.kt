@@ -112,4 +112,21 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
         nativeQuery = true,
     )
     fun findCachedCompletedJob(cacheKey: String): DownloadJob?
+
+    @Query(
+        value = """
+        SELECT result->>'fileId'
+        FROM download_jobs job
+        CROSS JOIN LATERAL jsonb_array_elements(job.playlist_entries_json::jsonb) entry
+        CROSS JOIN LATERAL jsonb_array_elements(job.playlist_results_json::jsonb) result
+        WHERE job.status = 'completed' AND job.workload_type = 'playlist_audio'
+          AND job.download_preset = :preset AND job.selected_format = :format
+          AND job.download_extra_args::jsonb = CAST(:args AS jsonb)
+          AND entry->>'videoId' = :videoId AND result->>'position' = entry->>'position'
+          AND result->>'fileId' IS NOT NULL
+        ORDER BY job.completed_at DESC LIMIT 1
+        """,
+        nativeQuery = true,
+    )
+    fun findCachedPlaylistFile(videoId: String, preset: String, format: String, args: String): String?
 }

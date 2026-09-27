@@ -10,9 +10,13 @@ object ResultKeyFactory {
     fun optionSuffix(key: String, preset: String): String = "choice:$key:$preset"
     fun audioSuffix(quality: String): String = "audio:$quality"
     fun coverSuffix(): String = "cover:v1"
-    fun playlist(id: String, range: String): String = "youtube:playlist:$id:audio:96:$range"
+    fun playlist(id: String, range: String): String = "youtube:playlist:$id:audio:320:cbr:v1:$range"
     fun playlistZip(base: String): String = "$base:zip"
-    fun playlistAudioEntry(videoId: String): String = choice(source("youtube:video:$videoId", OutputType.AUDIO, "youtube_audio"), audioSuffix("96K"))
+    fun playlistAudioEntry(videoId: String, quality: String = "96K"): String = if (quality == "96K") {
+        choice(source("youtube:video:$videoId", OutputType.AUDIO, "youtube_audio"), audioSuffix("96K"))
+    } else {
+        "youtube:video:$videoId:playlist_audio:$quality:cbr:v1"
+    }
     fun forNewJob(menuKey: String, output: OutputType): String = when (output) {
         OutputType.VIDEO -> TelegramVideoPolicy.versionCacheKey(menuKey)
         OutputType.POST -> TelegramVideoPolicy.versionCacheKey("$menuKey:post:v1")

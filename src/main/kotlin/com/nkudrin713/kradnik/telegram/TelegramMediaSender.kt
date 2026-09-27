@@ -8,9 +8,6 @@ import com.pengrad.telegrambot.model.request.InputMediaPhoto
 import com.pengrad.telegrambot.model.request.InputMediaVideo
 import com.pengrad.telegrambot.model.request.ParseMode
 import com.pengrad.telegrambot.model.request.ReplyParameters
-import com.pengrad.telegrambot.model.request.richmessages.InputRichMessage
-import com.pengrad.telegrambot.model.request.richmessages.richblock.InputRichBlockAudio
-import com.pengrad.telegrambot.model.richmessages.richblock.RichBlockAudio
 import com.pengrad.telegrambot.request.EditMessageMedia
 import com.pengrad.telegrambot.request.SendAudio
 import com.pengrad.telegrambot.request.SendDocument
@@ -18,8 +15,8 @@ import com.pengrad.telegrambot.request.SendMediaGroup
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.request.SendPhoto
 import com.pengrad.telegrambot.request.SendVideo
-import com.pengrad.telegrambot.request.richmessages.SendRichMessage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -39,6 +36,10 @@ class TelegramMediaSender(
     private val properties: TelegramBotProperties,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
+
+    suspend fun checkChatAccess(chatId: Long) {
+        apiClient.executeIo(com.pengrad.telegrambot.request.GetChat(chatId))
+    }
 
     suspend fun sendVideo(
         chatId: Long,
@@ -154,21 +155,29 @@ class TelegramMediaSender(
         replyToMessageId: Int? = null,
     ): List<String> {
         require(audios.isNotEmpty()) { "At least one audio file is required" }
-        return audios.chunked(MAX_RICH_AUDIO_COUNT).flatMapIndexed { index, chunk ->
-            val blocks = chunk.map { audio ->
-                val media = InputMediaAudio(audio.fileId).title(audio.title)
-                audio.performer?.let(media::performer)
-                audio.durationSeconds?.let(media::duration)
-                InputRichBlockAudio(media)
-            }
-            val request = SendRichMessage(chatId, InputRichMessage().blocks(*blocks.toTypedArray()))
-            if (index == 0) addReplyParameters(request, replyToMessageId)
-            val returned = apiClient.executeIo(request).message()?.richMessage()?.blocks
-                ?: throw TelegramSendException("Telegram response does not contain playlist audio")
-            if (returned.size != chunk.size) throw TelegramSendException("Telegram playlist audio count does not match")
-            returned.map { block ->
-                (block as? RichBlockAudio)?.audio?.fileId
-                    ?: throw TelegramSendException("Telegram playlist response does not contain audio")
+        return audios.chunked(MAX_MEDIA_GROUP_SIZE).flatMapIndexed { index, chunk ->
+            // Pace large playlists without blocking cancellation between Telegram requests.
+            if (index > 0) delay(1000)
+            val replyId = replyToMessageId.takeIf { index == 0 }
+            if (chunk.size == 1) {
+                val audio = chunk.single()
+                listOf(sendCachedAudio(chatId, audio.fileId, audio.title, audio.performer, audio.durationSeconds, replyId))
+            } else {
+                val media = chunk.map { audio ->
+                    InputMediaAudio(audio.fileId).title(audio.title).also {
+                        audio.performer?.let(it::performer)
+                        audio.durationSeconds?.let(it::duration)
+                    }
+                }
+                val request = SendMediaGroup(chatId, *media.toTypedArray())
+                addReplyParameters(request, replyId)
+                val returned = apiClient.executeIo(request).messages()
+                    ?: throw TelegramSendException("Telegram response does not contain playlist audio")
+                if (returned.size != chunk.size) throw TelegramSendException("Telegram playlist audio count does not match")
+                returned.map { message ->
+                    message.audio()?.fileId
+                        ?: throw TelegramSendException("Telegram playlist response does not contain audio")
+                }
             }
         }
     }
@@ -386,7 +395,6 @@ class TelegramMediaSender(
     private companion object {
         private const val BYTES_IN_MEGABYTE = 1024.0 * 1024.0
         private const val MAX_MEDIA_GROUP_SIZE = 10
-        private const val MAX_RICH_AUDIO_COUNT = 50
     }
 }
 

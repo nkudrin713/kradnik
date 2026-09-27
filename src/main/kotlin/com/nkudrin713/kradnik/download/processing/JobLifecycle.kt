@@ -18,9 +18,10 @@ class JobLifecycle(private val jobs: DownloadJobService, private val progress: T
         return true
     }
 
-    fun fail(job: DownloadJob, error: Exception) {
-        if (!jobs.markFailed(job, error.message ?: error.javaClass.simpleName)) return
+    fun fail(job: DownloadJob, error: Exception): Boolean {
+        if (!jobs.markFailed(job, error.message ?: error.javaClass.simpleName)) return false
         progress.failed(job, (error as? DownloadFailure)?.reason)
+        return true
     }
 
     fun isUserCancelled(job: DownloadJob): Boolean = jobs.isCancelledByUser(job.requiredId())

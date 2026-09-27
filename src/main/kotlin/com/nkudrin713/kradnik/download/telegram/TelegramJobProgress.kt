@@ -3,8 +3,15 @@ package com.nkudrin713.kradnik.download.telegram
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
+import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
+import com.nkudrin713.kradnik.download.playlist.PlaylistDeliveryResult
+import com.nkudrin713.kradnik.download.playlist.PlaylistEmptyException
+import com.nkudrin713.kradnik.download.playlist.PlaylistOperationException
+import com.nkudrin713.kradnik.download.playlist.PlaylistSizeLimitException
 import com.nkudrin713.kradnik.download.processing.DownloadPhase
 import com.nkudrin713.kradnik.download.processing.JobProgress
+import com.nkudrin713.kradnik.download.processing.PlaylistProgress
+import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
@@ -14,18 +21,49 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
 @Component
-class TelegramJobProgress(private val sender: TelegramSender, private val messages: TelegramMessages) {
+class TelegramJobProgress(private val sender: TelegramSender, private val messages: TelegramMessages, private val jobs: DownloadJobService) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun forJob(job: DownloadJob): JobProgress = JobProgress { phase ->
-        bestEffort(job) {
-            val address = address(job) ?: return@bestEffort
-            val status = when (phase) {
-                DownloadPhase.DOWNLOADING -> TelegramDownloadStatus.DOWNLOADING
-                DownloadPhase.PACKING -> TelegramDownloadStatus.PACKING
-                DownloadPhase.UPLOADING -> TelegramDownloadStatus.UPLOADING
+    fun forJob(job: DownloadJob): JobProgress = object : JobProgress {
+        private var lastUpdate = 0L
+        private var warned = false
+
+        override fun update(phase: DownloadPhase) {
+            bestEffort(job) {
+                val address = address(job) ?: return@bestEffort
+                val status = when (phase) {
+                    DownloadPhase.DOWNLOADING -> TelegramDownloadStatus.DOWNLOADING
+                    DownloadPhase.PACKING -> TelegramDownloadStatus.PACKING
+                    DownloadPhase.UPLOADING -> TelegramDownloadStatus.UPLOADING
+                }
+                if (job.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO) {
+                    sender.editPlaylistProgress(address, messages.text(job.language, status.message), job.requiredId(), job.language) {
+                        jobs.isProcessing(job.requiredId())
+                    }
+                } else {
+                    sender.editJobStatus(address, status, job.requiredId(), job.language)
+                }
             }
-            sender.editJobStatus(address, status, job.requiredId(), job.language)
+        }
+
+        @Synchronized
+        override fun playlist(progress: PlaylistProgress) {
+            bestEffort(job) {
+                if (!jobs.isProcessing(job.requiredId())) return@bestEffort
+                if (progress.longWait && !warned) {
+                    warned = true
+                    val message = if (progress.total == 1) TelegramMessage.PLAYLIST_LONG_ITEM_WARNING else TelegramMessage.PLAYLIST_LONG_WARNING
+                    sender.sendMessage(job.telegramChatId, messages.text(job.language, message))
+                }
+                val now = System.nanoTime()
+                if (lastUpdate != 0L && now - lastUpdate < 5_000_000_000L) return@bestEffort
+                lastUpdate = now
+                val text = messages.text(job.language, TelegramMessage.PLAYLIST_PROGRESS, progress.successful + progress.failed, progress.total, progress.successful, progress.failed)
+                val active = progress.active.take(2).joinToString("\n") { "${it.position}. ${it.title.take(160)}" }
+                val detail = if (active.isBlank()) "" else "\n\n" + messages.text(job.language, TelegramMessage.PLAYLIST_ACTIVE_ITEMS, active)
+                val address = address(job) ?: return@bestEffort
+                sender.editPlaylistProgress(address, text + detail, job.requiredId(), job.language) { jobs.isProcessing(job.requiredId()) }
+            }
         }
     }
 
@@ -44,9 +82,8 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
             else -> TelegramDownloadStatus.ERROR
         }
 
-        // Preserve the existing playlist terminal-status failure semantics during extraction.
         if (job.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO) {
-            sender.editStatus(requireNotNull(address(job)), status, job.language)
+            bestEffort(job) { sender.editStatus(requireNotNull(address(job)), status, job.language) }
             return
         }
         bestEffort(job) {
@@ -59,9 +96,34 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         }
     }
 
-    fun playlistSummary(job: DownloadJob, failedCount: Int) {
-        if (failedCount == 0) return
-        bestEffort(job) { sender.sendMessage(job.telegramChatId, messages.text(job.language, TelegramMessage.PLAYLIST_COMPLETED_WITH_ERRORS, failedCount)) }
+    fun playlistSummary(job: DownloadJob, result: PlaylistDeliveryResult) {
+        if (job.playlistDeliveryMode == PlaylistDeliveryMode.AUDIO_MESSAGES && result.successfulCount > 1) {
+            bestEffort(job) { sender.sendMessage(job.telegramChatId, messages.text(job.language, TelegramMessage.PLAYLIST_PLAYBACK_HINT)) }
+        }
+        bestEffort(job) {
+            if (result.failedCount == 0) return@bestEffort
+            val header = messages.text(job.language, TelegramMessage.PLAYLIST_PARTIAL_SUCCESS, result.successfulCount, job.playlistEntries.size)
+            PlaylistFailureReport(messages).render(header, job.playlistEntries, result.failures, job.language)
+                .forEach { sender.sendHtmlMessage(job.telegramChatId, it) }
+        }
+    }
+
+    fun playlistFailure(job: DownloadJob, error: Exception) {
+        bestEffort(job) {
+            if (error is PlaylistEmptyException) {
+                val header = messages.text(job.language, TelegramMessage.PLAYLIST_ALL_FAILED)
+                PlaylistFailureReport(messages).render(header, job.playlistEntries, error.failures, job.language)
+                    .forEach { sender.sendHtmlMessage(job.telegramChatId, it) }
+                return@bestEffort
+            }
+            val key = when {
+                error is PlaylistOperationException -> error.userMessage
+                error is PlaylistSizeLimitException && job.playlistDeliveryMode == PlaylistDeliveryMode.ZIP -> TelegramMessage.ERROR_PLAYLIST_ZIP_TOO_LARGE
+                else -> return@bestEffort
+            }
+            val address = address(job) ?: return@bestEffort
+            sender.editMessage(address, messages.text(job.language, key))
+        }
     }
 
     private fun address(job: DownloadJob): TelegramMessageAddress? {

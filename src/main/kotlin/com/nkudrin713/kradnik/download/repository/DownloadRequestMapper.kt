@@ -27,6 +27,6 @@ object DownloadRequestMapper {
 
     fun playlist(job: DownloadJob): PlaylistAudioRequest {
         require(job.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO)
-        return PlaylistAudioRequest(job.playlistEntries.toList(), job.playlistTitle, job.playlistDeliveryMode, job.playlistResults.toList())
+        return PlaylistAudioRequest(job.playlistEntries.toList(), job.playlistTitle, job.playlistDeliveryMode, job.playlistResults.toList(), source(DownloadSpec.fromJob(job)).takeIf { it.formatSelector.isNotBlank() })
     }
 }

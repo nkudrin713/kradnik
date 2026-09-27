@@ -9,6 +9,33 @@ app_image="${1:?Usage: render-deploy-env.sh <app-image>}"
 : "${TELEGRAM_BOT_API_IMAGE:?TELEGRAM_BOT_API_IMAGE is required}"
 : "${YOUTUBE_PO_TOKEN_PROVIDER_IMAGE:?YOUTUBE_PO_TOKEN_PROVIDER_IMAGE is required}"
 
+admin_enabled="${ADMIN_ENABLED:-false}"
+admin_username="${ADMIN_USERNAME:-}"
+admin_password_hash="${ADMIN_PASSWORD_HASH:-}"
+admin_public_port="${ADMIN_PUBLIC_PORT:-8080}"
+admin_cookie_secure="${ADMIN_COOKIE_SECURE:-false}"
+
+case "$admin_enabled:$admin_cookie_secure" in
+  true:true|true:false|false:true|false:false) ;;
+  *) echo 'ADMIN_ENABLED and ADMIN_COOKIE_SECURE must be true or false' >&2; exit 1 ;;
+esac
+if [ -n "$admin_username" ] && ! [[ "$admin_username" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
+  echo 'ADMIN_USERNAME must contain only letters, digits, underscore, dot, @ or hyphen' >&2
+  exit 1
+fi
+if [ -n "$admin_password_hash" ] && ! printf '%s\n' "$admin_password_hash" | grep -Eq '^\$2[aby]\$1[0-4]\$[./A-Za-z0-9]{53}$'; then
+  echo 'ADMIN_PASSWORD_HASH must be a BCrypt hash with cost 10 through 14' >&2
+  exit 1
+fi
+if [ "$admin_enabled" = true ] && { [ -z "$admin_username" ] || [ -z "$admin_password_hash" ]; }; then
+  echo 'ADMIN_USERNAME and ADMIN_PASSWORD_HASH are required when admin is enabled' >&2
+  exit 1
+fi
+if ! [[ "$admin_public_port" =~ ^[1-9][0-9]{0,4}$ ]] || [ "$admin_public_port" -gt 65535 ]; then
+  echo 'ADMIN_PUBLIC_PORT must be an integer from 1 through 65535' >&2
+  exit 1
+fi
+
 telegram_local_api_enabled="${TELEGRAM_LOCAL_API_ENABLED:-false}"
 case "$telegram_local_api_enabled" in
   true|false) ;;
@@ -51,6 +78,12 @@ youtube_po_token_provider_container_name="kradnik-prod-youtube-pot-provider"
 telegram_bot_api_data_volume_name="kradnik-prod-telegram-bot-api-data"
 media_work_volume_name="kradnik-prod-media-work"
 
+printf 'ADMIN_ENABLED=%s\n' "$admin_enabled"
+printf 'ADMIN_USERNAME=%s\n' "$admin_username"
+# Compose must receive literal dollar signs from the BCrypt hash.
+printf "ADMIN_PASSWORD_HASH='%s'\n" "$admin_password_hash"
+printf 'ADMIN_PUBLIC_PORT=%s\n' "$admin_public_port"
+printf 'ADMIN_COOKIE_SECURE=%s\n' "$admin_cookie_secure"
 printf 'APP_IMAGE=%s\n' "$app_image"
 printf 'APP_CONTAINER_NAME=%s\n' "$app_container_name"
 printf 'POSTGRES_CONTAINER_NAME=%s\n' "$postgres_container_name"

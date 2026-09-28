@@ -34,6 +34,7 @@ private const val FORMAT = "-f"
 private const val OUTPUT = "-o"
 private const val MAX_FILESIZE = "--max-filesize"
 private const val PRINT = "--print"
+private const val OUTPUT_NA_PLACEHOLDER = "--output-na-placeholder"
 private const val FILEPATH_MARKER = "KRADNIK_FILEPATH:"
 private const val FINAL_FILEPATH = "after_move:${FILEPATH_MARKER}%(filepath)j"
 private const val EXTRACTOR_ARGS = "--extractor-args"
@@ -41,6 +42,21 @@ private const val YOUTUBE_PLAYER_CLIENT = "youtube:player_client=mweb"
 
 private const val TITLE_EXT = "%(title)s.%(ext)s"
 private const val MAX_METADATA_STDOUT_CHARS = 32 * 1024 * 1024
+private val SINGLE_MEDIA_METADATA_TEMPLATE = listOf(
+    "\"title\":%(title)j",
+    "\"thumbnail\":%(thumbnail)j",
+    "\"duration\":%(duration)j",
+    "\"width\":%(width)j",
+    "\"height\":%(height)j",
+    "\"filesize\":%(filesize)j",
+    "\"filesize_approx\":%(filesize_approx)j",
+    "\"track\":%(track)j",
+    "\"artist\":%(artist)j",
+    "\"uploader\":%(uploader)j",
+    "\"channel\":%(channel)j",
+    "\"requested_formats\":%(requested_formats.:.{format_id,ext,height,fps,filesize,filesize_approx,vcodec,acodec,tbr,vbr,abr})j",
+    "\"formats\":%(formats.:.{format_id,ext,height,fps,filesize,filesize_approx,vcodec,acodec,tbr,vbr,abr})j",
+).joinToString(separator = ",", prefix = "{", postfix = "}")
 
 private data class YtDlpCommand(
     override val args: List<String>,
@@ -147,7 +163,10 @@ class YtDlpService(
         val result = processRunner.run(
             YtDlpCommand(
                 args = buildList {
-                    add(DUMP_SINGLE_JSON)
+                    add(PRINT)
+                    add(SINGLE_MEDIA_METADATA_TEMPLATE)
+                    add(OUTPUT_NA_PLACEHOLDER)
+                    add("null")
                     add(NO_PLAYLIST)
                     add(NO_WARNINGS)
                     if (formatSelector != null) {

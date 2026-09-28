@@ -1,16 +1,16 @@
 # Kradnik
 
-Kradnik retrieves public media from YouTube, Instagram, and VK and delivers it directly in Telegram.
+Kradnik downloads public media from YouTube, Instagram, and VK to Telegram.
 
 It supports:
 
-- video quality selection, audio-only downloads, and cover images;
-- YouTube playlist audio as 320 kbps CBR MP3, delivered in audio albums of up to 10 tracks or a ZIP archive, up to 100 tracks per job;
-- full Instagram posts with an image, video, or mixed carousel and its caption in one Telegram Rich Message;
-- direct chats and inline guest mode; playlists and full Instagram posts are available only in direct chats;
+- video quality, audio-only, and cover downloads;
+- YouTube playlists as 320 kbps CBR MP3, in audio albums or a ZIP (up to 100 tracks);
+- Instagram posts as ordered, mixed photo/video albums with captions;
+- direct chats and inline guest mode; playlists and posts require a direct chat;
 - cancellation of queued and running downloads;
-- English and Russian interfaces, plus the informal Russian “Свойский” option;
-- Telegram `file_id` reuse and cloud or local Bot API delivery (Bot API 10.2 or newer for Rich Messages).
+- English, Russian, and informal Russian (“Свойский”) interfaces;
+- Telegram `file_id` reuse with cloud or local Bot API.
 
 Playlist video downloads, playlists from other platforms, private content, and authentication bypasses are not supported.
 
@@ -18,97 +18,83 @@ Playlist video downloads, playlists from other platforms, private content, and a
 
 ![Kradnik request flow](docs/request-flow.svg)
 
-The diagram shows the single-media path. Playlist jobs use `PlaylistQueueWorker` and `PlaylistJobProcessor` with the same persisted queue and job states.
+The diagram shows single-media jobs. Playlists use `PlaylistQueueWorker` and `PlaylistJobProcessor` with the same persisted queue. `TelegramUpdateHandler` routes requests; `DownloadChoicePlanner` and `DownloadChoiceCoordinator` prepare options and save the menu. `DownloadChoiceHandler` turns a selection into a job, which a worker claims. `DownloadEngine` delegates to yt-dlp or Instagram adapters.
 
-`DownloadChoicePlanner` routes planning to the standard media, Instagram, or YouTube playlist planner. Standard and Instagram options share `MediaChoiceBuilder`; `DownloadEngine` delegates source metadata and downloads to explicit yt-dlp and Instagram adapters.
-
-`TelegramUpdateHandler` validates and routes links and inline queries. `DownloadChoiceCoordinator` runs the bounded metadata task, persists the choice session, and publishes the menu. The saved `DownloadSpec` contains the selected format, source arguments, output type, and cache identity. `DownloadChoiceHandler` accepts a saved selection, and `TelegramDownloadStarter` creates a queued job through `DownloadJobService`. `DownloadQueueWorker` atomically claims it as `PROCESSING`.
-
-- Metadata is loaded before enqueueing to build the available format menu and estimate sizes.
-- Metadata work uses 2 threads and accepts at most 32 pending requests.
-- YouTube playlists offer audio messages or ZIP for all tracks when there are at most 100 entries; larger playlists offer the first 100 or last 100. Both delivery modes use 320 kbps CBR MP3.
-- ZIP archives are named `<file count> – <playlist title>.zip`; numbered entries preserve playlist order. The count includes only successfully downloaded tracks. Archives exceeding the configured Telegram upload limit are rejected without splitting.
-- Instagram videos keep the video/audio menu and add a full-post option; static posts and carousels expose one full-post option. Up to 20 ordered photos/videos are supported. Native Instagram music that is absent from public metadata is not downloaded; no Instagram login is used.
-- Download buttons use blue for full posts/video, green for audio, the theme default for covers/ZIP, and red for cancellation. Unavailable options keep the default style.
-- Menu snapshots, ownership, and language preferences are stored in PostgreSQL, so callbacks survive restarts.
+- Metadata planning uses 2 threads and a queue of 32 requests. It loads formats and size estimates before enqueueing.
+- Playlists up to 100 tracks offer all tracks; larger lists offer the first or last 100. Both audio and ZIP modes use 320 kbps CBR MP3. ZIP filenames include the successful file count and playlist title; oversized archives are rejected.
+- Instagram videos offer video, audio, and full-post options; static posts offer the full post. Posts support up to 20 ordered attachments. Public metadata may omit native music; Instagram login is not used.
+- Available actions are green, cancellation is red, and unavailable options are hidden. Menu titles use inline monospace.
+- PostgreSQL stores menus, ownership, and language so callbacks survive restarts.
 
 ### Single-media production
 
-`DownloadRequestMapper` reads the saved selection into `SingleMediaRequest`. `DownloadJobProcessor` checks `TelegramResultCache` first. On a miss, it creates a workspace and selects a handler through `SingleMediaHandlers`. An invalid cached Telegram file reference falls back to a fresh download; other delivery errors fail the job.
-
-`SingleMediaHandlers` selects by `OutputType`; each row below is an independent production path. `DownloadEngine` selects the source adapter, using yt-dlp for YouTube/VK and the Instagram adapter for Instagram. `DeliveryContext` carries the Telegram destination and post text through delivery.
+`DownloadJobProcessor` maps the saved selection, checks `TelegramResultCache`, then selects a handler by `OutputType`. Invalid cached Telegram references trigger a fresh download; other delivery errors fail the job. `DeliveryContext` carries the destination and post text.
 
 ![Video, audio, cover, and post production](docs/single-media-production.svg)
 
 | Handler | Production and validation | Result |
 | --- | --- | --- |
-| `VideoHandler` | Metadata and preflight, source video download, `TelegramVideoPreparer`, final size check | `MediaArtifact.Video` |
-| `AudioHandler` | Metadata and audio preflight, quality adjustment when needed, source audio download, final size check | `MediaArtifact.Audio` with title, performer, and duration |
-| `CoverHandler` | Catalog metadata and preflight, required thumbnail URL, `CoverDownloader`, final size check | `MediaArtifact.Document` |
-| `InstagramPostHandler` | Metadata and preflight, ordered Instagram photo/video downloads in isolated item directories, per-video preparation, total media size bounded by the configured Telegram upload limit | `MediaArtifact.Post` |
-| `ImagesHandler` | Instagram image metadata and ordered downloads with per-photo limits; no aggregate single-file size check | `MediaArtifact.Photos` |
+| `VideoHandler` | Preflight, download, Telegram preparation, size check | `MediaArtifact.Video` |
+| `AudioHandler` | Preflight, quality selection, download, size check | `MediaArtifact.Audio` with metadata |
+| `CoverHandler` | Thumbnail lookup, download, size check | `MediaArtifact.Document` |
+| `InstagramPostHandler` | Ordered mixed-media download and video preparation | `MediaArtifact.Post` |
+| `ImagesHandler` | Ordered Instagram images with per-photo limits | `MediaArtifact.Photos` |
 
-Audio preflight still checks selected source sizes when duration-based estimation is unavailable. `InstagramSourceAdapter` uses embed metadata, falling back to yt-dlp post metadata when the embed is unavailable. Carousel fallback downloads select one position at a time. It downloads video directly when a media URL is available; audio and video without that URL use yt-dlp.
+Audio preflight checks source sizes when duration estimates are missing. Instagram uses embed metadata, then yt-dlp as fallback; available media URLs download directly. Carousel fallback selects one item at a time.
 
 ### Telegram delivery
 
 ![Direct-chat and inline Telegram delivery](docs/telegram-delivery-flow.svg)
 
-`TelegramFileSender` delivers fresh `MediaArtifact` results or typed `CachedMedia` references using `DeliveryContext`. Full posts are delivered by `TelegramPostSender` as one Rich Message with a caption and ordered media; cached posts retain each media type and file ID. Fresh inline results are uploaded to the configured storage chat before the inline message is edited; cached inline results reuse the file ID directly. Photo groups and full Instagram posts are direct-chat only. `TelegramMediaSender` owns ordinary media API calls; the processor passes the delivery receipt to `JobLifecycle`.
+`TelegramFileSender` sends fresh files or cached Telegram references through `DeliveryContext`.
 
-Fresh artifacts hold local file paths; cached media hold Telegram file references. Inline delivery supports video, audio, and documents through the corresponding inline-edit methods. The delivery receipt contains the reusable file IDs, including ordered media types for full posts, and is persisted only if `JobLifecycle.complete` succeeds.
+`TelegramPostSender` preserves photo/video order in ordinary albums of up to 10 items. Eleven items split 9 + 2; two albums receive `1/2` and `2/2` caption markers. Post text goes in the first caption if it fits Telegram’s 1024-character limit alongside the marker; otherwise it follows as a reply, split into 4096-character messages. Single items use `sendPhoto` or `sendVideo`. Cached posts use the same path and retain media types.
+
+Fresh inline results first go to the storage chat; cached results reuse their file ID. Photo groups and full posts require direct chats. Delivery receipts contain reusable file IDs and are persisted only after successful job completion.
 
 ### Playlist audio messages
 
 ![YouTube playlist audio-message workflow](docs/playlist-audio-flow.svg)
 
-`PlaylistJobProcessor` maps the persisted job to `PlaylistAudioRequest` and selects `AudioMessagesPlaylistWorkflow`. The workflow skips recorded positions, including failures, and processes remaining tracks with bounded parallelism. It reuses cached audio or downloads 320 kbps CBR MP3 through `PlaylistEntryDownloader` and stages it with `TelegramPlaylistSender` in the storage chat.
+`PlaylistJobProcessor` runs `AudioMessagesPlaylistWorkflow`. It skips recorded results, reuses cached audio, and downloads remaining tracks in bounded parallelism. Fresh MP3 files are staged in the storage chat.
 
-The saved playlist selection contains the track range prepared by `YouTubePlaylistPlanner` and the `AUDIO_MESSAGES` delivery mode; `PlaylistQueueWorker` claims the job after enqueueing. New selections save MP3 320 kbps CBR parameters and use a separate cache identity. Previously saved menus and jobs retain their original encoding parameters; legacy 96 kbps entries still share the single-audio identity. Completed audio-message playlists can supply cached tracks only when their saved encoding parameters match. A fresh track is uploaded to the configured storage chat before `DownloadJobService.savePlaylistResult` records its file ID.
+Both playlist modes prefer audio-only sources. When only combined video/audio is available, the downloader extracts audio without changing the selected bitrate or limits.
 
-Each item saves a file ID or an error before its temporary directory is removed. Once all pending entries finish, the workflow checks that the job is still processing, reloads saved results, and delivers successful tracks in playlist order, in audio albums of up to 10 tracks (100 tracks produce ten albums). A single remaining track is sent with `sendAudio`; every track has its own message ID. Delivery reuses `file_id` values and pauses for one second between batches. No successful tracks means failure. After conditional completion, a partial-success summary lists failed entries by their original position, with linked titles and localized reasons. If every entry fails, the failure report lists all recorded failures. Long reports are split into Telegram messages. After successful audio delivery with at least two tracks, a localized hint explains the player direction control. Telegram clients determine playback order across albums; the bot preserves source order and does not reverse batches. Restart resumes entries without a recorded outcome; user cancellation propagates without recording a new item failure.
+Selections persist the track range, delivery mode, and encoding. New 320 kbps jobs use a separate cache identity; older jobs retain their saved settings. Cached tracks are reused only with matching encoding. The bot saves each fresh track’s file ID after staging it.
 
-Storage-chat access is checked before downloading uncached entries. Item directories are removed in `finally` after staging or failure. Recognized source failures and oversized individual audio files are skipped; storage, disk, and delivery errors stop the job. Cancellation suppresses late completion and the summary, and the processor cleans the job workspace in `finally`.
+Each track saves a file ID or error before cleanup. Successful tracks arrive in playlist order, in albums of up to 10; a lone track uses `sendAudio`. There is a one-second pause between albums. The progress message becomes the final count or failure report, with failed positions, linked titles, and localized reasons; long reports continue in separate messages. Multiple audio tracks also trigger a playback-direction hint. Restart resumes unrecorded tracks, while cancellation stops late results.
 
-New menu size estimates use 320 kbps and require known durations for every selected entry. Unknown sizes are labeled explicitly; estimates do not disable either delivery mode. Actual output sizes enforce the configured upload limit. Long entries remain whole, without lowering bitrate or trimming. Each entry is monitored during download and conversion, including when source sizes are unknown. Temporary entry data is bounded to three upload limits, with at least 64 MiB free disk space.
+The bot checks storage-chat access before fresh downloads. Source and individual size failures skip a track; storage, disk, and delivery failures stop the job. Workspaces are cleaned after completion, failure, or cancellation.
 
-Playlist progress shows processed, successful, and skipped counts plus up to two active titles, updating at most once every five seconds. A one-time long-wait warning appears when uncached work starts and includes at least 20 entries or one hour of known duration. Cached-only delivery does not trigger it. Cancellation prevents late progress from replacing the cancelled status.
+Menu size estimates use 320 kbps and require known durations; unknown sizes are labeled without disabling either mode. Actual output enforces the upload limit. Long tracks are not trimmed or downsampled. Temporary data is limited to three upload limits, with at least 64 MiB free disk.
+
+Progress shows counts and up to two active titles, updating at most every five seconds. A long-wait warning appears in that status for uncached work of at least 20 tracks or one hour; cached-only delivery omits it. Cancellation prevents later edits.
 
 ### Playlist ZIP
 
 ![YouTube playlist ZIP workflow](docs/playlist-zip-flow.svg)
 
-`ZipPlaylistWorkflow` downloads tracks with bounded parallelism, packages successful local files with `PlaylistZipBuilder`, and sends the archive directly through `TelegramPlaylistSender`. This path does not reuse Telegram track file IDs or require a storage chat. Every attempt rebuilds local files, including after restart.
+`ZipPlaylistWorkflow` downloads tracks in bounded parallelism, packages successful files, and sends the archive directly. It needs no storage chat and rebuilds local files after restart.
 
-Planning saves the selected track range and `ZIP` delivery mode. `PlaylistQueueWorker` claims the job, and `PlaylistJobProcessor` maps it to `PlaylistAudioRequest` and creates the workspace. `PlaylistEntryDownloader` produces a local 320 kbps CBR MP3 for each successful entry. Packaging reports the `PACKING` phase; archive delivery reports `UPLOADING` and sends a document to the user.
+The saved job contains the selected range and ZIP mode. Successful tracks become local 320 kbps CBR MP3 files. Packaging and upload update the job status.
 
-One timeout covers downloading, packaging, and uploading; exceeding it fails the attempt. `PlaylistWorkspaceBudget` checks workspace size and free space before starting and every 250 ms throughout the attempt; the sum of downloaded track sizes and the final archive must each fit the upload limit. Recognized source failures skip individual tracks; size limits, disk failures, and other non-source errors abort the job. An empty result also fails. State checks precede packaging and upload, conditional completion precedes the linked failure report for this attempt, and the processor cleans all local files in `finally`, including after failure or cancellation.
+One timeout covers download, packaging, and upload. `PlaylistWorkspaceBudget` checks size and free space before and during the job; downloaded tracks and the final ZIP must each fit the upload limit. Source failures skip tracks; size, disk, and other errors abort the job. An empty result fails. Completion precedes the final status, and cleanup always runs.
 
 ### Runtime models and cache
 
-`DownloadJob` remains the persistence model and `DownloadSpec` the stored menu snapshot. Runtime requests separate single-media and playlist data; `SourceRequest` contains source download options. `ResultKeyFactory` centralizes result identities, while `TelegramReceiptCodec` preserves the stored file-ID and photo-group formats and keeps playlist completion markers separate from cached media. Existing queued selections and keys are read without reconstruction or re-versioning.
+`DownloadJob` persists work; `DownloadSpec` persists menu choices. Runtime requests separate single-media and playlist paths. `ResultKeyFactory` owns cache identities, and `TelegramReceiptCodec` preserves existing receipt formats. Saved jobs and keys remain compatible.
 
 ## Queue and lifecycle
 
-- The application runs as a single instance.
-- `DOWNLOAD_WORKERS` controls single-media worker loops; the default is 3.
-- `DOWNLOAD_PLAYLIST_WORKERS` controls a separate pool of playlist worker loops; the default is 1, in addition to the single-media workers.
-- Each playlist downloads up to `DOWNLOAD_PLAYLIST_ITEM_PARALLELISM` tracks concurrently; the default is 2.
-- Pending jobs stay in PostgreSQL. Workers claim them with `FOR UPDATE SKIP LOCKED` and `UPDATE ... RETURNING`.
-- Claiming and state changes use short transactions; download and Telegram upload I/O run outside them.
-- Job states are `QUEUED`, `PROCESSING`, `COMPLETED`, `FAILED`, and `CANCELLED_BY_USER`.
-- Both processors use `JobLifecycle` for conditional completion and failure through `DownloadJobService`. A cancelled job cannot be completed or failed by a late result; the playlist summary is sent only when completion succeeds.
-- Handlers and workflows report `JobProgress` phases. `TelegramJobProgress` maps phases and semantic `DownloadFailure` reasons to Telegram statuses; processors own cancellation handling and workspace cleanup in `finally`.
-- Failed jobs are not retried automatically; users can submit the link again. A playlist can complete with partial results when individual tracks fail.
-- Startup removes abandoned work directories and returns `PROCESSING` jobs to `QUEUED`.
-- Shutdown interrupts external I/O and waits up to 30 seconds for each worker pool.
-- Interrupted jobs are retried after restart. Audio-message playlists retain recorded Telegram file IDs and process remaining entries; ZIP playlists rebuild from scratch because their local files are temporary.
-- A crash after Telegram accepts a file but before `COMPLETED` can produce a duplicate message.
-- Overlapping application instances are not supported.
+- Run one application instance. `DOWNLOAD_WORKERS` defaults to 3, `DOWNLOAD_PLAYLIST_WORKERS` to 1, and per-playlist `DOWNLOAD_PLAYLIST_ITEM_PARALLELISM` to 2.
+- PostgreSQL stores `QUEUED`, `PROCESSING`, `COMPLETED`, `FAILED`, and `CANCELLED_BY_USER` jobs. Workers claim rows with `FOR UPDATE SKIP LOCKED`; external I/O runs outside transactions.
+- `JobLifecycle` makes completion and failure conditional, so cancelled jobs cannot finish later. `TelegramJobProgress` reports phases and user-facing errors. Partial playlist success counts as completion.
+- Failed jobs are not retried automatically. Restart requeues interrupted work: audio playlists retain recorded file IDs, while ZIP jobs rebuild local files. Startup removes abandoned directories.
+- Shutdown interrupts I/O and waits up to 30 seconds per worker pool. A crash after Telegram accepts a file but before completion can duplicate a message. Overlapping instances are unsupported.
 
 ## Embedded admin dashboard
 
-The monitoring dashboard runs in the bot JVM and container. Spring MVC serves local HTML/CSS/JavaScript; no frontend build, CDN, Node process, WebSocket server, or metrics service is required. The responsive layout supports phones; wide tables scroll inside their panels. A centered login form uses Spring Security sessions and a BCrypt password hash. The dashboard and its API require authentication.
+The responsive dashboard runs inside the bot JVM and container, with Spring MVC, static assets, and no separate frontend service. It supports phones and uses authenticated Spring Security sessions with a BCrypt password.
 
 ```mermaid
 flowchart LR
@@ -122,37 +108,37 @@ flowchart LR
     API --> Browser[Dashboard polling every 2 seconds]
 ```
 
-Enable it with `ADMIN_ENABLED=true`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD_HASH`. The hash must use BCrypt cost 10–14. Generate a hash interactively with `htpasswd -nBC 10 admin` where available, then copy only the hash after `admin:`. When using a Compose `.env` file, single-quote the hash to preserve its `$` characters. Never commit credentials or pass plaintext passwords on a command line.
+Enable with `ADMIN_ENABLED=true`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD_HASH` (BCrypt cost 10–14). Generate a hash with `htpasswd -nBC 10 admin` and copy the part after `admin:`. Single-quote it in Compose `.env` to preserve `$`; keep credentials out of Git and command-line arguments.
 
-Compose publishes `127.0.0.1:${ADMIN_PUBLIC_PORT:-8080}` on the host. Open `/admin` through an SSH tunnel, for example `ssh -L 8080:127.0.0.1:8080 user@server`, or an existing HTTPS reverse proxy. For HTTPS, set `ADMIN_COOKIE_SECURE=true`; ordinary HTTP access with secure cookies will not keep the login session. Native non-Compose runs can set `ADMIN_PORT` (default 8080). The web listener remains present when `ADMIN_ENABLED=false`, but access is denied and the collector/database pool are not created. Blank or invalid credentials prevent startup when the dashboard is enabled.
+Compose binds `127.0.0.1:${ADMIN_PUBLIC_PORT:-8080}`. Access `/admin` through an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 user@server`) or HTTPS proxy; set `ADMIN_COOKIE_SECURE=true` for HTTPS. Non-Compose runs use `ADMIN_PORT` (default 8080). When disabled, access is denied and monitoring resources are not created. Invalid enabled credentials prevent startup.
 
-For workflow deployments, configure the GitHub `production` environment: secret `ADMIN_PASSWORD_HASH`, variables `ADMIN_ENABLED`, `ADMIN_USERNAME`, `ADMIN_PUBLIC_PORT` and `ADMIN_COOKIE_SECURE`. The deploy workflow regenerates `.env` from these values; manual edits to the server file are replaced on the next release. The renderer validates booleans, port and BCrypt format and quotes the hash for Compose. Workflow usernames support letters, digits, underscore, dot, `@` and hyphen. Keep the plaintext password in a local password manager. An external HTTPS domain requires a separate DNS record, reverse proxy and certificate; the application port should remain bound to localhost.
+For workflow deployments, set secret `ADMIN_PASSWORD_HASH` and variables `ADMIN_ENABLED`, `ADMIN_USERNAME`, `ADMIN_PUBLIC_PORT`, `ADMIN_COOKIE_SECURE` in the GitHub `production` environment. Deployment regenerates `.env`; server edits are overwritten. The renderer validates values and quotes the hash. Keep the plaintext password in a local password manager. Public HTTPS requires DNS, a reverse proxy, and a certificate; keep the app port on localhost.
 
-Sessions expire after 15 minutes of inactivity and allow at most three concurrent logins. Cookies are HttpOnly and SameSite=Strict; CSRF protection covers login and logout. A global in-memory limit allows ten login submissions per minute. It deliberately does not trust client-supplied forwarding headers. Active dashboard polling keeps a session active; use logout when finished. Credential changes require a restart.
+Sessions expire after 15 idle minutes; at most three logins are active. Cookies are HttpOnly and SameSite=Strict, login/logout use CSRF protection, and login attempts are limited to ten per minute. Polling keeps sessions active; credential changes require a restart.
 
 The dashboard shows:
 
-- Logical worker slots for metadata preparation, single downloads, and playlists: idle, busy, backoff after a loop error, or stopped; current job, platform, phase and elapsed time where applicable. Playlist track activity and waiting tracks are separate from parent jobs.
-- Persisted queued/processing job counts and the oldest queued job by workload. Metadata preparation has its own bounded in-memory queue. A long-running task is not automatically classified as stuck.
-- Completed, failed and user-cancelled jobs over rolling 15-minute, one-hour and 24-hour windows. These values use PostgreSQL `completed_at`; a partially successful playlist still counts as completed.
-- Persisted error counts for metadata preparation, playlist items, worker iterations and metadata queue rejection. These minute-resolution counters survive releases and overlap with failed jobs; do not sum them into a single failure total. They do not represent every application log error.
-- Up to one hour of queue history, with one sample per minute; the current minute updates live. Saved samples are restored after restart.
+- Worker state, current job, platform, phase, elapsed time, and playlist track activity.
+- Queued/processing counts, oldest queued job, and the separate metadata queue.
+- Completed, failed, and cancelled jobs over 15 minutes, one hour, and 24 hours. Partial playlists count as completed.
+- Persisted metadata, playlist-item, worker-loop, and queue-rejection errors. These counters overlap with failed jobs and are not a total of all application errors.
+- One hour of minute-by-minute queue history, restored after restart.
 
-All three tables support sorting by column headers (click, Enter or Space). Repeated activation reverses the direction; each table keeps its selection during polling and period changes. Sorting runs entirely in the browser: counts, job IDs and elapsed times use their underlying numeric values, missing values stay last, and playlist tracks sort by active count then waiting count.
+All three tables sort by headers (click, Enter, or Space), reverse on a second activation, and keep their order during refreshes. Sorting is browser-side and numeric where appropriate.
 
-Memory monitoring reads JVM MXBeans and the process's Linux memory cgroup (v1/v2) in the existing collector, at most once every five seconds (normally every six seconds with its two-second tick). It adds no worker hooks, thread, dependency, object traversal, forced GC or remote monitoring service. The dashboard shows heap used/committed/max, non-heap total with metaspace/code cache, cgroup usage/limit, and rolling GC count/time deltas. GC time is the JVM's approximate accumulated collection time, not an exact application-pause measurement; startup and collection gaps show the actual measured window. Unsupported counters are unavailable, not zero. Cgroup usage includes child processes such as yt-dlp/ffmpeg and charged file cache; it is not JVM RSS or total VPS usage. The displayed limit belongs to the visible memory cgroup; limits of hidden ancestor groups cannot be detected. Missing or unlimited limits do not produce a percentage.
+The existing collector reads JVM MXBeans and Linux cgroup v1/v2 counters roughly every six seconds. It shows heap, non-heap, cgroup usage/limit, and GC count/time changes without extra worker hooks or forced GC. GC time is approximate; cgroup usage includes child processes and file cache, not total VPS memory. Unsupported or unlimited values display as unavailable.
 
-V34 adds memory minute samples with seven-day retention. The UI restores up to one hour of heap/cgroup history across releases, with gaps left visible. Completed minute samples are written once per minute through the same bounded admin database connection; graceful shutdown also flushes the current minute. Buffered samples are bounded to one hour during outages. An abrupt stop can lose the unfinished minute and samples since the last successful write. Memory acquisition and persistence failures are reported separately, and cannot block bot workers; the collector, JVM and database still consume shared VPS resources.
+Memory samples persist once per minute for seven days; the UI shows the latest hour across releases, including gaps. Graceful shutdown flushes the current minute. Abrupt stops or database outages can lose recent samples; acquisition and persistence errors are shown separately and do not block workers.
 
-`download_jobs` remains the source of truth for queue state and completed job outcomes; these values are not duplicated in a separate event log. `AdminStatisticsStore` persists only information unavailable from that table: additional error counters and historical queue-length samples.
+`download_jobs` supplies queue and outcome statistics. `AdminStatisticsStore` persists only extra error counters and history samples.
 
-One collector refreshes queue aggregates every two seconds after the previous collection finishes, and outcome aggregates at most once per ten seconds. Requests read the cached snapshot without SQL. The collector owns one separate PostgreSQL connection at most, shared by dashboard reads and aggregate writes, with a 500 ms statement timeout, 100 ms lock timeout, 500 ms connection acquisition timeout and bounded socket/connect timeouts. V33 adds partial indexes for active and terminal jobs and two small aggregate tables. If a query fails or times out, the previous values remain visible with their last successful update time; missing values are not reported as zero. Very large recent histories can exceed the query budget and require a later aggregation design.
+One collector refreshes queue aggregates every two seconds and outcomes every ten seconds. HTTP requests read a cached snapshot without SQL. Monitoring uses at most one separate PostgreSQL connection, bounded by 500 ms statement/acquisition and 100 ms lock timeouts. Failed queries retain the last value and timestamp instead of showing zero; very large histories may exceed this budget.
 
-Backend instrumentation depends only on the `BotTelemetry` execution contract, not on controllers, dashboard DTOs, JPA entities or web configuration. Its integration points are the two queue loops, metadata execution, `JobProgressFactory` for all phase changes, and `PlaylistItems` for both playlist delivery modes. Platform adapters and media handlers do not know about the admin. `AdminQueries` isolates the dashboard's two job-table SQL projections from repository implementation changes; schema migrations affecting their columns must update these projections and their PostgreSQL integration tests. The browser consumes only `DashboardSnapshot`.
+Workers and metadata planning publish only to `BotTelemetry`; adapters and media handlers do not depend on the dashboard. `AdminQueries` isolates its job-table SQL, and the browser reads `DashboardSnapshot`. Schema changes to queried columns require matching query and PostgreSQL test updates.
 
-Additional counters are flushed at most once every ten seconds and again after workers stop on graceful shutdown. Per-process absolute minute counts make retries idempotent, even if a database response is lost after commit. Queue samples are upserted by minute. Aggregate rows are retained for seven days and pruned hourly; the UI currently displays error windows up to 24 hours and queue history for one hour. Live worker states are rebuilt after restart. An abrupt process/container loss can discard counters since the last successful flush (normally about ten seconds; longer during database outages). Persistence outages keep pending counters in a bounded 24-hour memory window and are indicated on the dashboard; they do not block workers.
+Extra counters flush at most every ten seconds and on graceful shutdown. Minute-level writes are idempotent, retained seven days, and pruned hourly. Worker state restarts fresh; abrupt stops may lose counters since the last flush. Database outages retain pending counters in bounded memory for 24 hours and appear on the dashboard.
 
-Worker instrumentation only updates bounded memory; it performs no database or network I/O. The web server is limited to eight request threads and 32 connections. Hidden browser tabs pause polling; failed requests use bounded exponential backoff. Browser payloads exclude source URLs, Telegram identities, credentials and exception messages. CPU, heap and GC remain shared with the bot.
+Worker instrumentation updates bounded memory without I/O. The web server allows eight request threads and 32 connections; hidden tabs pause polling, and failed requests back off. API payloads omit URLs, Telegram identities, credentials, and exception messages.
 
 ## Code map
 

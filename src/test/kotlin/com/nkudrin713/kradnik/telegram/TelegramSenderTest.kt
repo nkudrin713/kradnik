@@ -102,6 +102,19 @@ class TelegramSenderTest {
     }
 
     @Test
+    fun editsFinalStatusAsHtmlAndRemovesCancelKeyboard() {
+        val request = slot<BaseRequest<*, *>>()
+        every { bot.execute(capture(request)) } returns okResponse()
+
+        sender.editFinalMessage(TelegramMessageAddress.Chat(100, 10), "1. <a href=\"https://example.com\">Track</a>", html = true)
+
+        val actual = request.captured as EditMessageText
+        actual.getParameters()["message_id"] shouldBe 10
+        actual.getParameters()["parse_mode"] shouldBe "HTML"
+        actual.getParameters()["reply_markup"] shouldBe InlineKeyboardMarkup()
+    }
+
+    @Test
     fun editsDownloadChoice() {
         val keyboard = InlineKeyboardMarkup(InlineKeyboardButton("Video"))
         val request = slot<BaseRequest<*, *>>()

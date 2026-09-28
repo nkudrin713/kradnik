@@ -21,7 +21,7 @@ import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 
-/** Preserves saved selections. The caller owns the directory, including partial output on failure. */
+/** Preserves saved encoding parameters. The caller owns the directory, including partial output on failure. */
 @Component
 class PlaylistEntryDownloader(
     private val ytDlpService: YtDlpService,
@@ -52,7 +52,12 @@ class PlaylistEntryDownloader(
             }
         }
         try {
-            ytDlpService.download(spec, destination).also {
+            // YouTube sometimes exposes only combined video/audio formats for an otherwise playable track.
+            val downloadSpec = when (spec.formatSelector) {
+                YtDlpPresets.YOUTUBE_AUDIO_FORMAT, "ba", "bestaudio" -> spec.copy(formatSelector = YtDlpPresets.AUDIO_FORMAT_WITH_VIDEO_FALLBACK)
+                else -> spec
+            }
+            ytDlpService.download(downloadSpec, destination).also {
                 checkWorkspace(destination)
                 if (Files.size(it.file) > limits.maxUploadBytes) throw DownloadRejectedException("Playlist item exceeds size limit")
             }

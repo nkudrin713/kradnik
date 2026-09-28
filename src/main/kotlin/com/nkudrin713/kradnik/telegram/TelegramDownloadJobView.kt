@@ -14,14 +14,16 @@ class TelegramDownloadJobView(private val messages: TelegramMessages) {
     fun cancelKeyboard(jobId: Long, language: BotLanguage): InlineKeyboardMarkup = InlineKeyboardMarkup(
         arrayOf(
             InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_CANCEL))
-                .callbackData(DownloadJobCallback.encode(DownloadJobAction.CANCEL, jobId)),
+                .callbackData(DownloadJobCallback.encode(DownloadJobAction.CANCEL, jobId))
+                .style("danger"),
         ),
     )
 
     fun backKeyboard(jobId: Long, language: BotLanguage): InlineKeyboardMarkup = InlineKeyboardMarkup(
         arrayOf(
             InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_BACK_TO_OPTIONS))
-                .callbackData(DownloadJobCallback.encode(DownloadJobAction.BACK, jobId)),
+                .callbackData(DownloadJobCallback.encode(DownloadJobAction.BACK, jobId))
+                .style("success"),
         ),
     )
 }

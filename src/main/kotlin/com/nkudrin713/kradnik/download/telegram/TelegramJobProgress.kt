@@ -26,7 +26,9 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
 
     fun forJob(job: DownloadJob): JobProgress = object : JobProgress {
         private var lastUpdate = 0L
-        private var warned = false
+        private var longWaitWarning: String? = null
+
+        private fun withWarning(text: String): String = longWaitWarning?.let { "$text\n\n$it" } ?: text
 
         override fun update(phase: DownloadPhase) {
             bestEffort(job) {
@@ -37,7 +39,7 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
                     DownloadPhase.UPLOADING -> TelegramDownloadStatus.UPLOADING
                 }
                 if (job.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO) {
-                    sender.editPlaylistProgress(address, messages.text(job.language, status.message), job.requiredId(), job.language) {
+                    sender.editPlaylistProgress(address, withWarning(messages.text(job.language, status.message)), job.requiredId(), job.language) {
                         jobs.isProcessing(job.requiredId())
                     }
                 } else {
@@ -50,24 +52,25 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         override fun playlist(progress: PlaylistProgress) {
             bestEffort(job) {
                 if (!jobs.isProcessing(job.requiredId())) return@bestEffort
-                if (progress.longWait && !warned) {
-                    warned = true
+                val newWarning = progress.longWait && longWaitWarning == null
+                if (newWarning) {
                     val message = if (progress.total == 1) TelegramMessage.PLAYLIST_LONG_ITEM_WARNING else TelegramMessage.PLAYLIST_LONG_WARNING
-                    sender.sendMessage(job.telegramChatId, messages.text(job.language, message))
+                    longWaitWarning = messages.text(job.language, message)
                 }
                 val now = System.nanoTime()
-                if (lastUpdate != 0L && now - lastUpdate < 5_000_000_000L) return@bestEffort
+                if (!newWarning && lastUpdate != 0L && now - lastUpdate < 5_000_000_000L) return@bestEffort
                 lastUpdate = now
                 val text = messages.text(job.language, TelegramMessage.PLAYLIST_PROGRESS, progress.successful + progress.failed, progress.total, progress.successful, progress.failed)
                 val active = progress.active.take(2).joinToString("\n") { "${it.position}. ${it.title.take(160)}" }
                 val detail = if (active.isBlank()) "" else "\n\n" + messages.text(job.language, TelegramMessage.PLAYLIST_ACTIVE_ITEMS, active)
                 val address = address(job) ?: return@bestEffort
-                sender.editPlaylistProgress(address, text + detail, job.requiredId(), job.language) { jobs.isProcessing(job.requiredId()) }
+                sender.editPlaylistProgress(address, withWarning(text + detail), job.requiredId(), job.language) { jobs.isProcessing(job.requiredId()) }
             }
         }
     }
 
     fun completed(job: DownloadJob) {
+        if (job.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO) return
         if (job.telegramInlineMessageId != null) return
         val id = job.telegramStatusMessageId ?: return
         bestEffort(job) { sender.deleteMessage(job.telegramChatId, id) }
@@ -101,10 +104,16 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
             bestEffort(job) { sender.sendMessage(job.telegramChatId, messages.text(job.language, TelegramMessage.PLAYLIST_PLAYBACK_HINT)) }
         }
         bestEffort(job) {
-            if (result.failedCount == 0) return@bestEffort
+            val address = address(job)
+            if (result.failedCount == 0) {
+                address?.let {
+                    sender.editFinalMessage(it, messages.text(job.language, TelegramMessage.PLAYLIST_COMPLETED, result.successfulCount, job.playlistEntries.size))
+                }
+                return@bestEffort
+            }
             val header = messages.text(job.language, TelegramMessage.PLAYLIST_PARTIAL_SUCCESS, result.successfulCount, job.playlistEntries.size)
-            PlaylistFailureReport(messages).render(header, job.playlistEntries, result.failures, job.language)
-                .forEach { sender.sendHtmlMessage(job.telegramChatId, it) }
+            val report = PlaylistFailureReport(messages).render(header, job.playlistEntries, result.failures, job.language)
+            publishReport(job, report)
         }
     }
 
@@ -112,8 +121,7 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         bestEffort(job) {
             if (error is PlaylistEmptyException) {
                 val header = messages.text(job.language, TelegramMessage.PLAYLIST_ALL_FAILED)
-                PlaylistFailureReport(messages).render(header, job.playlistEntries, error.failures, job.language)
-                    .forEach { sender.sendHtmlMessage(job.telegramChatId, it) }
+                publishReport(job, PlaylistFailureReport(messages).render(header, job.playlistEntries, error.failures, job.language))
                 return@bestEffort
             }
             val key = when {
@@ -129,6 +137,21 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
     private fun address(job: DownloadJob): TelegramMessageAddress? {
         job.telegramInlineMessageId?.let { return TelegramMessageAddress.Inline(it) }
         return job.telegramStatusMessageId?.let { TelegramMessageAddress.Chat(job.telegramChatId, it) }
+    }
+
+    private fun publishReport(job: DownloadJob, report: List<String>) {
+        val address = address(job)
+        if (address == null) {
+            report.forEach { sender.sendHtmlMessage(job.telegramChatId, it) }
+            return
+        }
+        try {
+            sender.editFinalMessage(address, report.first(), html = true)
+        } catch (error: Exception) {
+            logger.warn("JOB[{}] final status edit failed; sending report separately", job.id, error)
+            sender.sendHtmlMessage(job.telegramChatId, report.first())
+        }
+        report.drop(1).forEach { sender.sendHtmlMessage(job.telegramChatId, it) }
     }
 
     private fun bestEffort(job: DownloadJob, action: () -> Unit) {

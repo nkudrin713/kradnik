@@ -168,6 +168,10 @@ class TelegramSender(
         editText(address, text, keyboard)
     }
 
+    fun editFinalMessage(address: TelegramMessageAddress, text: String, html: Boolean = false) {
+        editText(address, text, EMPTY_KEYBOARD, if (html) ParseMode.HTML else null)
+    }
+
     fun answerCallback(
         callbackQueryId: String,
         text: String? = null,

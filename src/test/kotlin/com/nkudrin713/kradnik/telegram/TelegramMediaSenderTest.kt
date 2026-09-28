@@ -271,7 +271,7 @@ class TelegramMediaSenderTest {
 
         sender.sendMonospaceText(100, "Post <text> & more", replyToMessageId = 200)
 
-        request.captured.getParameters()["text"] shouldBe "<pre>Post &lt;text&gt; &amp; more</pre>"
+        request.captured.getParameters()["text"] shouldBe "<code>Post &lt;text&gt; &amp; more</code>"
         request.captured.getParameters()["parse_mode"] shouldBe ParseMode.HTML
         request.captured.getParameters()["reply_parameters"].shouldBeInstanceOf<ReplyParameters>()
     }

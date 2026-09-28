@@ -60,7 +60,7 @@ class TelegramDonationSender(
 
     private fun donationKeyboard(donationUrl: String, language: BotLanguage): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
-            InlineKeyboardButton(messages.text(language, TelegramMessage.DONATION_BUTTON)).url(donationUrl),
+            InlineKeyboardButton(messages.text(language, TelegramMessage.DONATION_BUTTON)).url(donationUrl).style("success"),
         )
     }
 

@@ -109,7 +109,7 @@ class DownloadChoicePlannerTest {
         assertEquals(listOf("video_original", "video_720", "audio", "cover"), actual.options.map { it.key })
         val original = actual.options.first()
         assertFalse(original.available)
-        assertEquals("Размер превышает лимит Telegram", original.unavailableReason)
+        assertEquals("⚠️ Размер превышает лимит Telegram", original.unavailableReason)
     }
 
     @Test

@@ -80,8 +80,14 @@ class ZipPlaylistDeliveryTest {
         coVerify(exactly = 3) { downloader.download(any(), any()) }
         verify { jobs.markCompleted(job, "zip-file-id") }
         verify(exactly = 0) { jobs.savePlaylistResult(any(), any()) }
-        verify { telegram.editPlaylistProgress(any(), "Creating ZIP archive", 1, job.language, any()) }
-        verify { telegram.sendHtmlMessage(20, match { "2. <a href=" in it && "Track 2" in it && "Recording unavailable" in it }) }
+        verify { telegram.editPlaylistProgress(any(), "📦 Creating ZIP archive", 1, job.language, any()) }
+        verify {
+            telegram.editFinalMessage(
+                com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(20, 22),
+                match { "2. <a href=" in it && "Track 2" in it && "Recording unavailable" in it },
+                html = true,
+            )
+        }
         assertFalse(Files.exists(root.resolve("1")))
     }
 

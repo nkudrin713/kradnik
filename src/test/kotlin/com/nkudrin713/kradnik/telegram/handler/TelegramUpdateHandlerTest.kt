@@ -64,10 +64,10 @@ class TelegramUpdateHandlerTest {
         handler().handle(textUpdate("/legal"))
         handler().handle(textUpdate("unknown"))
 
-        verify { telegramSender.sendMessage(100, "Пришли ссылку на медиа") }
-        verify { telegramSender.sendMessage(100, match { it.startsWith("Что умеет бот:") }) }
+        verify { telegramSender.sendMessage(100, "🔗 Пришли ссылку на медиа") }
+        verify { telegramSender.sendMessage(100, match { it.startsWith("🧭 Что умеет бот:") }) }
         verify { telegramSender.sendMessage(100, match { it.startsWith("Дисклеймер:") }) }
-        verify { telegramSender.sendMessage(100, "Нужна ссылка") }
+        verify { telegramSender.sendMessage(100, "🔗 Нужна ссылка") }
     }
 
     @Test
@@ -84,11 +84,11 @@ class TelegramUpdateHandlerTest {
     @Test
     fun defaultsToEnglishWhenLanguageWasNotSelected() {
         every { preferenceService.selectedLanguage(300) } returns null
-        every { telegramSender.sendMessage(100, "I need a link") } just runs
+        every { telegramSender.sendMessage(100, "🔗 I need a link") } just runs
 
         handler().handle(textUpdate("unknown", languageCode = "ru"))
 
-        verify { telegramSender.sendMessage(100, "I need a link") }
+        verify { telegramSender.sendMessage(100, "🔗 I need a link") }
     }
 
     @Test
@@ -180,12 +180,12 @@ class TelegramUpdateHandlerTest {
     fun answersInvalidGuestQueryOnce() {
         every { preferenceService.resolveLanguage(300) } returns BotLanguage.RU
         every {
-            telegramSender.answerGuestMessage("guest-query", "Нужна ссылка", BotLanguage.RU)
+            telegramSender.answerGuestMessage("guest-query", "🔗 Нужна ссылка", BotLanguage.RU)
         } returns TelegramMessageAddress.Inline("inline-message")
 
         handler().handle(guestUpdate("@kradnik_bot не-ссылка"))
 
-        verify { telegramSender.answerGuestMessage("guest-query", "Нужна ссылка", BotLanguage.RU) }
+        verify { telegramSender.answerGuestMessage("guest-query", "🔗 Нужна ссылка", BotLanguage.RU) }
         verify(exactly = 0) { coordinator.prepare(any()) }
     }
 

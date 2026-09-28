@@ -8,34 +8,34 @@
   <script src="/admin/admin.js" defer></script>
 </head>
 <body>
-  <header><div class="brand"><span class="brand-mark"><img src="/login/kradnik.jpg" alt="Kradnik" width="42" height="42"></span><div><p class="eyebrow">KRADNIK / ADMIN</p><h1>Мониторинг бота</h1></div></div><div class="header-actions"><span class="readonly">Только просмотр</span><form id="logout" action="/logout" method="post"><button disabled>Выйти</button></form></div></header>
+  <header><div class="brand"><span class="brand-mark"><img src="/login/kradnik.jpg" alt="Kradnik" width="42" height="42"></span><h1>Мониторинг бота</h1></div><div class="header-actions"><span id="version">Версия —</span><form id="logout" action="/logout" method="post"><button disabled>Выйти</button></form></div></header>
   <main>
-    <div class="status"><span id="connection" role="status">Подключение…</span><span id="updated">Снимок ещё не получен</span></div>
-    <section class="cards" aria-label="Нагрузка">
-      <article><h2>В очереди</h2><strong id="queued">—</strong><p>Джобы, ожидающие воркера</p></article>
-      <article><h2>В работе</h2><strong id="processing">—</strong><p>Скачивание, упаковка или отправка</p></article>
-      <article><h2>Подготовка меню</h2><strong id="metadata">—</strong><p>Запросы в очереди метаданных</p></article>
-      <article><h2>Треки плейлистов</h2><strong id="items">—</strong><p>Активны / ожидают свободного слота</p></article>
-    </section>
-    <section class="panel memory-panel" aria-label="Память">
-      <div class="section-title"><h2>Память</h2><span id="memory-status" class="muted">Ожидание измерения…</span></div>
-      <div class="memory-cards">
-        <article><h3>Heap JVM</h3><div class="memory-value"><strong id="heap-used">—</strong><span id="heap-percent"></span></div><p id="heap-limit" class="muted">Выделено / максимум: —</p><svg id="heap-chart" viewBox="0 0 600 140" role="img" aria-label="Heap JVM за последний час"><text x="10" y="70">Ожидание данных…</text></svg></article>
-        <article><h3>Контейнер / cgroup</h3><div class="memory-value"><strong id="container-used">—</strong><span id="container-percent"></span></div><p id="container-limit" class="muted">Лимит: —</p><svg id="container-chart" viewBox="0 0 600 140" role="img" aria-label="Память контейнера за последний час"><text x="10" y="70">Ожидание данных…</text></svg></article>
+    <section class="health panel" aria-live="polite"><div><h2 id="health-title">Проверяю состояние бота…</h2><p id="health-details"></p></div><div class="health-meta"><span id="connection" role="status">Подключение…</span><span id="updated"></span></div></section>
+    <div class="dashboard-grid"><div class="dashboard-main">
+      <section class="cards" aria-label="Нагрузка">
+        <article><h2>В очереди</h2><strong id="queued">—</strong></article>
+        <article><h2>В работе</h2><strong id="processing">—</strong></article>
+        <article><h2>Подготовка меню</h2><strong id="metadata">—</strong></article>
+        <article><h2>Треки плейлистов</h2><strong id="items">—</strong></article>
+      </section>
+      <section class="panel memory-panel" aria-label="Память"><div class="section-title"><h2>Память</h2><span id="memory-status" class="muted"></span></div>
+        <div class="memory-cards">
+          <article><h3>Heap JVM</h3><div class="memory-value"><strong id="heap-used">—</strong><span id="heap-percent"></span></div><p id="heap-limit" class="muted"></p><svg id="heap-chart" viewBox="0 0 600 140" role="img" aria-label="Heap JVM за последний час"></svg></article>
+          <article><h3>Контейнер</h3><div class="memory-value"><strong id="container-used">—</strong><span id="container-percent"></span></div><p id="container-limit" class="muted"></p><svg id="container-chart" viewBox="0 0 600 140" role="img" aria-label="Память контейнера за последний час"></svg></article>
+        </div>
+        <div class="memory-details"><div><h3>Non-heap JVM</h3><strong id="nonheap-used">—</strong><p id="memory-pools" class="muted"></p></div><div><h3>Сборка мусора (GC)</h3><strong id="gc-value">—</strong><p id="gc-window" class="muted"></p></div></div>
+        <p id="memory-history-status" class="muted"></p>
+      </section>
+      <section class="panel"><h2>Воркеры</h2><div class="table-wrap"><table><thead><tr><th>Слот</th><th>Состояние</th><th>Задача</th><th>Платформа</th><th>Этап</th><th>Длительность</th><th>Треки: активны / ждут</th></tr></thead><tbody id="workers"></tbody></table></div></section>
+      <div class="columns">
+        <section class="panel"><h2>Очереди</h2><p id="queue-status" class="muted"></p><div class="table-wrap"><table><thead><tr><th>Категория</th><th>Ждут</th><th>В работе</th><th>Старейшая</th></tr></thead><tbody id="queues"></tbody></table></div></section>
+        <section class="panel"><h2>Нагрузка за час</h2><svg id="chart" viewBox="0 0 600 140" role="img" aria-label="История количества задач в очереди и в работе"></svg></section>
       </div>
-      <p class="muted"><span class="dot processing"></span> Занято · пунктир — максимум / лимит · МиБ · минутные снимки за час</p>
-      <p id="memory-range" class="muted"></p>
-      <div class="memory-details"><div><h3>Non-heap JVM</h3><strong id="nonheap-used">—</strong><p id="memory-pools" class="muted"></p></div><div><h3>Сборка мусора (GC)</h3><strong id="gc-value">—</strong><p id="gc-window" class="muted">Ожидание второго измерения…</p></div></div>
-      <p id="memory-history-status" class="muted"></p>
-      <p class="muted">Память cgroup включает дочерние процессы и файловый кэш. Это не только JVM; часть кэша может быть освобождена. Время GC — счётчик JVM, не точная длительность пауз бота.</p>
-    </section>
-    <section class="panel"><h2>Воркеры</h2><p class="muted">Свободные слоты доступны для следующей задачи. Длительность не означает зависание.</p><div class="table-wrap"><table><thead><tr><th>Слот</th><th>Состояние</th><th>Задача</th><th>Платформа</th><th>Этап</th><th>Длительность</th><th>Треки: активны / ждут</th></tr></thead><tbody id="workers"></tbody></table></div></section>
-    <div class="columns">
-      <section class="panel"><h2>Очереди</h2><p id="queue-status" class="muted">Ожидание данных БД…</p><div class="table-wrap"><table><thead><tr><th>Категория</th><th>Ждут</th><th>В работе</th><th>Старейшая в очереди</th></tr></thead><tbody id="queues"></tbody></table></div></section>
-      <section class="panel"><h2>Нагрузка за последний час</h2><p class="muted"><span class="dot queued"></span> В очереди <span class="dot processing"></span> В работе · минутные снимки</p><svg id="chart" viewBox="0 0 600 140" role="img" aria-label="История количества задач в очереди и в работе"><text x="10" y="70">Ожидание данных…</text></svg><p id="chart-range" class="muted"></p></section>
-    </div>
-    <section class="panel"><div class="section-title"><h2>Завершения и ошибки</h2><label>Период <select id="window"><option value="15">15 минут</option><option value="60" selected>1 час</option><option value="1440">24 часа</option></select></label></div><p id="outcome-status" class="muted">Ожидание данных БД…</p><div class="table-wrap"><table><thead><tr><th>Категория</th><th>Завершено</th><th>Неуспешно</th><th>Отменено пользователем</th></tr></thead><tbody id="outcomes"></tbody></table></div><h3>Дополнительные ошибки</h3><div id="errors" class="error-grid"></div><p id="runtime-note" class="muted"></p><p class="muted">Эти счётчики не складываются с неуспешными джобами: одна ошибка трека может привести к ошибке всего плейлиста. Окна дополнительных ошибок имеют минутную точность.</p></section>
+      <section class="panel"><div class="section-title"><h2>Завершения и ошибки</h2><label>Период <select id="window"><option value="15">15 минут</option><option value="60" selected>1 час</option><option value="1440">24 часа</option></select></label></div><p id="outcome-status" class="muted"></p><div class="table-wrap"><table><thead><tr><th>Категория</th><th>Завершено</th><th>Неуспешно</th><th>Отменено</th></tr></thead><tbody id="outcomes"></tbody></table></div><h3>Дополнительные ошибки</h3><div id="errors" class="error-grid"></div></section>
+    </div><aside class="sidebar">
+      <section class="panel"><h2>База данных</h2><button id="backup" type="button" disabled>Оценить размер</button><p id="backup-estimate" class="muted"></p><p id="backup-status" role="status" class="muted"></p></section>
+      <section class="panel legend"><h2>Пояснения</h2><p>Треки: активные / ожидающие. На графике нагрузки синий — очередь, зелёный — работа.</p><p>Графики памяти: зелёный — занято, пунктир — максимум или лимит. Контейнер включает процессы и файловый кэш.</p><p>GC показывает суммарное время сборки, а не паузы бота. Дополнительные ошибки могут совпадать с неуспешными задачами.</p></section>
+    </aside></div>
   </main>
-  <footer>Обновление раз в 2 секунды · статистика завершений раз в 10 секунд · только просмотр</footer>
 </body>
 </html>

@@ -4,7 +4,7 @@ const categories = {single: 'Обычные скачивания', playlist_audi
 const states = {IDLE: 'Свободен', BUSY: 'Занят', BACKOFF: 'Пауза после ошибки', STOPPED: 'Остановлен'};
 const phases = {DOWNLOADING: 'Скачивание', PACKING: 'Упаковка', UPLOADING: 'Отправка'};
 const errors = {METADATA: 'Подготовка меню', PLAYLIST_ITEM: 'Треки плейлистов', WORKER: 'Циклы воркеров', METADATA_REJECTED: 'Переполнение очереди меню'};
-let latest, timer, inFlight = false, retry = 2000, csrfReady = false;
+let latest, timer, inFlight = false, retry = 2000, csrfReady = false, csrfToken, backupEstimated = false;
 const sorting = {};
 const collator = new Intl.Collator('ru', {numeric: true, sensitivity: 'base'});
 function text(id, value) { if ($(id).textContent !== String(value)) $(id).textContent = value; }
@@ -49,10 +49,11 @@ function table(id, rows, values = rows) {
   }));
 }
 function sourceStatus(id, available, at) {
-  text(id, `${available ? 'Данные БД' : 'БД недоступна · сохранён последний снимок'}: ${date(at)}`);
+  text(id, available ? '' : `БД недоступна · последний снимок: ${date(at)}`);
   $(id).classList.toggle('warning', !available);
 }
 function render(data) {
+  text('version', `Версия ${data.version || 'неизвестна'}`);
   const sum = status => data.queues.filter(q => q.status === status).reduce((n, q) => n + q.count, 0);
   text('queued', data.queuesUpdatedAt ? sum('queued') : '—');
   text('processing', data.queuesUpdatedAt ? sum('processing') : '—');
@@ -74,8 +75,7 @@ function render(data) {
   renderOutcomes();
   chart(data.history);
   renderMemory(data.memory);
-  text('updated', `Снимок: ${date(data.generatedAt)}`);
-  text('runtime-note', `Статистика сохраняется в PostgreSQL. ${data.statistics.restored ? "История ошибок восстановлена." : "История ошибок пока неполная."} ${data.statistics.available && data.historyAvailable ? "" : "Сохранение или загрузка статистики недоступны."} Сохранение счётчиков: ${date(data.statistics.updatedAt)}. Запуск процесса: ${date(data.runtime.startedAt)}.`);
+  text('updated', date(data.generatedAt));
 }
 function renderOutcomes() {
   if (!latest) return;
@@ -109,7 +109,6 @@ function chart(points) {
     $('chart').append(line);
   });
   [0, max].forEach(value => { const label = document.createElementNS(ns, 'text'); label.setAttribute('x', '0'); label.setAttribute('y', value ? '24' : '124'); label.textContent = value; $('chart').append(label); });
-  text('chart-range', `${date(points[0].at)} – ${date(key)}`);
 }
 function bytes(value) {
   if (value == null) return '—';
@@ -118,7 +117,7 @@ function bytes(value) {
 function renderMemory(memory) {
   if (!memory) return;
   const point = memory.current;
-  text('memory-status', `${memory.available ? 'Измерение' : 'Измерение недоступно'}: ${date(point?.at)}`);
+  text('memory-status', memory.available ? '' : `Измерение недоступно · ${date(point?.at)}`);
   $('memory-status').classList.toggle('warning', !memory.available);
   text('heap-used', bytes(point?.heapUsed));
   text('heap-limit', `Выделено: ${bytes(point?.heapCommitted)} / максимум: ${bytes(point?.heapMax)}`);
@@ -130,13 +129,43 @@ function renderMemory(memory) {
   text('nonheap-used', bytes(point?.nonHeapUsed));
   text('memory-pools', `Metaspace: ${bytes(point?.metaspaceUsed)} · Code cache: ${bytes(point?.codeCacheUsed)}`);
   text('gc-value', `${point?.gcCount ?? '—'} сборок · ${point?.gcTimeMillis ?? '—'} мс`);
-  text('gc-window', point?.gcWindowSeconds > 0 ? `За последние ${point.gcWindowSeconds} с · счётчики текущего процесса` : 'Ожидание второго измерения…');
-  text('memory-history-status', memory.historyAvailable ? 'История памяти сохраняется раз в минуту.' : 'Сохранение или загрузка истории памяти недоступны.');
+  text('gc-window', point?.gcWindowSeconds > 0 ? `За ${point.gcWindowSeconds} с` : '');
+  text('memory-history-status', memory.historyAvailable ? '' : 'История памяти недоступна');
   $('memory-history-status').classList.toggle('warning', !memory.historyAvailable);
   const points = memory.history || [];
   memoryChart('heap-chart', points, 'heapUsed', 'heapMax');
   memoryChart('container-chart', points, 'containerUsed', 'containerLimit');
-  text('memory-range', points.length ? `${date(points[0].at)} – ${date(points[points.length - 1].at)}` : 'История ещё не накоплена');
+}
+function renderHealth(data) {
+  const critical = [], warning = [];
+  const stale = Date.now() - Date.parse(data.generatedAt) > 10000;
+  if (stale) critical.push('снимок состояния не обновляется');
+  if (!data.queuesAvailable || !data.outcomesAvailable) warning.push('статистика базы недоступна');
+  if (!data.memory.available || !data.memory.current || Date.now() - Date.parse(data.memory.current.at) > 20000) warning.push('нет свежих данных о памяти');
+  const memory = data.memory.current;
+  for (const [name, used, limit] of [['heap', memory?.heapUsed, memory?.heapMax], ['память контейнера', memory?.containerUsed, memory?.containerLimit]]) {
+    if (used == null || !limit) continue;
+    const percent = Math.round(used / limit * 100);
+    if (percent >= 90) critical.push(`${name} заполнен на ${percent}%`);
+    else if (percent >= 80) warning.push(`${name} заполнен на ${percent}%`);
+  }
+  if (data.runtime.workers.some(w => w.state === 'STOPPED')) critical.push('есть остановленные воркеры');
+  if (data.runtime.workers.some(w => w.state === 'BACKOFF')) warning.push('воркер ждёт после ошибки');
+  if (!data.statistics.available || !data.historyAvailable || !data.memory.historyAvailable) warning.push('история метрик сохраняется не полностью');
+  $('health-title').className = critical.length ? 'critical' : warning.length ? 'warning' : 'healthy';
+  text('health-title', critical.length ? 'Боту требуется внимание' : warning.length ? 'Есть проблемы, требующие проверки' : 'По доступным метрикам бот работает нормально');
+  text('health-details', [...critical, ...warning].join(' · '));
+  text('connection', stale ? 'Снимок устарел' : 'На связи');
+}
+function renderBackup(status) {
+  const descriptions = {
+    idle: '',
+    running: `Создаётся дамп с ${date(status.startedAt)}`,
+    completed: `Готово: ${status.fileName} · ${bytes(status.sizeBytes)}`,
+    failed: `Не удалось создать дамп (${date(status.finishedAt)})`
+  };
+  text('backup-status', descriptions[status.state] || 'Состояние неизвестно');
+  $('backup').disabled = !csrfReady || status.state === 'running';
 }
 function memoryChart(id, points, used, limit) {
   const key = JSON.stringify(points.map(p => [p.at, p[used], p[limit]]));
@@ -186,14 +215,13 @@ async function poll() {
     if (!csrfReady) {
       const csrf = await request('/admin/api/csrf');
       const input = document.createElement('input'); input.type = 'hidden'; input.name = csrf.parameterName; input.value = csrf.token;
-      $('logout').append(input); $('logout').querySelector('button').disabled = false; csrfReady = true;
+      $('logout').append(input); $('logout').querySelector('button').disabled = false; csrfReady = true; csrfToken = csrf.token;
     }
-    latest = await request('/admin/api/snapshot'); render(latest);
-    const stale = Date.now() - Date.parse(latest.generatedAt) > 10000;
-    text('connection', stale ? 'Сборщик не обновляет снимок' : latest.queuesAvailable && latest.outcomesAvailable && latest.statistics.restored && latest.statistics.available && latest.historyAvailable ? 'Данные обновляются' : 'Часть данных недоступна');
-    $('connection').classList.toggle('warning', stale || !latest.queuesAvailable || !latest.outcomesAvailable || !latest.statistics.restored || !latest.statistics.available || !latest.historyAvailable);
+    latest = await request('/admin/api/snapshot'); render(latest); renderHealth(latest);
+    try { renderBackup(await request('/admin/api/backup')); }
+    catch (_) { text('backup-status', 'Не удалось получить состояние дампа'); }
     retry = 2000;
-  } catch (_) { text('connection', 'Связь потеряна · показаны последние данные'); $('connection').classList.add('warning'); retry = Math.min(retry * 2, 30000); }
+  } catch (_) { text('connection', 'Связь потеряна'); text('health-title', 'Состояние бота неизвестно'); text('health-details', 'Нет связи с админкой'); $('health-title').className = 'critical'; retry = Math.min(retry * 2, 30000); }
   finally { inFlight = false; if (!document.hidden) timer = setTimeout(poll, retry); }
 }
 ['workers', 'queues', 'outcomes'].forEach(id => {
@@ -219,5 +247,26 @@ async function poll() {
   });
 });
 $('window').addEventListener('change', renderOutcomes);
+$('backup').addEventListener('click', async () => {
+  $('backup').disabled = true;
+  try {
+    if (!backupEstimated) {
+      const estimate = await request('/admin/api/backup/estimate');
+      text('backup-estimate', `Размер БД: ${bytes(estimate.databaseBytes)}. Свободно: ${bytes(estimate.freeBytes)}. Сжатый дамп может отличаться.${estimate.freeBytes < estimate.databaseBytes ? ' Места может не хватить.' : ''}`);
+      $('backup-estimate').classList.toggle('warning', estimate.freeBytes < estimate.databaseBytes);
+      backupEstimated = true;
+      $('backup').textContent = 'Создать дамп';
+      $('backup').disabled = false;
+      return;
+    }
+    const response = await fetch('/admin/api/backup', {method: 'POST', headers: {'X-CSRF-TOKEN': csrfToken}, cache: 'no-store', signal: AbortSignal.timeout(5000)});
+    if (response.status === 401 || response.status === 403) { location.assign('/login'); return; }
+    if (!response.ok) throw new Error('http');
+    backupEstimated = false;
+    $('backup').textContent = 'Оценить размер';
+    text('backup-estimate', '');
+    renderBackup(await response.json());
+  } catch (_) { text('backup-status', backupEstimated ? 'Не удалось запустить дамп' : 'Не удалось оценить размер базы'); $('backup').disabled = false; }
+});
 document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (document.hidden) text('connection', 'Обновление приостановлено'); else poll(); });
 poll();

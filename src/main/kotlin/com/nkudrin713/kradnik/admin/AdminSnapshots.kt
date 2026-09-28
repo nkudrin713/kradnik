@@ -16,6 +16,7 @@ class AdminSnapshots(
     private val statistics: AdminStatistics? = null,
     private val store: AdminStatisticsStore? = null,
     private val memory: AdminMemory? = null,
+    private val version: String = "dev",
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val executor = Executors.newSingleThreadScheduledExecutor { task -> Thread(task, "admin-collector").apply { isDaemon = true } }
@@ -29,7 +30,7 @@ class AdminSnapshots(
     private var lastPrune: Instant = Instant.MIN
 
     @Volatile
-    private var current = DashboardSnapshot(clock.instant(), runtime.snapshot())
+    private var current = DashboardSnapshot(clock.instant(), runtime.snapshot(), version = version)
 
     @PostConstruct
     fun start() {
@@ -109,6 +110,7 @@ class AdminSnapshots(
 data class DashboardSnapshot(
     val generatedAt: Instant,
     val runtime: RuntimeView,
+    val version: String = "dev",
     val queues: List<QueueView> = emptyList(),
     val outcomes: List<OutcomeView> = emptyList(),
     val queuesUpdatedAt: Instant? = null,

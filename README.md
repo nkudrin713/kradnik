@@ -21,6 +21,7 @@ Playlist video downloads, playlists from other platforms, private content, and a
 The diagram shows single-media jobs. Playlists use `PlaylistQueueWorker` and `PlaylistJobProcessor` with the same persisted queue. `TelegramUpdateHandler` routes requests; `DownloadChoicePlanner` and `DownloadChoiceCoordinator` prepare options and save the menu. `DownloadChoiceHandler` turns a selection into a job, which a worker claims. `DownloadEngine` delegates to yt-dlp or Instagram adapters.
 
 - Metadata planning uses 2 threads and a queue of 32 requests. It loads formats and size estimates before enqueueing.
+- Single-media yt-dlp metadata contains only fields used for options and preflight, including the needed fields from each format. Subtitle data is omitted. Metadata output has a 32 Mi-character capture limit; oversized responses fail before job creation.
 - Playlists up to 100 tracks offer all tracks; larger lists offer the first or last 100. Both audio and ZIP modes use 320 kbps CBR MP3. ZIP filenames include the successful file count and playlist title; oversized archives are rejected.
 - Instagram videos offer video, audio, and full-post options; static posts offer the full post. Posts support up to 20 ordered attachments. Public metadata may omit native music; Instagram login is not used.
 - Available actions are green, cancellation is red, and unavailable options are hidden. Menu titles use inline monospace.
@@ -220,7 +221,6 @@ Run the complete verification:
 - `DOWNLOAD_PLAYLIST_ZIP_TIMEOUT`: total ZIP job timeout, including download, packaging and upload; default `2h`. ZIP workspaces are monitored against three times `TELEGRAM_MAX_UPLOAD_BYTES` and require at least 64 MiB of free disk space. The polling guard may briefly overshoot while external processes write.
 - `DOWNLOAD_WORK_DIR`: writable media directory with one subdirectory per job.
 - `DOWNLOAD_*_TIMEOUT`: external-process and HTTP timeouts.
-- yt-dlp metadata responses can use up to 32 Mi characters of captured stdout; other process output remains capped at 4 Mi characters. Larger responses fail before a download job is created.
 - `DOWNLOAD_YT_DLP_CLOUD_MAX_WORKSPACE_BYTES`: per-process cloud download workspace cap.
 - `DOWNLOAD_CHOICE_SESSION_TTL`: retention after selection or cancellation; default 30 minutes.
 - `DOWNLOAD_CHOICE_SESSION_MAX_AGE`: maximum lifetime of an unselected menu; default 30 days.

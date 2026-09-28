@@ -6,7 +6,7 @@ ARG BGUTIL_YTDLP_POT_PROVIDER_VERSION=1.3.2
 
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates deno=2.7.4-r2 ffmpeg py3-pip python3 \
+RUN apk add --no-cache ca-certificates deno=2.7.4-r2 ffmpeg postgresql17-client py3-pip python3 \
     && pip install --no-cache-dir --break-system-packages \
         "yt-dlp[default]==${YT_DLP_VERSION}" \
         "bgutil-ytdlp-pot-provider==${BGUTIL_YTDLP_POT_PROVIDER_VERSION}" \

@@ -19,13 +19,14 @@ class DeployEnvironmentTest {
 
     @Test
     fun enabledAdminPreservesLiteralBcryptAndHttpsSettings() {
-        val (status, output) = render(credentials() + mapOf("ADMIN_COOKIE_SECURE" to "true", "ADMIN_PUBLIC_PORT" to "18080"))
+        val (status, output) = render(credentials() + mapOf("ADMIN_COOKIE_SECURE" to "true", "ADMIN_PUBLIC_PORT" to "18080", "BOT_VERSION" to "v1.2.3"))
         assertEquals(0, status)
         assertTrue(output.contains("ADMIN_ENABLED=true\n"))
         assertTrue(output.contains("ADMIN_USERNAME=admin\n"))
         assertTrue(output.contains("ADMIN_PASSWORD_HASH='$hash'\n"))
         assertTrue(output.contains("ADMIN_COOKIE_SECURE=true\n"))
         assertTrue(output.contains("ADMIN_PUBLIC_PORT=18080\n"))
+        assertTrue(output.contains("BOT_VERSION=v1.2.3\n"))
     }
 
     @Test

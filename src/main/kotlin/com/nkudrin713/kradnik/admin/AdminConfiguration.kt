@@ -43,7 +43,12 @@ class AdminConfiguration {
     fun adminMemory(store: AdminStatisticsStore, clock: Clock): AdminMemory = AdminMemory(AdminMemoryProbe(), store, clock)
 
     @Bean
-    fun adminSnapshots(queries: AdminQueries, runtime: AdminRuntime, clock: Clock, statistics: AdminStatistics, store: AdminStatisticsStore, memory: AdminMemory): AdminSnapshots = AdminSnapshots(queries, runtime, clock, statistics, store, memory)
+    fun adminSnapshots(queries: AdminQueries, runtime: AdminRuntime, clock: Clock, statistics: AdminStatistics, store: AdminStatisticsStore, memory: AdminMemory, environment: Environment): AdminSnapshots {
+        return AdminSnapshots(queries, runtime, clock, statistics, store, memory, environment.getProperty("bot.version", "dev"))
+    }
+
+    @Bean(destroyMethod = "close")
+    fun adminBackup(environment: Environment, database: AdminDatabase): AdminBackup = AdminBackup(environment, database.jdbc)
 }
 
 /** One bounded connection shared by all dashboard reads and aggregate writes. */

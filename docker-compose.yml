@@ -19,6 +19,8 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
       ADMIN_COOKIE_SECURE: ${ADMIN_COOKIE_SECURE:-false}
+      BOT_VERSION: ${BOT_VERSION:-dev}
+      ADMIN_BACKUP_DIR: /var/lib/kradnik/backups
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-kradnik}
@@ -52,6 +54,7 @@ services:
       YOUTUBE_PO_TOKEN_PROVIDER_URL: ${YOUTUBE_PO_TOKEN_PROVIDER_URL:-}
     volumes:
       - media-work:/var/lib/kradnik/media
+      - ${ADMIN_BACKUP_HOST_DIR:-./backups}:/var/lib/kradnik/backups
 
   telegram-bot-api:
     image: ${TELEGRAM_BOT_API_IMAGE:-ghcr.io/nkudrin713/kradnik-telegram-bot-api:adfd7f6a8e990272851777eeb3ae0def4216f161}

@@ -112,6 +112,7 @@ jobs:
           ADMIN_PASSWORD_HASH: ${{ secrets.ADMIN_PASSWORD_HASH }}
           ADMIN_PUBLIC_PORT: ${{ vars.ADMIN_PUBLIC_PORT || '8080' }}
           ADMIN_COOKIE_SECURE: ${{ vars.ADMIN_COOKIE_SECURE || 'false' }}
+          BOT_VERSION: ${{ inputs.version }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}

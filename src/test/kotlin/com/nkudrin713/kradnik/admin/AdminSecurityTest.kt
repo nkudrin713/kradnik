@@ -30,11 +30,17 @@ class AdminSecurityTest @Autowired constructor(private val mvc: MockMvc) {
     @MockitoBean
     private lateinit var snapshots: AdminSnapshots
 
+    @MockitoBean
+    private lateinit var backup: AdminBackup
+
     @Test
     fun anonymousClientsCannotReadStaticPageOrApi() {
         mvc.perform(get("/admin/index.html")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/login"))
         mvc.perform(get("/admin/api/snapshot")).andExpect(status().isUnauthorized())
         mvc.perform(get("/admin/api/csrf")).andExpect(status().isUnauthorized())
+        mvc.perform(get("/admin/api/backup")).andExpect(status().isUnauthorized())
+        mvc.perform(get("/admin/api/backup/estimate")).andExpect(status().isUnauthorized())
+        mvc.perform(post("/admin/api/backup").with(csrf())).andExpect(status().isUnauthorized())
         mvc.perform(get("/login")).andExpect(status().isOk()).andExpect(forwardedUrl("/login/index.html"))
         mvc.perform(get("/login/index.html")).andExpect(status().isOk())
         mvc.perform(get("/login/login.js")).andExpect(status().isOk())
@@ -46,6 +52,9 @@ class AdminSecurityTest @Autowired constructor(private val mvc: MockMvc) {
     @Test
     fun loginCreatesSessionAndLogoutRequiresCsrfThenInvalidatesSession() {
         val now = Instant.now()
+        `when`(backup.status()).thenReturn(BackupStatus("idle"))
+        `when`(backup.estimate()).thenReturn(BackupEstimate(1024, 2048))
+        `when`(backup.start()).thenReturn(BackupStatus("running", startedAt = now))
         `when`(snapshots.snapshot()).thenReturn(DashboardSnapshot(now, RuntimeView(now, listOf(WorkerView("download-1", "download", "IDLE")), 0, emptyList()), memory = MemoryView(current = MemoryPoint(now, 100, 200, 300, 40, 20, 10, null, null, 2, 4, 60), available = true)))
         val login = mvc.perform(formLogin().user("operator").password("test-admin-password"))
             .andExpect(authenticated().withUsername("operator"))
@@ -53,6 +62,7 @@ class AdminSecurityTest @Autowired constructor(private val mvc: MockMvc) {
         val session = login.request.session as MockHttpSession
         mvc.perform(get("/admin/api/snapshot").session(session))
             .andExpect(status().isOk()).andExpect(jsonPath("$.runtime.metadataQueued").value(0))
+            .andExpect(jsonPath("$.version").value("dev"))
             .andExpect(jsonPath("$.runtime.workers[0].state").value("IDLE"))
             .andExpect(jsonPath("$.queues").isArray)
             .andExpect(jsonPath("$.outcomes").isArray)
@@ -66,6 +76,10 @@ class AdminSecurityTest @Autowired constructor(private val mvc: MockMvc) {
         mvc.perform(get("/admin/index.html").session(session)).andExpect(status().isOk())
         mvc.perform(get("/admin/admin.js").session(session)).andExpect(status().isOk())
         mvc.perform(get("/admin/api/csrf").session(session)).andExpect(status().isOk()).andExpect(jsonPath("$.token").isNotEmpty)
+        mvc.perform(get("/admin/api/backup").session(session)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("idle"))
+        mvc.perform(get("/admin/api/backup/estimate").session(session)).andExpect(status().isOk()).andExpect(jsonPath("$.databaseBytes").value(1024))
+        mvc.perform(post("/admin/api/backup").session(session)).andExpect(status().isForbidden())
+        mvc.perform(post("/admin/api/backup").session(session).with(csrf())).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("running"))
         mvc.perform(post("/logout").session(session)).andExpect(status().isForbidden())
         mvc.perform(post("/logout").session(session).with(csrf())).andExpect(redirectedUrl("/login?logout")).andExpect(unauthenticated())
         mvc.perform(get("/admin/api/snapshot")).andExpect(status().isUnauthorized())

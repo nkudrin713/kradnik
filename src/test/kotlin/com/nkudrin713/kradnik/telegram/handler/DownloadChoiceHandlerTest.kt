@@ -56,7 +56,7 @@ class DownloadChoiceHandlerTest {
         every { preferenceService.resolveLanguage(300) } returns BotLanguage.RU
         every { sessionService.select(any()) } returns selection
         every { starter.start(any(), any(), any(), any(), any(), any(), any()) } just runs
-        every { telegramSender.answerCallback("callback-id", "Выбрано: 720p", false) } just runs
+        every { telegramSender.answerCallback("callback-id", "✅ Выбрано: 720p", false) } just runs
         every { telegramSender.deleteMessage(100, 500) } just runs
 
         handler.handle(callbackQuery(userId = 300))
@@ -98,7 +98,7 @@ class DownloadChoiceHandlerTest {
     fun rejectsChoiceFromAnotherUser() {
         every { preferenceService.resolveLanguage(301) } returns BotLanguage.RU
         every { sessionService.select(any()) } returns DownloadChoiceSelection.NotOwner
-        every { telegramSender.answerCallback("callback-id", "Это меню другого пользователя", true) } just runs
+        every { telegramSender.answerCallback("callback-id", "🔒 Это меню другого пользователя", true) } just runs
 
         handler.handle(callbackQuery(userId = 301))
 
@@ -115,7 +115,7 @@ class DownloadChoiceHandlerTest {
         every { preferenceService.resolveLanguage(300) } returns BotLanguage.RU
         every { sessionService.select(any()) } returns selection
         every { starter.start(any(), any(), any(), any(), any(), any(), any()) } just runs
-        every { telegramSender.answerCallback("callback-id", "Выбрано: 720p", false) } just runs
+        every { telegramSender.answerCallback("callback-id", "✅ Выбрано: 720p", false) } just runs
 
         handler.handle(callbackQuery(userId = 300, inlineMessageId = "inline-message"))
 
@@ -152,7 +152,7 @@ class DownloadChoiceHandlerTest {
         every {
             telegramSender.answerCallback(
                 "callback-id",
-                "Все изображения можно скачать только в личном чате с ботом",
+                "💬 Все изображения можно скачать только в личном чате с ботом",
                 true,
             )
         } just runs
@@ -188,7 +188,7 @@ class DownloadChoiceHandlerTest {
         every {
             telegramSender.answerCallback(
                 "callback-id",
-                "Пост целиком можно скачать только в личном чате с ботом",
+                "💬 Пост целиком можно скачать только в личном чате с ботом",
                 true,
             )
         } just runs

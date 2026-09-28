@@ -17,17 +17,19 @@ class TelegramDownloadChoiceViewTest {
     private val view = TelegramDownloadChoiceView(telegramMessages())
 
     @Test
-    fun displaysArchiveModeAndUnavailableMarkerWithoutFullSizeEstimate() {
+    fun hidesUnavailableOptionsWithoutMentioningThem() {
         val audio = option("audio", "Все 100 в ZIP", null, approximate = true)
         val archive = audio.copy(
             key = "playlist_first_zip",
             available = false,
             spec = audio.spec.copy(playlistDeliveryMode = PlaylistDeliveryMode.ZIP),
         )
-        val button = view.keyboard(UUID.randomUUID(), listOf(archive), BotLanguage.RU).inlineKeyboard()[0][0]
-        assertEquals(null, button.style)
-        assertEquals("📦 Все 100 в ZIP · недоступно", button.text)
-        assertEquals("playlist_first_zip", DownloadChoiceCallback.parse(requireNotNull(button.callbackData))?.optionKey)
+        val keyboard = view.keyboard(UUID.randomUUID(), listOf(audio, archive), BotLanguage.RU).inlineKeyboard()
+        assertEquals(listOf("🎧 Все 100 в ZIP", "✖️ Отмена"), keyboard.map { it.single().text })
+        assertEquals(listOf("success", "danger"), keyboard.map { it.single().style })
+        assertEquals("audio", DownloadChoiceCallback.parse(requireNotNull(keyboard[0][0].callbackData))?.optionKey)
+        val playlistInfo = DownloadChoiceMediaInfo(title = "Playlist", durationSeconds = null, playlistCount = 100)
+        assertEquals("<code>Playlist\nДорожек: 100</code>", view.text(playlistInfo, BotLanguage.RU))
     }
 
     @Test
@@ -42,8 +44,8 @@ class TelegramDownloadChoiceViewTest {
 
         assertEquals(
             """
-                <pre>Title &amp; more
-                Длительность: 1:02:03</pre>
+                <code>Title &amp; more
+                Длительность: 1:02:03</code>
             """.trimIndent(),
             actual,
         )
@@ -59,7 +61,7 @@ class TelegramDownloadChoiceViewTest {
             BotLanguage.RU,
         )
 
-        assertEquals("<pre>Название недоступно</pre>", actual)
+        assertEquals("<code>Название недоступно</code>", actual)
     }
 
     @Test
@@ -73,7 +75,7 @@ class TelegramDownloadChoiceViewTest {
             BotLanguage.RU,
         )
 
-        assertEquals("<pre>Video &lt;title&gt;\n@owner</pre>", actual)
+        assertEquals("<code>Video &lt;title&gt;\n@owner</code>", actual)
     }
 
     @Test
@@ -102,12 +104,12 @@ class TelegramDownloadChoiceViewTest {
                 "🎬 720p · 460 МБ",
                 "🎧 Только звук · ≈ 24,5 МБ",
                 "🖼 Обложка",
-                "Отмена",
+                "✖️ Отмена",
             ),
             keyboard.map { it.single().text },
         )
-        assertEquals(listOf("primary", "primary", "success", null, "danger"), keyboard.map { it.single().style })
-        assertEquals(listOf("🎬 Original · ≈ 1.42 GB", "Cancel"), englishKeyboard.map { it.single().text })
+        assertEquals(listOf("success", "success", "success", "success", "danger"), keyboard.map { it.single().style })
+        assertEquals(listOf("🎬 Original · ≈ 1.42 GB", "✖️ Cancel"), englishKeyboard.map { it.single().text })
         assertEquals(
             listOf("video_original", "video_720", "audio", "cover", "cancel"),
             keyboard.map { DownloadChoiceCallback.parse(requireNotNull(it.single().callbackData))?.optionKey },

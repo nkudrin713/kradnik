@@ -49,7 +49,7 @@
   <path d="M 208 410 V 371 H 912 V 406" class="arrow"/>
   <text x="560" y="363" text-anchor="middle">cache hit</text>
   <path d="M 912 486 V 556 H 208 V 560" class="arrow"/>
-  <text x="40" y="530" class="stage">After all entries finish · ordered delivery and linked failure report</text>
+  <text x="40" y="530" class="stage">After all entries finish · ordered delivery and final status</text>
   <rect x="40.0" y="564" width="325.3333333333333" height="76" rx="10" class="store"/>
   <text x="202.66666666666666" y="608.0" text-anchor="middle">Reload saved results</text>
   <path d="M 365.3333333333333 602 H 393.3333333333333" class="arrow"/>

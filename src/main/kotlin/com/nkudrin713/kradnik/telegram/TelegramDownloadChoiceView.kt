@@ -44,9 +44,8 @@ class TelegramDownloadChoiceView(
                     )
                 }
                 if (bitrate != null && size == null) add(messages.text(language, TelegramMessage.PLAYLIST_SIZE_UNKNOWN, bitrate))
-                add(messages.text(language, TelegramMessage.PLAYLIST_DELIVERY_PARTS))
             }
-            return "<pre>${lines.joinToString("\n").escapeHtml()}</pre>"
+            return "<code>${lines.joinToString("\n").escapeHtml()}</code>"
         }
         val videoInfo = buildList {
             add(
@@ -65,7 +64,7 @@ class TelegramDownloadChoiceView(
                 }
             }
         }
-        return "<pre>${videoInfo.joinToString("\n").escapeHtml()}</pre>"
+        return "<code>${videoInfo.joinToString("\n").escapeHtml()}</code>"
     }
 
     fun keyboard(
@@ -73,19 +72,11 @@ class TelegramDownloadChoiceView(
         options: List<DownloadChoiceOptionSnapshot>,
         language: BotLanguage = BotLanguage.EN,
     ): InlineKeyboardMarkup {
-        val rows = options.map { option ->
+        val rows = options.filter { it.available }.map { option ->
             arrayOf(
                 InlineKeyboardButton(buttonText(option, language))
                     .callbackData(DownloadChoiceCallback.encode(sessionToken, option.key))
-                    .apply {
-                        if (option.available && option.spec.playlistDeliveryMode != PlaylistDeliveryMode.ZIP) {
-                            when (option.spec.outputType) {
-                                OutputType.VIDEO, OutputType.POST -> style("primary")
-                                OutputType.AUDIO -> style("success")
-                                else -> Unit
-                            }
-                        }
-                    },
+                    .style("success"),
             )
         } + listOf(
             arrayOf(
@@ -102,12 +93,7 @@ class TelegramDownloadChoiceView(
         val label = "$icon ${option.label}"
         val size = option.sizeBytes
         val prefix = if (option.approximateSize) "≈ " else ""
-        val unavailable = if (option.available) {
-            ""
-        } else {
-            " · ${messages.text(language, TelegramMessage.CHOICE_UNAVAILABLE)}"
-        }
-        return if (size == null) "$label$unavailable" else "$label · $prefix${formatSize(size, language)}$unavailable"
+        return if (size == null) label else "$label · $prefix${formatSize(size, language)}"
     }
 
     private fun formatSize(bytes: Long, language: BotLanguage): String {

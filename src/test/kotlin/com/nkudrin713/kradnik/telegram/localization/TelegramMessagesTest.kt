@@ -57,10 +57,10 @@ class TelegramMessagesTest {
     @Test
     fun resolvesInformalTextsWithoutChangingStandardRussian() {
         assertEquals("Свойский", messages.text(BotLanguage.RU_INFORMAL, TelegramMessage.LANGUAGE_NAME))
-        assertEquals("Наш человек. Кидай ссылку", messages.text(BotLanguage.RU_INFORMAL, TelegramMessage.LANGUAGE_SELECTED))
-        assertEquals("Принял: MP3", messages.text(BotLanguage.RU_INFORMAL, TelegramMessage.CHOICE_SELECTED, "MP3"))
+        assertEquals("✅ Наш человек. Кидай ссылку", messages.text(BotLanguage.RU_INFORMAL, TelegramMessage.LANGUAGE_SELECTED))
+        assertEquals("✅ Принял: MP3", messages.text(BotLanguage.RU_INFORMAL, TelegramMessage.CHOICE_SELECTED, "MP3"))
         assertEquals("Русский", messages.text(BotLanguage.RU, TelegramMessage.LANGUAGE_NAME))
-        assertEquals("Пришли ссылку на медиа", messages.text(BotLanguage.RU, TelegramMessage.START_PROMPT))
+        assertEquals("🔗 Пришли ссылку на медиа", messages.text(BotLanguage.RU, TelegramMessage.START_PROMPT))
     }
 
     private fun loadProperties(path: String): Properties {

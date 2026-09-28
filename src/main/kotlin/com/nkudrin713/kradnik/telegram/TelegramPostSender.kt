@@ -4,93 +4,144 @@ import com.nkudrin713.kradnik.download.domain.PostMedia
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.telegram.CachedPostItem
 import com.nkudrin713.kradnik.download.telegram.DeliveryContext
+import com.nkudrin713.kradnik.download.video.VideoMetadata
 import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
 import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties
+import com.pengrad.telegrambot.model.LinkPreviewOptions
+import com.pengrad.telegrambot.model.Message
+import com.pengrad.telegrambot.model.request.InputMedia
 import com.pengrad.telegrambot.model.request.InputMediaPhoto
 import com.pengrad.telegrambot.model.request.InputMediaVideo
 import com.pengrad.telegrambot.model.request.ReplyParameters
-import com.pengrad.telegrambot.model.request.richmessages.InputRichMessage
-import com.pengrad.telegrambot.model.request.richmessages.richblock.InputRichBlock
-import com.pengrad.telegrambot.model.request.richmessages.richblock.InputRichBlockPhoto
-import com.pengrad.telegrambot.model.request.richmessages.richblock.InputRichBlockSlideshow
-import com.pengrad.telegrambot.model.request.richmessages.richblock.InputRichBlockVideo
-import com.pengrad.telegrambot.model.richmessages.richblock.RichBlock
-import com.pengrad.telegrambot.model.richmessages.richblock.RichBlockCaption
-import com.pengrad.telegrambot.model.richmessages.richblock.RichBlockPhoto
-import com.pengrad.telegrambot.model.richmessages.richblock.RichBlockSlideshow
-import com.pengrad.telegrambot.model.richmessages.richblock.RichBlockVideo
-import com.pengrad.telegrambot.model.richmessages.richtext.RichTextPlain
-import com.pengrad.telegrambot.request.richmessages.SendRichMessage
+import com.pengrad.telegrambot.request.SendMediaGroup
+import com.pengrad.telegrambot.request.SendMessage
+import com.pengrad.telegrambot.request.SendPhoto
+import com.pengrad.telegrambot.request.SendVideo
+import kotlinx.coroutines.delay
 import org.springframework.stereotype.Component
+import java.io.File
 
-/** Sends the post in one message and returns ordered, typed file references for repeat delivery. */
+/** Sends ordinary photo/video albums and returns ordered, typed file references for repeat delivery. */
 @Component
 class TelegramPostSender(
     private val api: TelegramApiClient,
     private val probe: VideoMetadataProbe,
     private val properties: TelegramBotProperties,
 ) {
-    suspend fun send(context: DeliveryContext, items: List<PostMedia>): List<CachedPostItem> {
-        val blocks = items.map { item ->
-            val uri = item.file.toAbsolutePath().normalize().toUri().toString()
-            when (item.kind) {
-                PostMediaKind.PHOTO -> InputRichBlockPhoto(
-                    if (properties.localApi) InputMediaPhoto(uri) else InputMediaPhoto(item.file.toFile()),
-                )
+    private data class Item(val kind: PostMediaKind, val file: File? = null, val reference: String? = null, val metadata: VideoMetadata? = null)
 
-                PostMediaKind.VIDEO -> {
-                    val metadata = probe.probe(item.file)
-                    val video = if (properties.localApi) InputMediaVideo(uri) else InputMediaVideo(item.file.toFile())
-                    video.width(metadata.width).height(metadata.height).supportsStreaming(true)
-                    metadata.durationSeconds?.let(video::duration)
-                    InputRichBlockVideo(video)
-                }
-            }
-        }
-        return sendBlocks(context, blocks, items.map { it.kind })
+    suspend fun send(context: DeliveryContext, items: List<PostMedia>): List<CachedPostItem> {
+        validate(context, items.size)
+        return sendItems(
+            context,
+            items.map { item ->
+                Item(
+                    item.kind,
+                    file = item.file.toFile().takeUnless { properties.localApi },
+                    reference = item.file.toAbsolutePath().normalize().toUri().toString().takeIf { properties.localApi },
+                    metadata = if (item.kind == PostMediaKind.VIDEO) probe.probe(item.file) else null,
+                )
+            },
+        )
     }
 
     suspend fun sendCached(context: DeliveryContext, items: List<CachedPostItem>): List<CachedPostItem> {
-        val blocks = items.map { item ->
-            when (item.kind) {
-                PostMediaKind.PHOTO -> InputRichBlockPhoto(InputMediaPhoto(item.fileId))
-                PostMediaKind.VIDEO -> InputRichBlockVideo(InputMediaVideo(item.fileId).supportsStreaming(true))
-            }
-        }
-        return sendBlocks(context, blocks, items.map { it.kind })
+        validate(context, items.size)
+        return sendItems(context, items.map { Item(it.kind, reference = it.fileId) })
     }
 
-    private suspend fun sendBlocks(context: DeliveryContext, blocks: List<InputRichBlock>, kinds: List<PostMediaKind>): List<CachedPostItem> {
+    private fun validate(context: DeliveryContext, count: Int) {
         require(context.inlineMessageId == null) { "Full posts are available only in direct chats" }
-        require(blocks.size in 1..20) { "A post must contain 1 to 20 items" }
-        val caption = context.postText?.takeIf(String::isNotBlank)?.let { RichBlockCaption(RichTextPlain(it)) }
-        val block = if (blocks.size == 1) {
-            when (val single = blocks.single()) {
-                is InputRichBlockPhoto -> single.apply { caption?.let(::caption) }
-                is InputRichBlockVideo -> single.apply { caption?.let(::caption) }
-                else -> error("Unsupported post media")
+        require(count in 1..20) { "A post must contain 1 to 20 items" }
+    }
+
+    private suspend fun sendItems(context: DeliveryContext, items: List<Item>): List<CachedPostItem> {
+        val text = context.postText?.takeIf(String::isNotBlank)
+        val returned = mutableListOf<CachedPostItem>()
+        var firstMessageId: Int? = null
+        // Eleven attachments need 9 + 2, so the final attachment stays in an album.
+        val groups = items.chunked(if (items.size == 11) 9 else 10)
+        val caption = text?.takeIf { it.length + (if (groups.size > 1) 5 else 0) <= 1024 }
+        for ((index, group) in groups.withIndex()) {
+            if (index > 0) delay(1000)
+            val reply = context.replyToMessageId?.takeIf { index == 0 }?.let { ReplyParameters(it).allowSendingWithoutReply(true) }
+            val groupCaption = buildString {
+                if (index == 0 && caption != null) append(caption)
+                if (groups.size > 1) {
+                    if (isNotEmpty()) append("\n\n")
+                    append("${index + 1}/${groups.size}")
+                }
+            }.takeIf(String::isNotEmpty)
+            val messages = if (group.size == 1) {
+                listOf(sendSingle(context.chatId, group.single(), groupCaption, reply))
+            } else {
+                val media = group.map(::media)
+                groupCaption?.let { media.first().caption(it) }
+                val request = SendMediaGroup(context.chatId, *media.toTypedArray())
+                reply?.let(request::replyParameters)
+                api.executeIo(request).messages()?.toList() ?: throw TelegramSendException("Telegram response does not contain a post album")
             }
-        } else {
-            InputRichBlockSlideshow(*blocks.toTypedArray()).apply { caption?.let(::caption) }
+            if (messages.size != group.size) throw TelegramSendException("Telegram post media count does not match the upload")
+            if (firstMessageId == null) firstMessageId = messages.first().messageId()
+            returned += messages.zip(group).map { (message, item) -> fileId(message, item.kind) }
         }
-        val request = SendRichMessage(context.chatId, InputRichMessage().blocks(block))
-        context.replyToMessageId?.let { request.replyParameters(ReplyParameters(it).allowSendingWithoutReply(true)) }
-        val response = api.executeIo(request)
-        val returned = response.message()?.richMessage()?.blocks?.flatMap(::fileIds)
-            ?: throw TelegramSendException("Telegram response does not contain a rich post")
-        if (returned.map { it.kind } != kinds) throw TelegramSendException("Telegram rich post media does not match the upload")
+        if (text != null && caption == null) {
+            var start = 0
+            while (start < text.length) {
+                var end = minOf(start + 4096, text.length)
+                if (end < text.length && text[end - 1].isHighSurrogate()) end--
+                val request = SendMessage(context.chatId, text.substring(start, end)).linkPreviewOptions(LinkPreviewOptions().isDisabled(true))
+                firstMessageId?.let { request.replyParameters(ReplyParameters(it).allowSendingWithoutReply(true)) }
+                api.executeIo(request)
+                start = end
+            }
+        }
         return returned
     }
 
-    private fun fileIds(block: RichBlock): List<CachedPostItem> = when (block) {
-        is RichBlockSlideshow -> block.blocks.flatMap(::fileIds)
+    private fun media(item: Item): InputMedia<*> = when (item.kind) {
+        PostMediaKind.PHOTO -> if (item.file != null) InputMediaPhoto(item.file) else InputMediaPhoto(requireNotNull(item.reference))
 
-        is RichBlockPhoto -> listOf(
-            CachedPostItem(PostMediaKind.PHOTO, block.photo.lastOrNull()?.fileId() ?: throw TelegramSendException("Missing post photo")),
-        )
+        PostMediaKind.VIDEO -> {
+            val video = if (item.file != null) InputMediaVideo(item.file) else InputMediaVideo(requireNotNull(item.reference))
+            video.supportsStreaming(true)
+            item.metadata?.let { metadata ->
+                video.width(metadata.width).height(metadata.height)
+                metadata.durationSeconds?.let(video::duration)
+            }
+            video
+        }
+    }
 
-        is RichBlockVideo -> listOf(CachedPostItem(PostMediaKind.VIDEO, block.video.fileId))
+    private suspend fun sendSingle(chatId: Long, item: Item, caption: String?, reply: ReplyParameters?): Message {
+        val response = when (item.kind) {
+            PostMediaKind.PHOTO -> {
+                val request = if (item.file != null) SendPhoto(chatId, item.file) else SendPhoto(chatId, requireNotNull(item.reference))
+                caption?.let(request::caption)
+                reply?.let(request::replyParameters)
+                api.executeIo(request)
+            }
 
-        else -> throw TelegramSendException("Unexpected block in Telegram rich post")
+            PostMediaKind.VIDEO -> {
+                val request = if (item.file != null) SendVideo(chatId, item.file) else SendVideo(chatId, requireNotNull(item.reference))
+                request.supportsStreaming(true)
+                item.metadata?.let { metadata ->
+                    request.width(metadata.width).height(metadata.height)
+                    metadata.durationSeconds?.let(request::duration)
+                }
+                caption?.let(request::caption)
+                reply?.let(request::replyParameters)
+                api.executeIo(request)
+            }
+        }
+        return response.message() ?: throw TelegramSendException("Telegram response does not contain post media")
+    }
+
+    private fun fileId(message: Message, kind: PostMediaKind): CachedPostItem {
+        val id = when (kind) {
+            PostMediaKind.PHOTO -> message.photo()?.lastOrNull()?.fileId()
+            PostMediaKind.VIDEO -> message.video()?.fileId
+        } ?: throw TelegramSendException("Telegram post media does not match the upload")
+        return CachedPostItem(kind, id)
     }
 }

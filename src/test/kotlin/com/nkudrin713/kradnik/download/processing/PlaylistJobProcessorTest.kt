@@ -80,7 +80,7 @@ class PlaylistJobProcessorTest {
         }
         coVerify(exactly = 0) { ytDlp.download(any(), any()) }
         verify { jobs.markCompleted(job, "playlist:2") }
-        verify { telegram.deleteMessage(20, 22) }
+        verify { telegram.editFinalMessage(com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(20, 22), "✅ Sent 2 of 2") }
         assertFalse(root.resolve("1").exists())
     }
 
@@ -139,7 +139,13 @@ class PlaylistJobProcessorTest {
 
         processor().process(job)
 
-        verify { telegram.sendHtmlMessage(20, match { it.contains("2. <a href=\"https://www.youtube.com/watch?v=two\">Two</a>") && it.contains("private", ignoreCase = true) }) }
+        verify {
+            telegram.editFinalMessage(
+                com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(20, 22),
+                match { it.contains("2. <a href=\"https://www.youtube.com/watch?v=two\">Two</a>") && it.contains("private", ignoreCase = true) },
+                html = true,
+            )
+        }
         assertEquals(if (hasSuccess) 1 else 2, job.playlistResults.count { it.fileId == null })
         coVerify(exactly = if (hasSuccess) 1 else 0) { fileSender.sendPlaylistAudios(any(), any(), any()) }
         assertFalse(root.resolve("1").exists())

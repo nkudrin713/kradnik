@@ -56,7 +56,7 @@ class TelegramLanguageSelectorTest {
         assertTrue(selector.handle(callbackQuery("lang:ru-informal")))
 
         verify { preferenceService.selectLanguage(300, BotLanguage.RU_INFORMAL) }
-        verify { telegramSender.editMessage(100, 500, "Наш человек. Кидай ссылку", any()) }
+        verify { telegramSender.editMessage(100, 500, "✅ Наш человек. Кидай ссылку", any()) }
     }
 
     @Test
@@ -69,7 +69,7 @@ class TelegramLanguageSelectorTest {
         assertTrue(selector.handle(callbackQuery))
 
         verify { preferenceService.selectLanguage(300, BotLanguage.RU) }
-        verify { telegramSender.editMessage(100, 500, "Выбран русский язык. Пришли ссылку на медиа.", any()) }
+        verify { telegramSender.editMessage(100, 500, "✅ Выбран русский язык. Пришли ссылку на медиа.", any()) }
     }
 
     @Test

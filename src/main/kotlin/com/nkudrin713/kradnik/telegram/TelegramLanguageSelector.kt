@@ -49,6 +49,7 @@ class TelegramLanguageSelector(
         val buttons = BotLanguage.entries.map { language ->
             InlineKeyboardButton(messages.text(language, TelegramMessage.LANGUAGE_NAME))
                 .callbackData("$LANGUAGE_CALLBACK_PREFIX:${language.code}")
+                .style("success")
         }.toTypedArray()
         return InlineKeyboardMarkup(buttons)
     }

@@ -269,7 +269,7 @@ class TelegramMediaSender(
         text: String,
         replyToMessageId: Int? = null,
     ) {
-        val request = SendMessage(chatId, "<pre>${text.escapeHtml()}</pre>")
+        val request = SendMessage(chatId, "<code>${text.escapeHtml()}</code>")
             .parseMode(ParseMode.HTML)
         addReplyParameters(request, replyToMessageId)
         apiClient.executeIo(request)

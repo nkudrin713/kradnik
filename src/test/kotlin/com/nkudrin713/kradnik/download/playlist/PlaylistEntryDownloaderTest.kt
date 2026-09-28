@@ -13,6 +13,8 @@ import io.mockk.mockk
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -32,13 +34,47 @@ class PlaylistEntryDownloaderTest {
     fun usesSavedSelectionAndSeparatesNewCacheFromLegacyAudio() = runTest {
         coEvery { ytDlp.download(any(), root) } answers {
             val actual = firstArg<SourceRequest>()
-            assertEquals(source.copy(originalUrl = entry.url, normalizedUrl = "https://www.youtube.com/watch?v=video"), actual)
+            assertEquals(source.copy(originalUrl = entry.url, normalizedUrl = "https://www.youtube.com/watch?v=video", formatSelector = YtDlpPresets.AUDIO_FORMAT_WITH_VIDEO_FALLBACK), actual)
             DownloadedFile(Files.write(root.resolve("track.mp3"), ByteArray(20)), 20)
         }
         downloader.download(entry, root, source)
         assertEquals("youtube:video:video:audio:youtube_audio:audio:96K", downloader.cacheKey(entry))
         assertNotEquals(downloader.cacheKey(entry), downloader.cacheKey(entry, source))
         assertTrue(downloader.cacheKey(entry, source).contains("320K:cbr:v1"))
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["ba/bestaudio", "ba", "bestaudio"])
+    fun fallsBackToCombinedAudioWithoutChangingSavedEncoding(selector: String) = runTest {
+        val saved = source.copy(formatSelector = selector)
+        coEvery { ytDlp.download(any(), root) } answers {
+            val actual = firstArg<SourceRequest>()
+            assertEquals("ba/bestaudio/best", actual.formatSelector)
+            assertEquals(saved.extraArgs, actual.extraArgs)
+            DownloadedFile(Files.write(root.resolve("track.mp3"), ByteArray(20)), 20)
+        }
+        downloader.download(entry, root, saved)
+        assertEquals(selector, saved.formatSelector)
+    }
+
+    @Test
+    fun alsoUsesFallbackForLegacyRequestsWithoutSavedSource() = runTest {
+        coEvery { ytDlp.download(any(), root) } answers {
+            val actual = firstArg<SourceRequest>()
+            assertEquals("ba/bestaudio/best", actual.formatSelector)
+            assertEquals(YtDlpPresets.LEGACY_PLAYLIST_AUDIO_ARGS, actual.extraArgs)
+            DownloadedFile(Files.write(root.resolve("track.mp3"), ByteArray(20)), 20)
+        }
+        downloader.download(entry, root)
+    }
+
+    @Test
+    fun preservesExplicitFormatSelection() = runTest {
+        coEvery { ytDlp.download(any(), root) } answers {
+            assertEquals("140", firstArg<SourceRequest>().formatSelector)
+            DownloadedFile(Files.write(root.resolve("track.mp3"), ByteArray(20)), 20)
+        }
+        downloader.download(entry, root, source.copy(formatSelector = "140"))
     }
 
     @Test

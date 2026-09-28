@@ -101,6 +101,7 @@ class YtDlpServiceTest {
         val command = slot<Command>()
         coVerify { processRunner.run(capture(command)) }
         assertFalse(command.captured.args.contains("-f"))
+        assertEquals(32 * 1024 * 1024, command.captured.maxCapturedStdoutChars)
     }
 
     @Test
@@ -118,6 +119,7 @@ class YtDlpServiceTest {
         coVerify { processRunner.run(capture(command)) }
         assertTrue(command.captured.args.contains("--flat-playlist"))
         assertFalse(command.captured.args.contains("--no-playlist"))
+        assertEquals(32 * 1024 * 1024, command.captured.maxCapturedStdoutChars)
     }
 
     @Test

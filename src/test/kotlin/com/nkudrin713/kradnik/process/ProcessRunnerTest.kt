@@ -105,6 +105,22 @@ class ProcessRunnerTest {
     }
 
     @Test
+    fun `uses command stdout limit for large metadata output`() = runTest {
+        val result = runner.run(
+            TestCommand(
+                executable = "sh",
+                args = listOf("-c", "yes metadata | head -c 5000000"),
+                workingDir = tempDir,
+                timeout = 10.seconds,
+                maxCapturedStdoutChars = 6_000_000,
+            ),
+        )
+
+        assertFalse(result.stdoutTruncated)
+        assertEquals(5_000_000, result.stdout.length)
+    }
+
+    @Test
     fun `cancellation terminates process tree with workspace monitor`() = runBlocking {
         val rootPidFile = tempDir.resolve("root.pid")
         val childPidFile = tempDir.resolve("child.pid")
@@ -151,4 +167,5 @@ private data class TestCommand(
     override val workingDir: Path?,
     override val timeout: kotlin.time.Duration,
     override val maxWorkingDirectoryBytes: Long? = null,
+    override val maxCapturedStdoutChars: Int? = null,
 ) : Command

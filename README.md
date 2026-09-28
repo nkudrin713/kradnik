@@ -220,6 +220,7 @@ Run the complete verification:
 - `DOWNLOAD_PLAYLIST_ZIP_TIMEOUT`: total ZIP job timeout, including download, packaging and upload; default `2h`. ZIP workspaces are monitored against three times `TELEGRAM_MAX_UPLOAD_BYTES` and require at least 64 MiB of free disk space. The polling guard may briefly overshoot while external processes write.
 - `DOWNLOAD_WORK_DIR`: writable media directory with one subdirectory per job.
 - `DOWNLOAD_*_TIMEOUT`: external-process and HTTP timeouts.
+- yt-dlp metadata responses can use up to 32 Mi characters of captured stdout; other process output remains capped at 4 Mi characters. Larger responses fail before a download job is created.
 - `DOWNLOAD_YT_DLP_CLOUD_MAX_WORKSPACE_BYTES`: per-process cloud download workspace cap.
 - `DOWNLOAD_CHOICE_SESSION_TTL`: retention after selection or cancellation; default 30 minutes.
 - `DOWNLOAD_CHOICE_SESSION_MAX_AGE`: maximum lifetime of an unselected menu; default 30 days.

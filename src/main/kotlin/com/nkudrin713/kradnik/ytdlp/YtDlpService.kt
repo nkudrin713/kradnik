@@ -40,12 +40,14 @@ private const val EXTRACTOR_ARGS = "--extractor-args"
 private const val YOUTUBE_PLAYER_CLIENT = "youtube:player_client=mweb"
 
 private const val TITLE_EXT = "%(title)s.%(ext)s"
+private const val MAX_METADATA_STDOUT_CHARS = 32 * 1024 * 1024
 
 private data class YtDlpCommand(
     override val args: List<String>,
     override val workingDir: Path?,
     override val timeout: kotlin.time.Duration,
     override val maxWorkingDirectoryBytes: Long? = null,
+    override val maxCapturedStdoutChars: Int? = null,
     override val executable: String = YT_DLP,
 ) : Command
 
@@ -111,6 +113,7 @@ class YtDlpService(
                 },
                 workingDir = null,
                 timeout = metadataTimeout.toKotlinDuration(),
+                maxCapturedStdoutChars = MAX_METADATA_STDOUT_CHARS,
             ),
         )
         return parseMetadataResult(result)
@@ -131,6 +134,7 @@ class YtDlpService(
                 ),
                 workingDir = null,
                 timeout = metadataTimeout.toKotlinDuration(),
+                maxCapturedStdoutChars = MAX_METADATA_STDOUT_CHARS,
             ),
         )
         return parseMetadataResult(result)
@@ -155,6 +159,7 @@ class YtDlpService(
                 },
                 workingDir = null,
                 timeout = metadataTimeout.toKotlinDuration(),
+                maxCapturedStdoutChars = MAX_METADATA_STDOUT_CHARS,
             ),
         )
 

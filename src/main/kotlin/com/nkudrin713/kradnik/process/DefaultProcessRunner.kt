@@ -29,15 +29,17 @@ import kotlin.time.Duration.Companion.milliseconds
 @Service
 class DefaultProcessRunner : ProcessRunner {
     override suspend fun run(command: Command): ProcessExecutionResult = coroutineScope {
+        val stdoutCaptureLimit = command.maxCapturedStdoutChars ?: MAX_CAPTURED_OUTPUT_CHARS
+        require(stdoutCaptureLimit > 0) { "maxCapturedStdoutChars must be positive" }
         val process = ProcessBuilder(command.executable, *command.args.toTypedArray())
             .directory(command.workingDir?.toFile())
             .start()
 
         val stdoutDeferred = async(Dispatchers.IO) {
-            readOutput(process.inputStream)
+            readOutput(process.inputStream, stdoutCaptureLimit)
         }
         val stderrDeferred = async(Dispatchers.IO) {
-            readOutput(process.errorStream)
+            readOutput(process.errorStream, MAX_CAPTURED_OUTPUT_CHARS)
         }
         val workingDirectoryLimitExceeded = AtomicBoolean(false)
         val workingDirectoryMonitor = startWorkingDirectoryMonitor(
@@ -149,7 +151,7 @@ class DefaultProcessRunner : ProcessRunner {
         }
     }
 
-    private fun readOutput(inputStream: InputStream): CapturedOutput {
+    private fun readOutput(inputStream: InputStream, maxCapturedChars: Int): CapturedOutput {
         val chunks = ArrayDeque<String>()
         val buffer = CharArray(OUTPUT_READ_BUFFER_CHARS)
         var capturedChars = 0
@@ -169,7 +171,7 @@ class DefaultProcessRunner : ProcessRunner {
                 }
                 chunks.addLast(buffer.concatToString(startIndex = 0, endIndex = count))
                 capturedChars += count
-                while (capturedChars > MAX_CAPTURED_OUTPUT_CHARS && chunks.size > 1) {
+                while (capturedChars > maxCapturedChars && chunks.size > 1) {
                     capturedChars -= chunks.removeFirst().length
                 }
             }

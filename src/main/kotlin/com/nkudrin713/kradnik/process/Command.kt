@@ -13,6 +13,10 @@ interface Command {
     val workingDir: Path?
     val timeout: Duration
 
+    /** Optional stdout capture limit for commands that return larger structured results. */
+    val maxCapturedStdoutChars: Int?
+        get() = null
+
     /** Optional hard growth limit enforced by [DefaultProcessRunner] against [workingDir] while the process is alive. */
     val maxWorkingDirectoryBytes: Long?
         get() = null

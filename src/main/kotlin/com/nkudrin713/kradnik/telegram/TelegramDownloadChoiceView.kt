@@ -45,7 +45,7 @@ class TelegramDownloadChoiceView(
                 }
                 if (bitrate != null && size == null) add(messages.text(language, TelegramMessage.PLAYLIST_SIZE_UNKNOWN, bitrate))
             }
-            return "<code>${lines.joinToString("\n").escapeHtml()}</code>"
+            return lines.joinToString("\n").escapeHtml()
         }
         val videoInfo = buildList {
             add(
@@ -64,7 +64,7 @@ class TelegramDownloadChoiceView(
                 }
             }
         }
-        return "<code>${videoInfo.joinToString("\n").escapeHtml()}</code>"
+        return videoInfo.joinToString("\n").escapeHtml()
     }
 
     fun keyboard(
@@ -75,8 +75,7 @@ class TelegramDownloadChoiceView(
         val rows = options.filter { it.available }.map { option ->
             arrayOf(
                 InlineKeyboardButton(buttonText(option, language))
-                    .callbackData(DownloadChoiceCallback.encode(sessionToken, option.key))
-                    .style("success"),
+                    .callbackData(DownloadChoiceCallback.encode(sessionToken, option.key)),
             )
         } + listOf(
             arrayOf(

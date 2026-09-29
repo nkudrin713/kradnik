@@ -80,12 +80,16 @@ class ZipPlaylistDeliveryTest {
         coVerify(exactly = 3) { downloader.download(any(), any()) }
         verify { jobs.markCompleted(job, "zip-file-id") }
         verify(exactly = 0) { jobs.savePlaylistResult(any(), any()) }
+        verify { jobs.savePlaylistFailures(1, match { it.map(PlaylistAudioResult::position) == listOf(2) }) }
         verify { telegram.editPlaylistProgress(any(), "📦 Creating ZIP archive", 1, job.language, any()) }
         verify {
-            telegram.editFinalMessage(
+            telegram.editPlaylistReport(
                 com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(20, 22),
                 match { "2. <a href=" in it && "Track 2" in it && "Recording unavailable" in it },
-                html = true,
+                1,
+                job.language,
+                1,
+                true,
             )
         }
         assertFalse(Files.exists(root.resolve("1")))
@@ -127,6 +131,7 @@ class ZipPlaylistDeliveryTest {
         coEvery { downloader.download(any(), any()) } throws YtDlpException("Unavailable")
         processor().process(job)
         verify { jobs.markFailed(job, "No playlist items could be downloaded") }
+        verify { jobs.savePlaylistFailures(1, match { it.size == 3 }) }
         coVerify(exactly = 0) { sender.sendDocument(any(), any(), any()) }
         assertFalse(Files.exists(root.resolve("1")))
     }
@@ -201,6 +206,7 @@ class ZipPlaylistDeliveryTest {
 
     private fun successfulDownloads(size: Int = 10) {
         every { jobs.isProcessing(1) } returns true
+        every { jobs.savePlaylistFailures(1, any()) } returns true
         every { jobs.markCompleted(any(), any()) } returns true
         every { jobs.markFailed(any(), any()) } returns true
         coEvery { downloader.download(any(), any()) } answers {

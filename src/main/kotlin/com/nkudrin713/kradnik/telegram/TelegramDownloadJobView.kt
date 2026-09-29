@@ -11,6 +11,34 @@ private const val JOB_CALLBACK_PREFIX = "job"
 
 @Component
 class TelegramDownloadJobView(private val messages: TelegramMessages) {
+    fun retryKeyboard(jobId: Long, language: BotLanguage, count: Int, includeZip: Boolean): InlineKeyboardMarkup {
+        val rows = mutableListOf(
+            arrayOf(
+                InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_RETRY_AUDIO, count))
+                    .callbackData(DownloadJobCallback.encode(DownloadJobAction.RETRY_AUDIO, jobId)),
+            ),
+        )
+        if (includeZip) {
+            rows += arrayOf(
+                InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_RETRY_ZIP, count))
+                    .callbackData(DownloadJobCallback.encode(DownloadJobAction.RETRY_ZIP, jobId)),
+            )
+        }
+        return InlineKeyboardMarkup(*rows.toTypedArray())
+    }
+
+    fun queueKeyboard(jobId: Long, language: BotLanguage): InlineKeyboardMarkup = InlineKeyboardMarkup(
+        arrayOf(
+            InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_REFRESH_QUEUE))
+                .callbackData(DownloadJobCallback.encode(DownloadJobAction.REFRESH_QUEUE, jobId)),
+        ),
+        arrayOf(
+            InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_CANCEL))
+                .callbackData(DownloadJobCallback.encode(DownloadJobAction.CANCEL, jobId))
+                .style("danger"),
+        ),
+    )
+
     fun cancelKeyboard(jobId: Long, language: BotLanguage): InlineKeyboardMarkup = InlineKeyboardMarkup(
         arrayOf(
             InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_CANCEL))
@@ -31,6 +59,9 @@ class TelegramDownloadJobView(private val messages: TelegramMessages) {
 enum class DownloadJobAction(val value: String) {
     CANCEL("cancel"),
     BACK("back"),
+    REFRESH_QUEUE("queue"),
+    RETRY_AUDIO("retry_audio"),
+    RETRY_ZIP("retry_zip"),
 }
 
 data class DownloadJobCallback(val action: DownloadJobAction, val jobId: Long) {

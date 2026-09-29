@@ -10,16 +10,26 @@ import org.springframework.data.jpa.repository.Query
 interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
     fun findByTelegramUpdateId(telegramUpdateId: Int): DownloadJob?
 
+    fun findByRetryOfJobId(retryOfJobId: Long): DownloadJob?
+
+    /** Serializes short claims from both worker pools before checking a user's processing jobs. */
+    @Query(value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(7262824436563968)) AS locked", nativeQuery = true)
+    fun lockQueueClaims(): Int
+
     @Query(value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(CAST(:telegramUpdateId AS BIGINT))) AS locked", nativeQuery = true)
     fun lockTelegramUpdate(telegramUpdateId: Int): Int
 
     @Query(
         value = """
         WITH picked AS (
-            SELECT id FROM download_jobs
-            WHERE status = 'queued' AND workload_type = 'single'
-            ORDER BY created_at, id
-            FOR UPDATE SKIP LOCKED
+            SELECT queued.id FROM download_jobs queued
+            WHERE queued.status = 'queued' AND queued.workload_type = 'single'
+              AND NOT EXISTS (
+                  SELECT 1 FROM download_jobs active
+                  WHERE active.telegram_user_id = queued.telegram_user_id AND active.status = 'processing'
+              )
+            ORDER BY queued.created_at, queued.id
+            FOR UPDATE OF queued SKIP LOCKED
             LIMIT 1
         )
         UPDATE download_jobs
@@ -35,10 +45,14 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
     @Query(
         value = """
         WITH picked AS (
-            SELECT id FROM download_jobs
-            WHERE status = 'queued' AND workload_type = 'playlist_audio'
-            ORDER BY created_at, id
-            FOR UPDATE SKIP LOCKED
+            SELECT queued.id FROM download_jobs queued
+            WHERE queued.status = 'queued' AND queued.workload_type = 'playlist_audio'
+              AND NOT EXISTS (
+                  SELECT 1 FROM download_jobs active
+                  WHERE active.telegram_user_id = queued.telegram_user_id AND active.status = 'processing'
+              )
+            ORDER BY queued.created_at, queued.id
+            FOR UPDATE OF queued SKIP LOCKED
             LIMIT 1
         )
         UPDATE download_jobs
@@ -50,6 +64,20 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
         nativeQuery = true,
     )
     fun claimNextQueuedPlaylistJob(): DownloadJob?
+
+    @Query(
+        value = """
+        SELECT (
+            SELECT COUNT(*) FROM download_jobs preceding
+            WHERE preceding.status = 'queued' AND preceding.workload_type = target.workload_type
+              AND (preceding.created_at, preceding.id) < (target.created_at, target.id)
+        ) + 1
+        FROM download_jobs target
+        WHERE target.id = :jobId AND target.status = 'queued'
+        """,
+        nativeQuery = true,
+    )
+    fun queuePosition(jobId: Long): Long?
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT job FROM DownloadJob job WHERE job.id = :jobId")

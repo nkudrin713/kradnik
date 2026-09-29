@@ -40,6 +40,9 @@ class DownloadJob(
     @Column(name = "telegram_update_id")
     var telegramUpdateId: Int? = null,
 
+    @Column(name = "retry_of_job_id")
+    var retryOfJobId: Long? = null,
+
     @Column(name = "telegram_request_message_id")
     var telegramRequestMessageId: Int? = null,
 

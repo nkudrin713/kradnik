@@ -19,7 +19,7 @@ class PlaylistFailureReport(private val messages: TelegramMessages) {
             val title = entry.title.replace(Regex("[\\p{Cc}\\p{Cf}]"), " ")
                 .let { it.substring(0, it.offsetByCodePoints(0, minOf(160, it.codePointCount(0, it.length)))) }
             val url = "https://www.youtube.com/watch?v=" + URLEncoder.encode(entry.videoId, StandardCharsets.UTF_8)
-            val reason = failure.failure ?: PlaylistItemFailure.from(failure.error)
+            val reason = PlaylistItemFailure.forResult(failure)
             val line = "${entry.position}. <a href=\"${escape(url)}\">${escape(title)}</a>\n${escape(messages.text(language, reason.message))}"
             if (chunk.length + line.length + 2 > 3500) {
                 chunks += chunk

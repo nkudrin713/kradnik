@@ -3,7 +3,10 @@ package com.nkudrin713.kradnik.download.service
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
+import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
+import com.nkudrin713.kradnik.download.playlist.PlaylistRetrySelection
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import com.nkudrin713.kradnik.download.repository.StringListJsonConverter
 import com.nkudrin713.kradnik.download.source.SourceRequest
@@ -30,6 +33,7 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
                 telegramUserId = command.telegramUserId,
                 telegramChatId = command.telegramChatId,
                 telegramUpdateId = command.telegramUpdateId,
+                retryOfJobId = command.retryOfJobId,
                 telegramRequestMessageId = command.telegramRequestMessageId,
                 language = command.language,
                 originalUrl = spec.originalUrl,
@@ -51,11 +55,60 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
         )
     }
 
+    @Transactional(readOnly = true)
+    fun retrySource(jobId: Long, telegramUserId: Long, telegramChatId: Long): DownloadJob? {
+        val job = downloadJobRepository.findById(jobId).orElse(null) ?: return null
+        return job.takeIf { it.canRetry(telegramUserId, telegramChatId) }
+    }
+
+    /** Locks the source job so repeated callbacks cannot create duplicate retry jobs. */
     @Transactional
-    fun claimNextQueuedJob(): DownloadJob? = downloadJobRepository.claimNextQueuedJob()
+    fun createRetryJob(
+        sourceJobId: Long,
+        telegramUserId: Long,
+        telegramChatId: Long,
+        telegramUpdateId: Int,
+        telegramStatusMessageId: Int,
+        deliveryMode: PlaylistDeliveryMode,
+    ): DownloadJob? {
+        val source = downloadJobRepository.findForUpdate(sourceJobId) ?: return null
+        if (!source.canRetry(telegramUserId, telegramChatId)) return null
+        if (deliveryMode == PlaylistDeliveryMode.ZIP && source.playlistDeliveryMode != PlaylistDeliveryMode.ZIP) return null
+        if (downloadJobRepository.findByRetryOfJobId(sourceJobId) != null) return null
+        val entries = PlaylistRetrySelection.entries(source.playlistEntries, source.playlistResults)
+        val spec = DownloadSpec.fromJob(source).copy(
+            cacheKey = "${source.cacheKey}:retry:$sourceJobId",
+            playlistEntries = entries,
+            playlistDeliveryMode = deliveryMode,
+        )
+        return createJob(
+            CreateDownloadJobCommand(
+                telegramUserId = telegramUserId,
+                telegramChatId = telegramChatId,
+                telegramUpdateId = telegramUpdateId,
+                retryOfJobId = sourceJobId,
+                telegramRequestMessageId = source.telegramRequestMessageId,
+                language = source.language,
+                spec = spec,
+                telegramStatusMessageId = telegramStatusMessageId,
+            ),
+        )
+    }
 
     @Transactional
-    fun claimNextQueuedPlaylistJob(): DownloadJob? = downloadJobRepository.claimNextQueuedPlaylistJob()
+    fun claimNextQueuedJob(): DownloadJob? {
+        downloadJobRepository.lockQueueClaims()
+        return downloadJobRepository.claimNextQueuedJob()
+    }
+
+    @Transactional
+    fun claimNextQueuedPlaylistJob(): DownloadJob? {
+        downloadJobRepository.lockQueueClaims()
+        return downloadJobRepository.claimNextQueuedPlaylistJob()
+    }
+
+    @Transactional(readOnly = true)
+    fun queuePosition(jobId: Long): Long? = downloadJobRepository.queuePosition(jobId)
 
     /** Called once before workers start. The previous application instance must already be stopped. */
     @Transactional
@@ -88,6 +141,9 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
     fun isProcessing(jobId: Long): Boolean = downloadJobRepository.findById(jobId).orElse(null)?.status == DownloadJobStatus.PROCESSING
 
     @Transactional(readOnly = true)
+    fun isQueued(jobId: Long): Boolean = downloadJobRepository.findById(jobId).orElse(null)?.status == DownloadJobStatus.QUEUED
+
+    @Transactional(readOnly = true)
     fun isCancelledByUser(jobId: Long): Boolean = downloadJobRepository.findById(jobId).orElse(null)?.status == DownloadJobStatus.CANCELLED_BY_USER
 
     @Transactional
@@ -98,12 +154,30 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
         job.playlistResults = job.playlistResults + result
         return true
     }
+
+    @Transactional
+    fun savePlaylistFailures(jobId: Long, failures: List<PlaylistAudioResult>): Boolean {
+        val job = downloadJobRepository.findForUpdate(jobId) ?: return false
+        if (job.status != DownloadJobStatus.PROCESSING) return false
+        job.playlistResults = failures.filter { it.fileId == null }
+        return true
+    }
+
+    private fun DownloadJob.canRetry(telegramUserId: Long, telegramChatId: Long): Boolean {
+        return this.telegramUserId == telegramUserId &&
+            this.telegramChatId == telegramChatId &&
+            telegramInlineMessageId == null &&
+            workloadType == DownloadWorkloadType.PLAYLIST_AUDIO &&
+            status in setOf(DownloadJobStatus.COMPLETED, DownloadJobStatus.FAILED) &&
+            PlaylistRetrySelection.entries(playlistEntries, playlistResults).isNotEmpty()
+    }
 }
 
 data class CreateDownloadJobCommand(
     val telegramUserId: Long,
     val telegramChatId: Long,
     val telegramUpdateId: Int? = null,
+    val retryOfJobId: Long? = null,
     val telegramRequestMessageId: Int? = null,
     val language: BotLanguage = BotLanguage.EN,
     val spec: DownloadSpec,

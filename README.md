@@ -24,7 +24,7 @@ The diagram shows single-media jobs. Playlists use `PlaylistQueueWorker` and `Pl
 - Single-media yt-dlp metadata contains only fields used for options and preflight, including the needed fields from each format. Subtitle data is omitted. Metadata output has a 32 Mi-character capture limit; oversized responses fail before job creation.
 - Playlists up to 100 tracks offer all tracks; larger lists offer the first or last 100. Both audio and ZIP modes use 320 kbps CBR MP3. ZIP filenames include the successful file count and playlist title; oversized archives are rejected.
 - Instagram videos offer video, audio, and full-post options; static posts offer the full post. Posts support up to 20 ordered attachments. Public metadata may omit native music; Instagram login is not used.
-- Available actions are green, cancellation is red, and unavailable options are hidden. Menu titles use inline monospace.
+- Available actions use Telegram's default button style, cancellation is red, unavailable options are hidden, and menu titles use ordinary text styling.
 - PostgreSQL stores menus, ownership, and language so callbacks survive restarts.
 
 ### Single-media production
@@ -65,6 +65,8 @@ Selections persist the track range, delivery mode, and encoding. New 320 kbps jo
 
 Each track saves a file ID or error before cleanup. Successful tracks arrive in playlist order, in albums of up to 10; a lone track uses `sendAudio`. There is a one-second pause between albums. The progress message becomes the final count or failure report, with failed positions, linked titles, and localized reasons; long reports continue in separate messages. Multiple audio tracks also trigger a playback-direction hint. Restart resumes unrecorded tracks, while cancellation stops late results.
 
+When an audio playlist has retryable failures, its report offers a manual retry of only those tracks. The new queued job keeps their original positions and saved encoding; successful tracks are not sent again. Explicitly removed, private, region-blocked, or oversized tracks are excluded. Timeouts, request limits, network failures, and ambiguous source errors remain eligible; a generic “unavailable” message alone does not prove permanent loss. One retry can be started from each report; a retry job can offer another attempt if it still has eligible failures.
+
 The bot checks storage-chat access before fresh downloads. Source and individual size failures skip a track; storage, disk, and delivery failures stop the job. Workspaces are cleaned after completion, failure, or cancellation.
 
 Menu size estimates use 320 kbps and require known durations; unknown sizes are labeled without disabling either mode. Actual output enforces the upload limit. Long tracks are not trimmed or downsampled. Temporary data is limited to three upload limits, with at least 64 MiB free disk.
@@ -81,6 +83,8 @@ The saved job contains the selected range and ZIP mode. Successful tracks become
 
 One timeout covers download, packaging, and upload. `PlaylistWorkspaceBudget` checks size and free space before and during the job; downloaded tracks and the final ZIP must each fit the upload limit. Source failures skip tracks; size, disk, and other errors abort the job. An empty result fails. Completion precedes the final status, and cleanup always runs.
 
+ZIP jobs save the failed positions and reasons before packaging. Their failure reports offer two manual retries of the eligible tracks: as audio messages or as a new ZIP. Selecting either starts one child job; repeated presses on the same report cannot enqueue duplicates. A ZIP retry still rebuilds its local files after restart.
+
 ### Runtime models and cache
 
 `DownloadJob` persists work; `DownloadSpec` persists menu choices. Runtime requests separate single-media and playlist paths. `ResultKeyFactory` owns cache identities, and `TelegramReceiptCodec` preserves existing receipt formats. Saved jobs and keys remain compatible.
@@ -89,6 +93,7 @@ One timeout covers download, packaging, and upload. `PlaylistWorkspaceBudget` ch
 
 - Run one application instance. `DOWNLOAD_WORKERS` defaults to 3, `DOWNLOAD_PLAYLIST_WORKERS` to 1, and per-playlist `DOWNLOAD_PLAYLIST_ITEM_PARALLELISM` to 2.
 - PostgreSQL stores `QUEUED`, `PROCESSING`, `COMPLETED`, `FAILED`, and `CANCELLED_BY_USER` jobs. Workers claim rows with `FOR UPDATE SKIP LOCKED`; external I/O runs outside transactions.
+- Each user has at most one `PROCESSING` job across both worker pools. Claim transactions are serialized briefly so concurrent workers cannot start a second job for the same user; they skip that user's waiting jobs and serve other users. Waiting statuses show a position within the single-media or playlist queue, with a button to refresh it. Positions count queued jobs in creation order and can change as workers skip users who already have a running job.
 - `JobLifecycle` makes completion and failure conditional, so cancelled jobs cannot finish later. `TelegramJobProgress` reports phases and user-facing errors. Partial playlist success counts as completion.
 - Failed jobs are not retried automatically. Restart requeues interrupted work: audio playlists retain recorded file IDs, while ZIP jobs rebuild local files. Startup removes abandoned directories.
 - Shutdown interrupts I/O and waits up to 30 seconds per worker pool. A crash after Telegram accepts a file but before completion can duplicate a message. Overlapping instances are unsupported.

@@ -25,6 +25,7 @@ class TelegramUpdateHandlerTest {
     private val coordinator: DownloadChoiceCoordinator = mockk()
     private val choiceHandler: DownloadChoiceHandler = mockk()
     private val cancellationHandler: DownloadCancellationHandler = mockk(relaxed = true)
+    private val retryHandler: PlaylistRetryHandler = mockk(relaxed = true)
     private val telegramSender: TelegramSender = mockk()
     private val donationSender: TelegramDonationSender = mockk()
     private val languageSelector: TelegramLanguageSelector = mockk()
@@ -146,6 +147,7 @@ class TelegramUpdateHandlerTest {
             every { callbackQuery() } returns callbackQuery
         }
         every { languageSelector.handle(callbackQuery) } returns false
+        every { retryHandler.handle(callbackQuery, 500) } returns false
         every { cancellationHandler.handle(callbackQuery, 500) } returns false
         every { choiceHandler.handle(callbackQuery) } just runs
 
@@ -194,6 +196,7 @@ class TelegramUpdateHandlerTest {
             downloadChoiceCoordinator = coordinator,
             downloadChoiceHandler = choiceHandler,
             downloadCancellationHandler = cancellationHandler,
+            playlistRetryHandler = retryHandler,
             telegramSender = telegramSender,
             telegramDonationSender = donationSender,
             languageSelector = languageSelector,

@@ -1,6 +1,8 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -66,16 +68,36 @@ class TelegramDownloadStarter(
             statusMessageId?.let { deleteStatusBestEffort(telegramChatId, it) }
             return
         }
+        showQueuedStatus(created)
+    }
+
+    fun retryPlaylist(source: DownloadJob, telegramUserId: Long, telegramUpdateId: Int, deliveryMode: PlaylistDeliveryMode): DownloadJob? {
+        val chatId = source.telegramChatId
+        val statusMessageId = telegramSender.sendStatus(chatId, TelegramDownloadStatus.QUEUED, source.language)
+        val created = try {
+            downloadJobService.createRetryJob(source.requiredId(), telegramUserId, chatId, telegramUpdateId, statusMessageId, deliveryMode)
+        } catch (error: Exception) {
+            deleteStatusBestEffort(chatId, statusMessageId)
+            throw error
+        }
+        if (created == null) {
+            deleteStatusBestEffort(chatId, statusMessageId)
+            return null
+        }
+        showQueuedStatus(created)
+        return created
+    }
+
+    private fun showQueuedStatus(created: DownloadJob) {
         val jobAddress = created.telegramInlineMessageId
             ?.let(TelegramMessageAddress::Inline)
             ?: TelegramMessageAddress.Chat(created.telegramChatId, requireNotNull(created.telegramStatusMessageId))
         runCatching {
-            telegramSender.editJobStatus(
-                address = jobAddress,
-                status = TelegramDownloadStatus.QUEUED,
-                jobId = created.requiredId(),
-                language = created.language,
-            )
+            downloadJobService.queuePosition(created.requiredId())?.let { position ->
+                telegramSender.editQueuedJob(jobAddress, created.requiredId(), created.language, created.workloadType, position) {
+                    downloadJobService.isQueued(created.requiredId())
+                }
+            }
         }.onFailure {
             logger.warn("Queued job keyboard update failed: jobId={}", created.id, it)
         }

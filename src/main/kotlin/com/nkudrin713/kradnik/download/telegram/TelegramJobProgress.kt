@@ -3,10 +3,12 @@ package com.nkudrin713.kradnik.download.telegram
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
+import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.playlist.PlaylistDeliveryResult
 import com.nkudrin713.kradnik.download.playlist.PlaylistEmptyException
 import com.nkudrin713.kradnik.download.playlist.PlaylistOperationException
+import com.nkudrin713.kradnik.download.playlist.PlaylistRetrySelection
 import com.nkudrin713.kradnik.download.playlist.PlaylistSizeLimitException
 import com.nkudrin713.kradnik.download.processing.DownloadPhase
 import com.nkudrin713.kradnik.download.processing.JobProgress
@@ -113,7 +115,7 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
             }
             val header = messages.text(job.language, TelegramMessage.PLAYLIST_PARTIAL_SUCCESS, result.successfulCount, job.playlistEntries.size)
             val report = PlaylistFailureReport(messages).render(header, job.playlistEntries, result.failures, job.language)
-            publishReport(job, report)
+            publishReport(job, report, result.failures)
         }
     }
 
@@ -121,7 +123,7 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         bestEffort(job) {
             if (error is PlaylistEmptyException) {
                 val header = messages.text(job.language, TelegramMessage.PLAYLIST_ALL_FAILED)
-                publishReport(job, PlaylistFailureReport(messages).render(header, job.playlistEntries, error.failures, job.language))
+                publishReport(job, PlaylistFailureReport(messages).render(header, job.playlistEntries, error.failures, job.language), error.failures)
                 return@bestEffort
             }
             val key = when {
@@ -139,19 +141,34 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         return job.telegramStatusMessageId?.let { TelegramMessageAddress.Chat(job.telegramChatId, it) }
     }
 
-    private fun publishReport(job: DownloadJob, report: List<String>) {
+    private fun publishReport(job: DownloadJob, report: List<String>, failures: List<PlaylistAudioResult>) {
+        val retryCount = PlaylistRetrySelection.entries(job.playlistEntries, failures).size
+        val includeZip = job.playlistDeliveryMode == PlaylistDeliveryMode.ZIP
         val address = address(job)
         if (address == null) {
-            report.forEach { sender.sendHtmlMessage(job.telegramChatId, it) }
+            sendReport(job, report.first(), retryCount, includeZip)
+            report.drop(1).forEach { sender.sendHtmlMessage(job.telegramChatId, it) }
             return
         }
         try {
-            sender.editFinalMessage(address, report.first(), html = true)
+            if (retryCount > 0) {
+                sender.editPlaylistReport(address, report.first(), job.requiredId(), job.language, retryCount, includeZip)
+            } else {
+                sender.editFinalMessage(address, report.first(), html = true)
+            }
         } catch (error: Exception) {
             logger.warn("JOB[{}] final status edit failed; sending report separately", job.id, error)
-            sender.sendHtmlMessage(job.telegramChatId, report.first())
+            sendReport(job, report.first(), retryCount, includeZip)
         }
         report.drop(1).forEach { sender.sendHtmlMessage(job.telegramChatId, it) }
+    }
+
+    private fun sendReport(job: DownloadJob, html: String, retryCount: Int, includeZip: Boolean) {
+        if (retryCount > 0) {
+            sender.sendPlaylistReport(job.telegramChatId, html, job.requiredId(), job.language, retryCount, includeZip)
+        } else {
+            sender.sendHtmlMessage(job.telegramChatId, html)
+        }
     }
 
     private fun bestEffort(job: DownloadJob, action: () -> Unit) {

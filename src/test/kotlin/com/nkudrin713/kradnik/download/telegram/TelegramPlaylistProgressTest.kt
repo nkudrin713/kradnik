@@ -129,10 +129,13 @@ class TelegramPlaylistProgressTest {
         TelegramJobProgress(sender, messages, mockk()).playlistSummary(job, PlaylistDeliveryResult(1, 1, PlaylistCompletion.AudioMessages(1), listOf(failure)))
 
         verify(exactly = 1) {
-            sender.editFinalMessage(
+            sender.editPlaylistReport(
                 TelegramMessageAddress.Chat(10, 20),
                 match { it.contains("1 of 2") && it.contains("2. <a") && it.contains("Processing timed out") },
-                html = true,
+                1,
+                job.language,
+                1,
+                false,
             )
         }
         verify(exactly = 0) { sender.sendHtmlMessage(any(), any()) }
@@ -157,12 +160,38 @@ class TelegramPlaylistProgressTest {
         )
 
         verify(exactly = 1) {
-            sender.editFinalMessage(
+            sender.editPlaylistReport(
                 TelegramMessageAddress.Chat(10, 20),
                 match { it.contains("No recordings") && it.contains("1. <a") },
-                html = true,
+                1,
+                job.language,
+                1,
+                false,
             )
         }
         verify(exactly = 0) { sender.sendHtmlMessage(any(), any()) }
+    }
+
+    @Test
+    fun omitsRetryForPermanentSourceFailure() {
+        val sender = mockk<TelegramSender>(relaxed = true)
+        val messages = telegramMessages()
+        val job = DownloadJob(
+            id = 1,
+            telegramChatId = 10,
+            telegramStatusMessageId = 20,
+            workloadType = DownloadWorkloadType.PLAYLIST_AUDIO,
+            playlistEntries = listOf(PlaylistAudioEntry(1, "a", "url", "First", null)),
+        )
+
+        TelegramJobProgress(sender, messages, mockk()).playlistFailure(
+            job,
+            PlaylistEmptyException(listOf(PlaylistAudioResult(1, failure = PlaylistItemFailure.GEO_BLOCKED))),
+        )
+
+        verify(exactly = 1) {
+            sender.editFinalMessage(TelegramMessageAddress.Chat(10, 20), match { it.contains("1. <a") }, html = true)
+        }
+        verify(exactly = 0) { sender.editPlaylistReport(any(), any(), any(), any(), any(), any()) }
     }
 }

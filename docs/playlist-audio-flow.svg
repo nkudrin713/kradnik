@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1120" height="790" viewBox="0 0 1120 790" role="img" aria-labelledby="title description">
   <title id="title">YouTube playlist · audio messages</title>
-  <desc id="description">Queued playlist processing, per-entry cache or download, persisted outcomes, ordered delivery, and completion. Details are in the README.</desc>
+  <desc id="description">Queued playlist processing, persisted per-entry outcomes, ordered delivery, and a manual retry for failures that may be temporary. Details are in the README.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
@@ -58,7 +58,8 @@
   <text x="560.0" y="620.5" text-anchor="middle">Ordered albums · up to 10</text>
   <path d="M 722.6666666666666 602 H 750.6666666666666" class="arrow"/>
   <rect x="754.6666666666666" y="564" width="325.3333333333333" height="76" rx="10" class="box"/>
-  <text x="917.3333333333333" y="608.0" text-anchor="middle">JobLifecycle.complete</text>
+  <text x="917.3333333333333" y="595.5" text-anchor="middle">JobLifecycle.complete</text>
+  <text x="917.3333333333333" y="620.5" text-anchor="middle">Retry eligible failures</text>
   <path d="M 912 640 V 662 H 560 V 683" class="arrow"/>
   <rect x="400" y="687" width="320" height="76" rx="10" class="box"/>
   <text x="560.0" y="731.0" text-anchor="middle">WorkDirCleaner</text>

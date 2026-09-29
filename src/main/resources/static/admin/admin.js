@@ -52,13 +52,23 @@ function sourceStatus(id, available, at) {
   text(id, available ? '' : `БД недоступна · последний снимок: ${date(at)}`);
   $(id).classList.toggle('warning', !available);
 }
+function ring(id, value, total) {
+  const percent = value != null && total > 0 ? Math.min(100, Math.max(0, value / total * 100)) : 0;
+  $(id).style.setProperty('--ring-value', `${percent}%`);
+}
 function render(data) {
   text('version', `Версия ${data.version || 'неизвестна'}`);
   const sum = status => data.queues.filter(q => q.status === status).reduce((n, q) => n + q.count, 0);
-  text('queued', data.queuesUpdatedAt ? sum('queued') : '—');
-  text('processing', data.queuesUpdatedAt ? sum('processing') : '—');
+  const queued = sum('queued'), processing = sum('processing');
+  text('queued', data.queuesUpdatedAt ? queued : '—');
+  text('processing', data.queuesUpdatedAt ? processing : '—');
+  ring('queue-ring', data.queuesUpdatedAt ? processing : null, queued + processing);
   text('metadata', data.runtime.metadataQueued);
   const workers = data.runtime.workers;
+  const busyWorkers = workers.filter(w => w.state === 'BUSY').length;
+  text('worker-active', busyWorkers);
+  text('worker-total', `/ ${workers.length}`);
+  ring('worker-ring', busyWorkers, workers.length);
   text('items', `${workers.reduce((n, w) => n + w.activeItems, 0)} / ${workers.reduce((n, w) => n + w.waitingItems, 0)}`);
   table('workers', workers.map(w => [w.id, {state: w.state}, w.jobId == null ? '—' : `#${w.jobId}`, w.platform, phases[w.phase] || '—', duration(w.since), w.category === 'playlist' ? `${w.activeItems} / ${w.waitingItems}` : '—']),
     workers.map(w => [w.id, states[w.state] || w.state, w.jobId, w.platform, phases[w.phase], w.since ? -Date.parse(w.since) : null, w.category === 'playlist' ? [w.activeItems, w.waitingItems] : null]));
@@ -81,6 +91,41 @@ function renderOutcomes() {
   if (!latest) return;
   const minutes = Number($('window').value);
   table('outcomes', Object.entries(categories).map(([key, label]) => [label, ...['completed', 'failed', 'cancelled_by_user'].map(status => latest.outcomesUpdatedAt ? latest.outcomes.find(o => o.minutes === minutes && o.category === key && o.status === status)?.count || 0 : null)]));
+  const count = (window, status, category) => latest.outcomes
+    .filter(o => o.minutes === window && o.status === status && (!category || o.category === category))
+    .reduce((total, o) => total + o.count, 0);
+  const dayCompleted = count(1440, 'completed'), dayFailed = count(1440, 'failed');
+  text('stat-completed', latest.outcomesUpdatedAt ? dayCompleted : '—');
+  text('stat-success-rate', latest.outcomesUpdatedAt && dayCompleted + dayFailed > 0
+    ? `${Math.round(dayCompleted / (dayCompleted + dayFailed) * 100)}%` : '—');
+  const completed = count(minutes, 'completed'), failed = count(minutes, 'failed');
+  const cancelled = count(minutes, 'cancelled_by_user'), total = completed + failed + cancelled;
+  [['outcome-ring-total', total], ['outcome-completed', completed], ['outcome-failed', failed], ['outcome-cancelled', cancelled]]
+    .forEach(([id, value]) => text(id, latest.outcomesUpdatedAt ? value : '—'));
+  const completeEnd = total ? completed / total * 100 : 0;
+  const failedEnd = total ? (completed + failed) / total * 100 : 0;
+  $('outcome-ring').style.background = total && latest.outcomesUpdatedAt
+    ? 'conic-gradient(#69d7b4 0 ' + completeEnd + '%, #f1989e ' + completeEnd + '% ' + failedEnd + '%, #e8bb75 ' + failedEnd + '% 100%)'
+    : 'conic-gradient(#344457 0 100%)';
+  $('outcome-ring').setAttribute('aria-label', latest.outcomesUpdatedAt
+    ? `Завершено ${completed}, неуспешно ${failed}, отменено ${cancelled}` : 'Нет данных о результатах задач');
+  const bars = Object.entries(categories).map(([category, label]) => {
+    const values = ['completed', 'failed', 'cancelled_by_user'].map(status => count(minutes, status, category));
+    const row = document.createElement('div'); row.className = 'outcome-bar-row';
+    const name = document.createElement('span'); name.textContent = label;
+    const track = document.createElement('div'); track.className = 'bar-track';
+    const sum = values.reduce((n, value) => n + value, 0);
+    values.forEach((value, index) => {
+      const segment = document.createElement('span');
+      segment.className = ['completed', 'failed', 'cancelled'][index];
+      segment.style.width = `${total ? value / total * 100 : 0}%`;
+      track.append(segment);
+    });
+    const amount = document.createElement('strong'); amount.textContent = latest.outcomesUpdatedAt ? sum : '—';
+    row.append(name, track, amount);
+    return row;
+  });
+  $('outcome-bars').replaceChildren(...bars);
   const counts = latest.runtime.errors.find(e => e.minutes === minutes)?.counts || {};
   Object.entries(errors).forEach(([key, label]) => {
     let box = document.getElementById(`error-${key}`);
@@ -126,6 +171,8 @@ function renderMemory(memory) {
   const percent = (used, max) => used != null && max > 0 ? `${(used / max * 100).toFixed(1)}%` : '';
   text('heap-percent', percent(point?.heapUsed, point?.heapMax));
   text('container-percent', percent(point?.containerUsed, point?.containerLimit));
+  ring('heap-ring', point?.heapUsed, point?.heapMax);
+  ring('container-ring', point?.containerUsed, point?.containerLimit);
   text('nonheap-used', bytes(point?.nonHeapUsed));
   text('memory-pools', `Metaspace: ${bytes(point?.metaspaceUsed)} · Code cache: ${bytes(point?.codeCacheUsed)}`);
   text('gc-value', `${point?.gcCount ?? '—'} сборок · ${point?.gcTimeMillis ?? '—'} мс`);
@@ -164,7 +211,7 @@ function renderBackup(status) {
     completed: `Готово: ${status.fileName} · ${bytes(status.sizeBytes)}`,
     failed: `Не удалось создать дамп (${date(status.finishedAt)})`
   };
-  text('backup-status', descriptions[status.state] || 'Состояние неизвестно');
+  text('backup-status', descriptions[status.state] ?? 'Состояние неизвестно');
   $('backup').disabled = !csrfReady || status.state === 'running';
 }
 function memoryChart(id, points, used, limit) {

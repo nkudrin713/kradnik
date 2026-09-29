@@ -124,18 +124,19 @@ For workflow deployments, set secret `ADMIN_PASSWORD_HASH` and variables `ADMIN_
 
 Sessions expire after 15 idle minutes; at most three logins are active. Cookies are HttpOnly and SameSite=Strict, login/logout use CSRF protection, and login attempts are limited to ten per minute. Polling keeps sessions active; credential changes require a restart.
 
-The dashboard shows:
+The dashboard has two sections. **Statistics** opens with prominent counts for completed jobs and the 24-hour job success rate, followed by an outcome ring and a breakdown by single jobs and playlists. Its 15-minute, one-hour, and 24-hour views use the existing outcome snapshot; partial playlists count as completed jobs. User totals, DAU, WAU, MAU, and daily trends remain visibly unavailable until user-activity collection and product aggregates are implemented; the UI does not infer them from job counts. **Technical state** groups live worker, queue, JVM heap, and container values into compact ring cards, with detailed tables and history below. Ring segments represent busy workers out of all workers, processing jobs out of queued plus processing jobs, and memory used out of the reported limit. Missing limits show an empty ring rather than an estimated percentage.
+
+The technical section shows:
 
 - Installed release version (`dev` for local runs) and a plain-language health summary based on fresh data, heap and container usage, worker state, and collector/database availability. Memory at 80% is a warning and at 90% is critical; these are current usage thresholds, not a leak diagnosis.
 - Worker state, current job, platform, phase, elapsed time, and playlist track activity.
 - Queued/processing counts, oldest queued job, and the separate metadata queue.
-- Completed, failed, and cancelled jobs over 15 minutes, one hour, and 24 hours. Partial playlists count as completed.
 - Persisted metadata, playlist-item, worker-loop, and queue-rejection errors. These counters overlap with failed jobs and are not a total of all application errors.
 - One hour of minute-by-minute queue history, restored after restart.
 
 The health summary reflects only collected process and database metrics; it does not probe Telegram delivery or other external services.
 
-The dashboard keeps metrics compact and places graph and counter explanations in a side panel. To create a database backup, click **Estimate size** first. This reads PostgreSQL's on-disk database size and free space in the backup directory; the compressed dump size may differ. A second click starts one asynchronous `pg_dump` in custom format, using the bot's datasource connection settings. The authenticated, CSRF-protected API reports progress and the completed filename; it does not serve database contents over HTTP. Compose writes to `${ADMIN_BACKUP_HOST_DIR:-./backups}` on the host, relative to the Compose project. For non-Compose runs, set `ADMIN_BACKUP_DIR` to a writable persistent directory; backups require a single-host PostgreSQL JDBC URL without query parameters. The directory is restricted to its owner and dump files to mode 0600. Backups remain until the operator removes or transfers them; monitor available disk space. A failed or timed-out dump (15 minutes) removes its partial file. Use `pg_restore` to inspect or restore a backup separately; restore is not part of the admin UI.
+To create a database backup, click **Estimate size** first. This reads PostgreSQL's on-disk database size and free space in the backup directory; the compressed dump size may differ. A second click starts one asynchronous `pg_dump` in custom format, using the bot's datasource connection settings. The authenticated, CSRF-protected API reports progress and the completed filename; it does not serve database contents over HTTP. Compose writes to `${ADMIN_BACKUP_HOST_DIR:-./backups}` on the host, relative to the Compose project. For non-Compose runs, set `ADMIN_BACKUP_DIR` to a writable persistent directory; backups require a single-host PostgreSQL JDBC URL without query parameters. The directory is restricted to its owner and dump files to mode 0600. Backups remain until the operator removes or transfers them; monitor available disk space. A failed or timed-out dump (15 minutes) removes its partial file. Use `pg_restore` to inspect or restore a backup separately; restore is not part of the admin UI.
 
 All three tables sort by headers (click, Enter, or Space), reverse on a second activation, and keep their order during refreshes. Sorting is browser-side and numeric where appropriate.
 

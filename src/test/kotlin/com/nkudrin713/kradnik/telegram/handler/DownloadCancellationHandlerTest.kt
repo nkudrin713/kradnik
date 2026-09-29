@@ -88,6 +88,20 @@ class DownloadCancellationHandlerTest {
         assertFalse(handler.handle(query, 100))
     }
 
+    @Test
+    fun refreshesQueuePositionForOwner() {
+        val job = job()
+        val address = TelegramMessageAddress.Chat(20, 30)
+        every { preferences.resolveLanguage(10) } returns BotLanguage.RU
+        every { cancellations.queuedPosition(1, 10, address) } returns (job to 3L)
+        every { sender.answerCallback("callback", null, false) } just runs
+        every { sender.editQueuedJob(address, 1, BotLanguage.RU, job.workloadType, 3L, any()) } just runs
+
+        assertTrue(handler.handle(callback(DownloadJobAction.REFRESH_QUEUE), 100))
+
+        verify { sender.editQueuedJob(address, 1, BotLanguage.RU, job.workloadType, 3L, any()) }
+    }
+
     private fun callback(action: DownloadJobAction, data: String = DownloadJobCallback.encode(action, 1)): CallbackQuery {
         val message = mockk<MaybeInaccessibleMessage> {
             every { chat() } returns mockk<Chat> { every { id() } returns 20 }

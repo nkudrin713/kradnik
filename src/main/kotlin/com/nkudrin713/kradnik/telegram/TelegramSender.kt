@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
+import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -34,6 +35,14 @@ class TelegramSender(
 
     fun sendHtmlMessage(chatId: Long, html: String) {
         apiClient.execute(SendMessage(chatId, html).parseMode(ParseMode.HTML))
+    }
+
+    fun sendPlaylistReport(chatId: Long, html: String, jobId: Long, language: BotLanguage, retryCount: Int, includeZip: Boolean) {
+        apiClient.execute(
+            SendMessage(chatId, html)
+                .parseMode(ParseMode.HTML)
+                .replyMarkup(downloadJobView.retryKeyboard(jobId, language, retryCount, includeZip)),
+        )
     }
 
     fun sendMessage(
@@ -98,11 +107,32 @@ class TelegramSender(
         jobId: Long,
         language: BotLanguage = BotLanguage.EN,
     ) {
-        editText(
-            address,
-            messages.text(language, status.message),
-            downloadJobView.cancelKeyboard(jobId, language),
-        )
+        synchronized(jobStatusLocks[Math.floorMod(jobId, jobStatusLocks.size.toLong()).toInt()]) {
+            editText(address, messages.text(language, status.message), downloadJobView.cancelKeyboard(jobId, language))
+        }
+    }
+
+    fun editQueuedJob(
+        address: TelegramMessageAddress,
+        jobId: Long,
+        language: BotLanguage,
+        workloadType: DownloadWorkloadType,
+        position: Long,
+        isQueued: () -> Boolean,
+    ) {
+        synchronized(jobStatusLocks[Math.floorMod(jobId, jobStatusLocks.size.toLong()).toInt()]) {
+            if (!isQueued()) return
+            val positionMessage = when (workloadType) {
+                DownloadWorkloadType.SINGLE -> TelegramMessage.STATUS_QUEUE_POSITION_SINGLE
+                DownloadWorkloadType.PLAYLIST_AUDIO -> TelegramMessage.STATUS_QUEUE_POSITION_PLAYLIST
+            }
+            val text = messages.text(language, TelegramMessage.STATUS_QUEUED) + "\n" + messages.text(language, positionMessage, position)
+            try {
+                editText(address, text, downloadJobView.queueKeyboard(jobId, language))
+            } catch (error: TelegramSendException) {
+                if (error.kind != TelegramSendFailureKind.MESSAGE_NOT_MODIFIED) throw error
+            }
+        }
     }
 
     fun editCancelledJob(
@@ -170,6 +200,10 @@ class TelegramSender(
 
     fun editFinalMessage(address: TelegramMessageAddress, text: String, html: Boolean = false) {
         editText(address, text, EMPTY_KEYBOARD, if (html) ParseMode.HTML else null)
+    }
+
+    fun editPlaylistReport(address: TelegramMessageAddress, html: String, jobId: Long, language: BotLanguage, retryCount: Int, includeZip: Boolean) {
+        editText(address, html, downloadJobView.retryKeyboard(jobId, language, retryCount, includeZip), ParseMode.HTML)
     }
 
     fun answerCallback(

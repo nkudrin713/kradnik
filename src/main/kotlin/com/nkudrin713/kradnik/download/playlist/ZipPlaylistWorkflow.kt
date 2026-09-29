@@ -111,6 +111,7 @@ class ZipPlaylistWorkflow(
             PlaylistLocalFile(entry, file.file)
         }
         if (!downloadJobService.isProcessing(jobId)) return null
+        if (!downloadJobService.savePlaylistFailures(jobId, failures.toList())) return null
         if (files.isEmpty()) throw PlaylistEmptyException(failures.toList())
         progress.update(DownloadPhase.PACKING)
         val archive = try {

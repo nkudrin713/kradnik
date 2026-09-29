@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.telegram
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -26,7 +27,8 @@ class TelegramDownloadStarterTest {
     )
 
     init {
-        every { telegramSender.editJobStatus(any(), any(), any(), any()) } just runs
+        every { downloadJobService.queuePosition(any()) } returns 1
+        every { telegramSender.editQueuedJob(any(), any(), any(), any(), any(), any()) } just runs
     }
 
     @Test
@@ -90,6 +92,18 @@ class TelegramDownloadStarterTest {
         assertEquals("inline-message", command.captured.telegramInlineMessageId)
         assertEquals(null, command.captured.telegramStatusMessageId)
         verify(exactly = 0) { telegramSender.sendStatus(any(), any(), any()) }
+    }
+
+    @Test
+    fun queuesRetryWithNewStatusMessage() {
+        val source = DownloadJob(id = 1, telegramUserId = 300, telegramChatId = 100, language = BotLanguage.RU)
+        val retry = DownloadJob(id = 2, telegramUserId = 300, telegramChatId = 100, telegramStatusMessageId = 500, language = BotLanguage.RU)
+        every { telegramSender.sendStatus(100, TelegramDownloadStatus.QUEUED, BotLanguage.RU) } returns 500
+        every { downloadJobService.createRetryJob(1, 300, 100, 400, 500, PlaylistDeliveryMode.ZIP) } returns retry
+
+        assertEquals(retry, starter.retryPlaylist(source, 300, 400, PlaylistDeliveryMode.ZIP))
+
+        verify { telegramSender.editQueuedJob(TelegramMessageAddress.Chat(100, 500), 2, BotLanguage.RU, retry.workloadType, 1, any()) }
     }
 
     private fun start(

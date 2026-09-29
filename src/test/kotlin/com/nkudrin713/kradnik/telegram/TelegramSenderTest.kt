@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.telegram
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
@@ -99,6 +100,19 @@ class TelegramSenderTest {
         val actual = request.captured as EditMessageText
         actual.getParameters()["message_id"] shouldBe 10
         actual.getParameters()["text"] shouldBe messages.text(BotLanguage.EN, TelegramMessage.STATUS_ERROR)
+    }
+
+    @Test
+    fun unchangedQueuePositionIsHarmless() {
+        val keyboard = InlineKeyboardMarkup(InlineKeyboardButton("Refresh"))
+        every { downloadJobView.queueKeyboard(42, BotLanguage.EN) } returns keyboard
+        every { bot.execute(any<BaseRequest<*, *>>()) } returns mockk {
+            every { isOk } returns false
+            every { errorCode() } returns 400
+            every { description() } returns "Bad Request: message is not modified"
+        }
+
+        sender.editQueuedJob(TelegramMessageAddress.Chat(100, 10), 42, BotLanguage.EN, DownloadWorkloadType.SINGLE, 1) { true }
     }
 
     @Test

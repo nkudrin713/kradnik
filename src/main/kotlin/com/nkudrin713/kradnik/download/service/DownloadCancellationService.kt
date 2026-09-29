@@ -36,6 +36,13 @@ class DownloadCancellationService(
         }
     }
 
+    fun queuedPosition(jobId: Long, telegramUserId: Long, address: TelegramMessageAddress): Pair<DownloadJob, Long>? {
+        val job = downloadJobService.findJob(jobId) ?: return null
+        if (job.telegramUserId != telegramUserId || job.status != DownloadJobStatus.QUEUED || !job.hasAddress(address)) return null
+        val position = downloadJobService.queuePosition(jobId) ?: return null
+        return job to position
+    }
+
     private fun DownloadJob.hasAddress(address: TelegramMessageAddress): Boolean = when (address) {
         is TelegramMessageAddress.Chat ->
             telegramInlineMessageId == null &&

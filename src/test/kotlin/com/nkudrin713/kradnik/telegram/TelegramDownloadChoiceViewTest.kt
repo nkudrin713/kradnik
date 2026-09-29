@@ -26,14 +26,14 @@ class TelegramDownloadChoiceViewTest {
         )
         val keyboard = view.keyboard(UUID.randomUUID(), listOf(audio, archive), BotLanguage.RU).inlineKeyboard()
         assertEquals(listOf("🎧 Все 100 в ZIP", "✖️ Отмена"), keyboard.map { it.single().text })
-        assertEquals(listOf("success", "danger"), keyboard.map { it.single().style })
+        assertEquals(listOf(null, "danger"), keyboard.map { it.single().style })
         assertEquals("audio", DownloadChoiceCallback.parse(requireNotNull(keyboard[0][0].callbackData))?.optionKey)
         val playlistInfo = DownloadChoiceMediaInfo(title = "Playlist", durationSeconds = null, playlistCount = 100)
-        assertEquals("<code>Playlist\nДорожек: 100</code>", view.text(playlistInfo, BotLanguage.RU))
+        assertEquals("Playlist\nДорожек: 100", view.text(playlistInfo, BotLanguage.RU))
     }
 
     @Test
-    fun createsPreformattedEscapedTitleAndNonClickableDuration() {
+    fun createsPlainEscapedTitleAndNonClickableDuration() {
         val actual = view.text(
             DownloadChoiceMediaInfo(
                 title = "Title & more",
@@ -44,8 +44,8 @@ class TelegramDownloadChoiceViewTest {
 
         assertEquals(
             """
-                <code>Title &amp; more
-                Длительность: 1:02:03</code>
+                Title &amp; more
+                Длительность: 1:02:03
             """.trimIndent(),
             actual,
         )
@@ -61,11 +61,11 @@ class TelegramDownloadChoiceViewTest {
             BotLanguage.RU,
         )
 
-        assertEquals("<code>Название недоступно</code>", actual)
+        assertEquals("Название недоступно", actual)
     }
 
     @Test
-    fun showsInstagramTitleAndAuthorInMonospace() {
+    fun showsInstagramTitleAndAuthorAsPlainText() {
         val actual = view.text(
             DownloadChoiceMediaInfo(
                 title = "Video <title>",
@@ -75,7 +75,7 @@ class TelegramDownloadChoiceViewTest {
             BotLanguage.RU,
         )
 
-        assertEquals("<code>Video &lt;title&gt;\n@owner</code>", actual)
+        assertEquals("Video &lt;title&gt;\n@owner", actual)
     }
 
     @Test
@@ -108,7 +108,7 @@ class TelegramDownloadChoiceViewTest {
             ),
             keyboard.map { it.single().text },
         )
-        assertEquals(listOf("success", "success", "success", "success", "danger"), keyboard.map { it.single().style })
+        assertEquals(listOf(null, null, null, null, "danger"), keyboard.map { it.single().style })
         assertEquals(listOf("🎬 Original · ≈ 1.42 GB", "✖️ Cancel"), englishKeyboard.map { it.single().text })
         assertEquals(
             listOf("video_original", "video_720", "audio", "cover", "cancel"),

@@ -18,6 +18,7 @@ import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.playlist.PlaylistItemFailure
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.observability.RuntimeError
@@ -396,7 +397,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun claimsDifferentJobsConcurrently() {
-        repository.saveAllAndFlush(listOf(job("first"), job("second")))
+        repository.saveAllAndFlush(listOf(job("first"), job("second", 2)))
         val executor = Executors.newFixedThreadPool(2)
 
         val claimed = try {
@@ -420,7 +421,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     fun workerTypesClaimOnlyTheirOwnJobs() {
         val single = repository.saveAndFlush(job("single"))
         val playlist = repository.saveAndFlush(
-            job("playlist").apply {
+            job("playlist", 2).apply {
                 workloadType = DownloadWorkloadType.PLAYLIST_AUDIO
                 playlistDeliveryMode = PlaylistDeliveryMode.ZIP
                 playlistTitle = "Playlist archive"
@@ -517,7 +518,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun completesAndFailsInShortTransactionsAndRecoversOnlyProcessing() {
-        repository.saveAllAndFlush(listOf(job("complete"), job("fail"), job("interrupted")))
+        repository.saveAllAndFlush(listOf(job("complete"), job("fail", 2), job("interrupted", 3)))
         val completed = claimNextJob()
         val failed = claimNextJob()
         val interrupted = claimNextJob()
@@ -533,9 +534,107 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     private fun claimNextJob(): DownloadJob = requireNotNull(downloadJobService.claimNextQueuedJob())
 
-    private fun job(cacheKey: String): DownloadJob {
+    @Test
+    fun skipsQueuedJobsForAUserAlreadyProcessingAcrossWorkerPools() {
+        val active = repository.saveAndFlush(job("active"))
+        val blockedPlaylist = repository.saveAndFlush(job("blocked-playlist").apply { workloadType = DownloadWorkloadType.PLAYLIST_AUDIO })
+        val otherPlaylist = repository.saveAndFlush(job("other-playlist", 2).apply { workloadType = DownloadWorkloadType.PLAYLIST_AUDIO })
+
+        assertEquals(active.id, downloadJobService.claimNextQueuedJob()?.id)
+        assertEquals(1L, downloadJobService.queuePosition(blockedPlaylist.requiredId()))
+        assertEquals(2L, downloadJobService.queuePosition(otherPlaylist.requiredId()))
+        assertEquals(otherPlaylist.id, downloadJobService.claimNextQueuedPlaylistJob()?.id)
+        assertNull(downloadJobService.claimNextQueuedPlaylistJob())
+
+        downloadJobService.markCompleted(active, "file")
+        assertEquals(blockedPlaylist.id, downloadJobService.claimNextQueuedPlaylistJob()?.id)
+    }
+
+    @Test
+    fun concurrentPoolsCannotClaimTwoJobsForOneUser() {
+        repository.saveAndFlush(job("single"))
+        repository.saveAndFlush(job("playlist").apply { workloadType = DownloadWorkloadType.PLAYLIST_AUDIO })
+        val barrier = java.util.concurrent.CyclicBarrier(2)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val single = pool.submit(
+                Callable {
+                    barrier.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                    downloadJobService.claimNextQueuedJob()
+                },
+            )
+            val playlist = pool.submit(
+                Callable {
+                    barrier.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                    downloadJobService.claimNextQueuedPlaylistJob()
+                },
+            )
+            val claimed = listOf(single.get(10, java.util.concurrent.TimeUnit.SECONDS), playlist.get(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(1, claimed.count { it != null })
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun createsOneRetryJobForRetryableZipFailuresOnly() {
+        val source = repository.saveAndFlush(
+            job("zip-retry").apply {
+                status = DownloadJobStatus.COMPLETED
+                workloadType = DownloadWorkloadType.PLAYLIST_AUDIO
+                playlistDeliveryMode = PlaylistDeliveryMode.ZIP
+                playlistEntries = (1..3).map { PlaylistAudioEntry(it, "video-$it", "https://youtu.be/video-$it", "Track $it", 60) }
+                playlistResults = listOf(
+                    PlaylistAudioResult(2, error = "Connection reset by peer", failure = PlaylistItemFailure.NETWORK),
+                    PlaylistAudioResult(3, error = "The uploader has not made this video available in your country", failure = PlaylistItemFailure.GEO_BLOCKED),
+                )
+            },
+        )
+
+        assertNotNull(downloadJobService.retrySource(source.requiredId(), 1, 2))
+        val retry = downloadJobService.createRetryJob(source.requiredId(), 1, 2, 901, 50, PlaylistDeliveryMode.AUDIO_MESSAGES)
+
+        assertNotNull(retry)
+        assertEquals(source.id, retry.retryOfJobId)
+        assertEquals(listOf(2), retry.playlistEntries.map { it.position })
+        assertEquals(PlaylistDeliveryMode.AUDIO_MESSAGES, retry.playlistDeliveryMode)
+        assertEquals(source.downloadPreset, retry.downloadPreset)
+        assertEquals(source.selectedFormat, retry.selectedFormat)
+        assertNull(downloadJobService.createRetryJob(source.requiredId(), 1, 2, 902, 51, PlaylistDeliveryMode.ZIP))
+        assertNull(downloadJobService.retrySource(source.requiredId(), 99, 2))
+        assertNull(downloadJobService.retrySource(source.requiredId(), 1, 99))
+    }
+
+    @Test
+    fun concurrentRetryCallbacksCreateOnlyOneChild() {
+        val source = repository.saveAndFlush(
+            job("concurrent-retry").apply {
+                status = DownloadJobStatus.FAILED
+                workloadType = DownloadWorkloadType.PLAYLIST_AUDIO
+                playlistEntries = listOf(PlaylistAudioEntry(1, "video", "https://youtu.be/video", "Track", 60))
+                playlistResults = listOf(PlaylistAudioResult(1, failure = PlaylistItemFailure.TIMEOUT))
+            },
+        )
+        val barrier = java.util.concurrent.CyclicBarrier(2)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val results = (1..2).map { index ->
+                pool.submit(
+                    Callable {
+                        barrier.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                        downloadJobService.createRetryJob(source.requiredId(), 1, 2, 900 + index, 50 + index, PlaylistDeliveryMode.AUDIO_MESSAGES)
+                    },
+                )
+            }.map { it.get(10, java.util.concurrent.TimeUnit.SECONDS) }
+            assertEquals(1, results.count { it != null })
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    private fun job(cacheKey: String, userId: Long = 1): DownloadJob {
         return DownloadJob(
-            telegramUserId = 1,
+            telegramUserId = userId,
             telegramChatId = 2,
             originalUrl = "https://example.com/$cacheKey",
             normalizedUrl = "https://example.com/$cacheKey",

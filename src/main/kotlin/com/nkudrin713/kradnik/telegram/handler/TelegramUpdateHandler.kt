@@ -26,6 +26,7 @@ class TelegramUpdateHandler(
     private val downloadChoiceCoordinator: DownloadChoiceCoordinator,
     private val downloadChoiceHandler: DownloadChoiceHandler,
     private val downloadCancellationHandler: DownloadCancellationHandler,
+    private val playlistRetryHandler: PlaylistRetryHandler,
     private val telegramSender: TelegramSender,
     private val telegramDonationSender: TelegramDonationSender,
     private val languageSelector: TelegramLanguageSelector,
@@ -57,6 +58,7 @@ class TelegramUpdateHandler(
             update.callbackQuery()?.data() != null -> {
                 val callbackQuery = update.callbackQuery()
                 if (!languageSelector.handle(callbackQuery) &&
+                    !playlistRetryHandler.handle(callbackQuery, update.updateId()) &&
                     !downloadCancellationHandler.handle(callbackQuery, update.updateId())
                 ) {
                     downloadChoiceHandler.handle(callbackQuery)

@@ -24,6 +24,7 @@ class DownloadCancellationHandler(
 ) {
     fun handle(callbackQuery: CallbackQuery, updateId: Int): Boolean {
         val callback = DownloadJobCallback.parse(callbackQuery.data().trim()) ?: return false
+        if (callback.action == DownloadJobAction.RETRY_AUDIO || callback.action == DownloadJobAction.RETRY_ZIP) return false
         val language = preferenceService.resolveLanguage(callbackQuery.from().id())
         val address = callbackQuery.inlineMessageId()
             ?.let(TelegramMessageAddress::Inline)
@@ -96,6 +97,21 @@ class DownloadCancellationHandler(
                     )
                 }
             }
+
+            DownloadJobAction.REFRESH_QUEUE -> {
+                val queued = cancellationService.queuedPosition(callback.jobId, callbackQuery.from().id(), address)
+                if (queued == null) {
+                    telegramSender.answerCallback(callbackQuery.id(), messages.text(language, TelegramMessage.QUEUE_NOT_WAITING))
+                } else {
+                    val (job, position) = queued
+                    telegramSender.answerCallback(callbackQuery.id())
+                    telegramSender.editQueuedJob(address, callback.jobId, job.language, job.workloadType, position) {
+                        cancellationService.queuedPosition(callback.jobId, callbackQuery.from().id(), address) != null
+                    }
+                }
+            }
+
+            DownloadJobAction.RETRY_AUDIO, DownloadJobAction.RETRY_ZIP -> return false
         }
         return true
     }

@@ -6,6 +6,7 @@ import com.nkudrin713.kradnik.telegram.TelegramDonationSender
 import com.nkudrin713.kradnik.telegram.TelegramLanguageSelector
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
+import com.nkudrin713.kradnik.telegram.UserActivity
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
@@ -30,6 +31,7 @@ class TelegramUpdateHandlerTest {
     private val donationSender: TelegramDonationSender = mockk()
     private val languageSelector: TelegramLanguageSelector = mockk()
     private val preferenceService: TelegramUserPreferenceService = mockk()
+    private val userActivity: UserActivity = mockk(relaxed = true)
 
     @Test
     fun deletesPinServiceMessage() {
@@ -69,6 +71,7 @@ class TelegramUpdateHandlerTest {
         verify { telegramSender.sendMessage(100, match { it.startsWith("🧭 Что умеет бот:") }) }
         verify { telegramSender.sendMessage(100, match { it.startsWith("Дисклеймер:") }) }
         verify { telegramSender.sendMessage(100, "🔗 Нужна ссылка") }
+        verify(exactly = 4) { userActivity.record(300) }
     }
 
     @Test
@@ -139,6 +142,7 @@ class TelegramUpdateHandlerTest {
     fun delegatesCallbackUpdates() {
         val callbackQuery = mockk<CallbackQuery> {
             every { data() } returns "dl:token:option"
+            every { from() } returns mockk<User> { every { id() } returns 300 }
         }
         val update = mockk<Update> {
             every { updateId() } returns 500
@@ -154,6 +158,7 @@ class TelegramUpdateHandlerTest {
         handler().handle(update)
 
         verify { choiceHandler.handle(callbackQuery) }
+        verify { userActivity.record(300) }
     }
 
     @Test
@@ -201,6 +206,7 @@ class TelegramUpdateHandlerTest {
             telegramDonationSender = donationSender,
             languageSelector = languageSelector,
             preferenceService = preferenceService,
+            userActivity = userActivity,
             messages = telegramMessages(),
             donationUrl = donationUrl,
         )

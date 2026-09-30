@@ -25,8 +25,14 @@ class AdminSnapshots(
     private var historyLoaded = store == null
     private var queuesFailed = false
     private var outcomesFailed = false
+    private var allTimeOutcomesFailed = false
+    private var usersFailed = false
+    private var jobTrendFailed = false
     private var historyFailed = false
     private var lastSlowCollection: Instant = Instant.MIN
+    private var lastUserCollection: Instant = Instant.MIN
+    private var lastJobTrendCollection: Instant = Instant.MIN
+    private var lastAllTimeCollection: Instant = Instant.MIN
     private var lastPrune: Instant = Instant.MIN
 
     @Volatile
@@ -86,6 +92,41 @@ class AdminSnapshots(
                 next = next.copy(historyAvailable = false)
             }
         }
+        if (lastUserCollection == Instant.MIN || !now.isBefore(lastUserCollection.plusSeconds(60))) {
+            lastUserCollection = now
+            try {
+                val users = queries.users()
+                val userTrend = queries.userTrend()
+                next = next.copy(users = users, userTrend = userTrend, usersUpdatedAt = clock.instant(), usersAvailable = true)
+                usersFailed = false
+            } catch (error: Exception) {
+                if (!usersFailed) logger.warn("Admin user statistics unavailable", error)
+                usersFailed = true
+                next = next.copy(usersAvailable = false)
+            }
+        }
+        if (lastJobTrendCollection == Instant.MIN || !now.isBefore(lastJobTrendCollection.plusSeconds(60))) {
+            lastJobTrendCollection = now
+            try {
+                next = next.copy(jobTrend = queries.jobTrend(), jobTrendUpdatedAt = clock.instant(), jobTrendAvailable = true)
+                jobTrendFailed = false
+            } catch (error: Exception) {
+                if (!jobTrendFailed) logger.warn("Admin job trend unavailable", error)
+                jobTrendFailed = true
+                next = next.copy(jobTrendAvailable = false)
+            }
+        }
+        if (lastAllTimeCollection == Instant.MIN || !now.isBefore(lastAllTimeCollection.plusSeconds(900))) {
+            lastAllTimeCollection = now
+            try {
+                next = next.copy(allTimeOutcomes = queries.allTimeOutcomes(), allTimeOutcomesUpdatedAt = clock.instant(), allTimeOutcomesAvailable = true)
+                allTimeOutcomesFailed = false
+            } catch (error: Exception) {
+                if (!allTimeOutcomesFailed) logger.warn("Admin all-time outcomes unavailable", error)
+                allTimeOutcomesFailed = true
+                next = next.copy(allTimeOutcomesAvailable = false)
+            }
+        }
         history.entries.removeIf { it.value.at.isBefore(now.minusSeconds(3600)) }
         pendingHistory.entries.removeIf { it.value.at.isBefore(now.minusSeconds(3600)) }
         current = next.copy(history = history.values.toList(), statistics = statistics?.health() ?: StatisticsHealth(), memory = memory?.collect() ?: MemoryView())
@@ -117,6 +158,16 @@ data class DashboardSnapshot(
     val outcomesUpdatedAt: Instant? = null,
     val queuesAvailable: Boolean = false,
     val outcomesAvailable: Boolean = false,
+    val allTimeOutcomes: List<AllTimeOutcome> = emptyList(),
+    val allTimeOutcomesUpdatedAt: Instant? = null,
+    val allTimeOutcomesAvailable: Boolean = false,
+    val users: UserSummary? = null,
+    val userTrend: List<UserDay> = emptyList(),
+    val jobTrend: List<JobDay> = emptyList(),
+    val jobTrendUpdatedAt: Instant? = null,
+    val jobTrendAvailable: Boolean = false,
+    val usersUpdatedAt: Instant? = null,
+    val usersAvailable: Boolean = false,
     val history: List<HistoryPoint> = emptyList(),
     val historyAvailable: Boolean = false,
     val statistics: StatisticsHealth = StatisticsHealth(),

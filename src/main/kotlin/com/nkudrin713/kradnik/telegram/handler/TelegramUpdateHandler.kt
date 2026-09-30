@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.telegram.PrepareDownloadChoiceCommand
 import com.nkudrin713.kradnik.telegram.TelegramDonationSender
 import com.nkudrin713.kradnik.telegram.TelegramLanguageSelector
 import com.nkudrin713.kradnik.telegram.TelegramSender
+import com.nkudrin713.kradnik.telegram.UserActivity
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -31,6 +32,7 @@ class TelegramUpdateHandler(
     private val telegramDonationSender: TelegramDonationSender,
     private val languageSelector: TelegramLanguageSelector,
     private val preferenceService: TelegramUserPreferenceService,
+    private val userActivity: UserActivity,
     private val messages: TelegramMessages,
     @Value($$"${telegram.donation.url:}")
     private val donationUrl: String,
@@ -46,17 +48,24 @@ class TelegramUpdateHandler(
         val guestMessage = update.guestMessage()
         val message = update.message()
         when {
-            guestMessage?.text() != null -> handleGuestMessage(update, guestMessage)
+            guestMessage?.text() != null -> {
+                guestMessage.from()?.id()?.let(userActivity::record)
+                handleGuestMessage(update, guestMessage)
+            }
 
             message?.pinnedMessage() != null -> deletePinnedServiceMessageBestEffort(
                 chatId = message.chat().id(),
                 messageId = message.messageId(),
             )
 
-            message?.text() != null -> handleMessage(update, message)
+            message?.text() != null -> {
+                message.from()?.id()?.let(userActivity::record)
+                handleMessage(update, message)
+            }
 
             update.callbackQuery()?.data() != null -> {
                 val callbackQuery = update.callbackQuery()
+                callbackQuery.from()?.id()?.let(userActivity::record)
                 if (!languageSelector.handle(callbackQuery) &&
                     !playlistRetryHandler.handle(callbackQuery, update.updateId()) &&
                     !downloadCancellationHandler.handle(callbackQuery, update.updateId())

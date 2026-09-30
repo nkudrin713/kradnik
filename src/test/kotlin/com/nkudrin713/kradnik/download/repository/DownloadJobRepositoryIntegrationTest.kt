@@ -202,6 +202,15 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         assertEquals(1L, outcomes.single { it.minutes == 1440 && it.status == "completed" }.count)
         assertEquals(1L, outcomes.single { it.minutes == 15 && it.status == "cancelled_by_user" }.count)
         assertEquals(2L, outcomes.filter { it.minutes == 1440 && it.status == "failed" }.sumOf { it.count })
+        val allTime = queries.allTimeOutcomes().associate { it.status to it.count }
+        assertEquals(1L, allTime["completed"])
+        assertEquals(3L, allTime["failed"])
+        assertEquals(1L, allTime["cancelled_by_user"])
+        val trend = queries.jobTrend()
+        assertEquals(14, trend.size)
+        assertEquals(1L, trend.sumOf { it.completed })
+        assertEquals(3L, trend.sumOf { it.failed })
+        assertEquals(1L, trend.sumOf { it.cancelled })
     }
 
     @Test

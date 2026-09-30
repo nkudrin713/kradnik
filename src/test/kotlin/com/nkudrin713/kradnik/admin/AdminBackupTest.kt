@@ -32,6 +32,8 @@ class AdminBackupTest {
         )
         val backup = AdminBackup(environment(), jdbc(), executable.toString())
         try {
+            assertEquals(1024L, backup.databaseSize())
+            assertFalse(Files.exists(temp.resolve("backups")))
             assertEquals(1024L, backup.estimate().databaseBytes)
             assertTrue(backup.estimate().freeBytes > 0)
             val first = backup.start()

@@ -23,6 +23,9 @@ class AdminController(private val snapshots: AdminSnapshots, private val backup:
     @GetMapping("/admin/api/backup")
     fun backup(): BackupStatus = backup.status()
 
+    @GetMapping("/admin/api/database-size")
+    fun databaseSize(): DatabaseSize = DatabaseSize(backup.databaseSize())
+
     @GetMapping("/admin/api/backup/estimate")
     fun backupEstimate(): BackupEstimate = backup.estimate()
 

@@ -4,7 +4,7 @@ const categories = {single: 'Обычные скачивания', playlist_audi
 const states = {IDLE: 'Свободен', BUSY: 'Занят', BACKOFF: 'Пауза после ошибки', STOPPED: 'Остановлен'};
 const phases = {DOWNLOADING: 'Скачивание', PACKING: 'Упаковка', UPLOADING: 'Отправка'};
 const errors = {METADATA: 'Подготовка меню', PLAYLIST_ITEM: 'Треки плейлистов', WORKER: 'Циклы воркеров', METADATA_REJECTED: 'Переполнение очереди меню'};
-let latest, timer, inFlight = false, retry = 2000, csrfReady = false, csrfToken, backupEstimated = false;
+let latest, timer, inFlight = false, retry = 2000, csrfReady = false, csrfToken, backupEstimated = false, backupPendingRequest = false, backupRunning = false, backupError = '';
 let databaseSizeNextAt = 0, databaseSizeLoaded = false;
 const sorting = {};
 const collator = new Intl.Collator('ru', {numeric: true, sensitivity: 'base'});
@@ -50,8 +50,12 @@ function table(id, rows, values = rows) {
   }));
 }
 function sourceStatus(id, available, at) {
-  text(id, available ? '' : `БД недоступна · последний снимок: ${date(at)}`);
+  text(id, available ? '' : `Не обновляется · последний снимок: ${date(at)}`);
   $(id).classList.toggle('warning', !available);
+}
+function overviewStatus(id, available, at, empty = '') {
+  text(id, !at ? 'Нет данных' : !available ? 'Не обновляется' : empty);
+  $(id).parentElement.classList.toggle('is-stale', !available || !at);
 }
 function meter(id, value, total) {
   const element = $(id);
@@ -105,9 +109,15 @@ function sparkline(id, points, field) {
 }
 function render(data) {
   text('version', `Версия ${data.version || 'неизвестна'}`);
+  renderStatisticsStatus(data);
+  renderUsers(data);
+  renderJobTrend(data);
+  renderAllTime(data);
   const sum = status => data.queues.filter(q => q.status === status).reduce((n, q) => n + q.count, 0);
   const queued = sum('queued'), processing = sum('processing');
   text('queued', data.queuesUpdatedAt ? queued : '—');
+  text('overview-queued', data.queuesUpdatedAt ? queued.toLocaleString('ru-RU') : '—');
+  overviewStatus('overview-queue-status', data.queuesAvailable, data.queuesUpdatedAt);
   text('processing', data.queuesUpdatedAt ? processing : '—');
   sparkline('queue-sparkline', data.history || [], 'queued');
   text('metadata', data.runtime.metadataQueued);
@@ -142,7 +152,103 @@ function render(data) {
   renderOutcomes();
   chart(data.history);
   renderMemory(data.memory);
+  const telemetry = [
+    [data.historyAvailable, 'история очереди'], [data.statistics.available, 'счётчики ошибок'],
+    [data.memory.historyAvailable, 'история памяти'], [data.memory.available, 'измерение памяти']
+  ].filter(([available]) => !available).map(([, name]) => name);
+  text('telemetry-status', telemetry.length ? `Не обновляется: ${telemetry.join(', ')}` : '');
+  $('telemetry-status').classList.toggle('warning', telemetry.length > 0);
   text('updated', date(data.generatedAt));
+}
+function renderStatisticsStatus(data) {
+  const unavailable = [
+    [data.usersAvailable, 'пользователи'], [data.outcomesAvailable, 'результаты задач'],
+    [data.allTimeOutcomesAvailable, 'итоги за всё время'], [data.jobTrendAvailable, 'график задач'],
+    [data.queuesAvailable, 'очередь']
+  ].filter(([available]) => !available).map(([, name]) => name);
+  text('statistics-status', unavailable.length ? `Не обновляется: ${unavailable.join(', ')}` : '');
+  $('statistics-status').classList.toggle('warning', unavailable.length > 0);
+}
+function renderUsers(data) {
+  sourceStatus('users-status', data.usersAvailable, data.usersUpdatedAt);
+  overviewStatus('overview-users-status', data.usersAvailable, data.usersUpdatedAt);
+  const users = data.users;
+  for (const [id, value] of [
+    ['users-total', users?.total], ['users-today', users?.activeToday],
+    ['users-week', users?.activeWeek], ['users-month', users?.activeMonth],
+    ['users-new-today', users?.newToday], ['users-returning', users?.returningToday],
+    ['users-new-week', users?.newWeek]
+  ]) text(id, value == null ? '—' : value.toLocaleString('ru-RU'));
+  text('users-range', users?.firstSeen ? `Первое обращение ${date(users.firstSeen)} · последнее ${date(users.lastSeen)}` : '');
+  const points = data.userTrend || [];
+  const svg = $('users-chart');
+  const key = JSON.stringify(points);
+  if (svg.dataset.points === key) return;
+  svg.dataset.points = key;
+  svg.replaceChildren();
+  const ns = 'http://www.w3.org/2000/svg';
+  const label = (value, x, y, anchor = 'start') => {
+    const node = document.createElementNS(ns, 'text');
+    node.textContent = value; node.setAttribute('x', x); node.setAttribute('y', y); node.setAttribute('text-anchor', anchor);
+    svg.append(node);
+  };
+  if (!points.length) { label('История недоступна', 12, 90); return; }
+  const max = Math.max(1, ...points.map(p => p.active));
+  label(String(max), 4, 27); label('0', 4, 148);
+  points.forEach((point, i) => {
+    const x = 40 + i * 46, activeHeight = point.active / max * 112;
+    const newHeight = point.newUsers / max * 112;
+    const old = document.createElementNS(ns, 'rect');
+    old.setAttribute('x', x); old.setAttribute('y', 143 - activeHeight); old.setAttribute('width', 25);
+    old.setAttribute('height', Math.max(0, activeHeight - newHeight)); old.setAttribute('rx', 3); old.setAttribute('fill', '#546b83');
+    const fresh = document.createElementNS(ns, 'rect');
+    fresh.setAttribute('x', x); fresh.setAttribute('y', 143 - newHeight); fresh.setAttribute('width', 25);
+    fresh.setAttribute('height', newHeight); fresh.setAttribute('rx', 3); fresh.setAttribute('fill', '#8bc3ff');
+    svg.append(old, fresh);
+    if ((i % 3 === 0 && i < points.length - 2) || i === points.length - 1) label(new Date(`${point.day}T00:00:00Z`).toLocaleDateString('ru-RU', {day: 'numeric', month: 'short', timeZone: 'UTC'}), x + 12, 169, 'middle');
+  });
+  svg.setAttribute('aria-label', `Активные пользователи за последние ${points.length} дней; сегодня ${points[points.length - 1].active}, из них новых ${points[points.length - 1].newUsers}`);
+}
+function renderJobTrend(data) {
+  sourceStatus('job-trend-status', data.jobTrendAvailable, data.jobTrendUpdatedAt);
+  const points = data.jobTrend || [];
+  const svg = $('jobs-chart');
+  const key = JSON.stringify(points);
+  if (svg.dataset.points === key) return;
+  svg.dataset.points = key;
+  svg.replaceChildren();
+  const ns = 'http://www.w3.org/2000/svg';
+  const label = (value, x, y, anchor = 'start') => {
+    const node = document.createElementNS(ns, 'text');
+    node.textContent = value; node.setAttribute('x', x); node.setAttribute('y', y); node.setAttribute('text-anchor', anchor);
+    svg.append(node);
+  };
+  if (!points.length) { label('История недоступна', 12, 90); return; }
+  const max = Math.max(1, ...points.map(point => point.completed + point.failed + point.cancelled));
+  label(String(max), 4, 27); label('0', 4, 148);
+  points.forEach((point, i) => {
+    const x = 40 + i * 46;
+    let y = 143;
+    for (const [field, color] of [['completed', '#75d9b3'], ['failed', '#f39ba2'], ['cancelled', '#8292a3']]) {
+      const height = point[field] / max * 112;
+      y -= height;
+      const bar = document.createElementNS(ns, 'rect');
+      bar.setAttribute('x', x); bar.setAttribute('y', y); bar.setAttribute('width', 25);
+      bar.setAttribute('height', height); bar.setAttribute('rx', 3); bar.setAttribute('fill', color);
+      svg.append(bar);
+    }
+    if ((i % 3 === 0 && i < points.length - 2) || i === points.length - 1) label(new Date(`${point.day}T00:00:00Z`).toLocaleDateString('ru-RU', {day: 'numeric', month: 'short', timeZone: 'UTC'}), x + 12, 169, 'middle');
+  });
+  const today = points[points.length - 1];
+  svg.setAttribute('aria-label', `Результаты задач за последние ${points.length} дней; сегодня завершено ${today.completed}, неуспешно ${today.failed}, отменено ${today.cancelled}`);
+}
+function renderAllTime(data) {
+  sourceStatus('all-time-status', data.allTimeOutcomesAvailable, data.allTimeOutcomesUpdatedAt);
+  $('all-time-status').closest('.all-time-panel').classList.toggle('is-stale', !data.allTimeOutcomesAvailable);
+  for (const [status, id] of [['completed', 'all-time-completed'], ['failed', 'all-time-failed'], ['cancelled_by_user', 'all-time-cancelled']]) {
+    const count = data.allTimeOutcomes?.find(item => item.status === status)?.count || 0;
+    text(id, data.allTimeOutcomesUpdatedAt ? count.toLocaleString('ru-RU') : '—');
+  }
 }
 function renderOutcomes() {
   if (!latest) return;
@@ -155,6 +261,9 @@ function renderOutcomes() {
   text('stat-completed', latest.outcomesUpdatedAt ? dayCompleted : '—');
   text('stat-success-rate', latest.outcomesUpdatedAt && dayCompleted + dayFailed > 0
     ? `${Math.round(dayCompleted / (dayCompleted + dayFailed) * 100)}%` : '—');
+  overviewStatus('overview-completed-status', latest.outcomesAvailable, latest.outcomesUpdatedAt);
+  overviewStatus('overview-success-status', latest.outcomesAvailable, latest.outcomesUpdatedAt,
+    dayCompleted + dayFailed === 0 ? 'Нет завершённых задач' : '');
   const completed = count(minutes, 'completed'), failed = count(minutes, 'failed');
   const cancelled = count(minutes, 'cancelled_by_user'), total = completed + failed + cancelled;
   [['outcome-total', total], ['outcome-completed', completed], ['outcome-failed', failed], ['outcome-cancelled', cancelled]]
@@ -259,9 +368,8 @@ function renderHealth(data) {
   const stale = Date.now() - Date.parse(data.generatedAt) > 10000;
   document.body.classList.toggle('snapshot-stale', stale);
   if (stale) critical.push('снимок состояния не обновляется');
-  if (!data.queuesAvailable || !data.outcomesAvailable) warning.push('статистика базы недоступна');
-  if (!data.memory.available || !data.memory.current || Date.now() - Date.parse(data.memory.current.at) > 20000) warning.push('нет свежих данных о памяти');
-  const memory = data.memory.current;
+  const memory = data.memory.available && data.memory.current && Date.now() - Date.parse(data.memory.current.at) <= 20000
+    ? data.memory.current : null;
   for (const [name, used, limit] of [['heap', memory?.heapUsed, memory?.heapMax], ['память контейнера', memory?.containerUsed, memory?.containerLimit]]) {
     if (used == null || !limit) continue;
     const percent = Math.round(used / limit * 100);
@@ -270,7 +378,6 @@ function renderHealth(data) {
   }
   if (data.runtime.workers.some(w => w.state === 'STOPPED')) critical.push('есть остановленные воркеры');
   if (data.runtime.workers.some(w => w.state === 'BACKOFF')) warning.push('воркер ждёт после ошибки');
-  if (!data.statistics.available || !data.historyAvailable || !data.memory.historyAvailable) warning.push('история метрик сохраняется не полностью');
   $('health-title').className = critical.length ? 'critical' : warning.length ? 'warning' : 'healthy';
   text('health-title', critical.length ? 'Требуется внимание' : warning.length ? 'Нужна проверка' : 'Работает нормально');
   text('health-details', [...critical, ...warning].join(' · '));
@@ -283,8 +390,16 @@ function renderBackup(status) {
     completed: `Готово: ${status.fileName} · ${bytes(status.sizeBytes)}`,
     failed: `Не удалось создать дамп (${date(status.finishedAt)})`
   };
-  text('backup-status', descriptions[status.state] ?? 'Состояние неизвестно');
-  $('backup').disabled = !csrfReady || status.state === 'running';
+  text('backup-status', backupError || (descriptions[status.state] ?? 'Состояние неизвестно'));
+  backupRunning = status.state === 'running';
+  if (backupRunning) resetBackupEstimate();
+  $('backup').disabled = !csrfReady || backupRunning || backupPendingRequest;
+}
+function resetBackupEstimate() {
+  backupEstimated = false;
+  $('backup').textContent = 'Создать дамп';
+  $('backup-cancel').hidden = true;
+  text('backup-estimate', '');
 }
 async function refreshDatabaseSize() {
   if (Date.now() < databaseSizeNextAt) return;
@@ -380,26 +495,37 @@ async function poll() {
   });
 });
 $('window').addEventListener('change', renderOutcomes);
+$('backup-cancel').addEventListener('click', () => { resetBackupEstimate(); backupError = ''; text('backup-status', ''); });
 $('backup').addEventListener('click', async () => {
+  if (backupPendingRequest || backupRunning) return;
+  backupPendingRequest = true;
+  backupError = '';
+  text('backup-status', '');
   $('backup').disabled = true;
   try {
     if (!backupEstimated) {
       const estimate = await request('/admin/api/backup/estimate');
-      text('backup-estimate', `Размер БД: ${bytes(estimate.databaseBytes)}. Свободно: ${bytes(estimate.freeBytes)}. Сжатый дамп может отличаться.${estimate.freeBytes < estimate.databaseBytes ? ' Места может не хватить.' : ''}`);
+      text('database-size', bytes(estimate.databaseBytes));
+      text('database-size-status', '');
+      databaseSizeLoaded = true;
+      databaseSizeNextAt = Date.now() + 300000;
+      text('backup-estimate', `Свободно для дампа: ${bytes(estimate.freeBytes)}. Сжатый дамп может отличаться по размеру.${estimate.freeBytes < estimate.databaseBytes ? ' Места может не хватить.' : ''}`);
       $('backup-estimate').classList.toggle('warning', estimate.freeBytes < estimate.databaseBytes);
       backupEstimated = true;
-      $('backup').textContent = 'Создать дамп';
-      $('backup').disabled = false;
+      $('backup').textContent = 'Подтвердить создание';
+      $('backup-cancel').hidden = false;
       return;
     }
     const response = await fetch('/admin/api/backup', {method: 'POST', headers: {'X-CSRF-TOKEN': csrfToken}, cache: 'no-store', signal: AbortSignal.timeout(5000)});
     if (response.status === 401 || response.status === 403) { location.assign('/login'); return; }
     if (!response.ok) throw new Error('http');
-    backupEstimated = false;
-    $('backup').textContent = 'Оценить размер';
-    text('backup-estimate', '');
+    resetBackupEstimate();
     renderBackup(await response.json());
-  } catch (_) { text('backup-status', backupEstimated ? 'Не удалось запустить дамп' : 'Не удалось оценить размер базы'); $('backup').disabled = false; }
+  } catch (_) {
+    backupError = backupEstimated ? 'Не удалось запустить дамп' : 'Не удалось проверить свободное место';
+    text('backup-status', backupError);
+  }
+  finally { backupPendingRequest = false; $('backup').disabled = !csrfReady || backupRunning; }
 });
 document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (document.hidden) text('connection', 'Обновление приостановлено'); else poll(); });
 poll();

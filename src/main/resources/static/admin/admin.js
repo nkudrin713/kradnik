@@ -5,6 +5,7 @@ const states = {IDLE: 'Свободен', BUSY: 'Занят', BACKOFF: 'Пауз
 const phases = {DOWNLOADING: 'Скачивание', PACKING: 'Упаковка', UPLOADING: 'Отправка'};
 const errors = {METADATA: 'Подготовка меню', PLAYLIST_ITEM: 'Треки плейлистов', WORKER: 'Циклы воркеров', METADATA_REJECTED: 'Переполнение очереди меню'};
 let latest, timer, inFlight = false, retry = 2000, csrfReady = false, csrfToken, backupEstimated = false;
+let databaseSizeNextAt = 0, databaseSizeLoaded = false;
 const sorting = {};
 const collator = new Intl.Collator('ru', {numeric: true, sensitivity: 'base'});
 function text(id, value) { if ($(id).textContent !== String(value)) $(id).textContent = value; }
@@ -52,9 +53,55 @@ function sourceStatus(id, available, at) {
   text(id, available ? '' : `БД недоступна · последний снимок: ${date(at)}`);
   $(id).classList.toggle('warning', !available);
 }
-function ring(id, value, total) {
-  const percent = value != null && total > 0 ? Math.min(100, Math.max(0, value / total * 100)) : 0;
-  $(id).style.setProperty('--ring-value', `${percent}%`);
+function meter(id, value, total) {
+  const element = $(id);
+  const available = value != null && total > 0;
+  element.hidden = !available;
+  if (!available) return;
+  const percent = Math.min(100, Math.max(0, value / total * 100));
+  element.firstElementChild.style.width = `${percent}%`;
+  element.setAttribute('aria-valuenow', percent.toFixed(1));
+  element.setAttribute('aria-valuetext', `${bytes(value)} из ${bytes(total)}`);
+}
+function sparkline(id, points, field) {
+  const svg = $(id);
+  const key = JSON.stringify(points.map(point => [point.at, point[field]]));
+  if (svg.dataset.points === key) return;
+  svg.dataset.points = key;
+  svg.replaceChildren();
+  const available = points.filter(point => point[field] != null && Number.isFinite(point[field]));
+  if (available.length < 2) {
+    svg.setAttribute('aria-label', `${svg.dataset.label}: история недоступна`);
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('x', '2'); label.setAttribute('y', '26');
+    label.textContent = 'История недоступна'; svg.append(label);
+    return;
+  }
+  const ns = 'http://www.w3.org/2000/svg';
+  const start = Date.parse(points[0].at), end = Date.parse(points[points.length - 1].at);
+  const span = Math.max(60000, end - start);
+  const values = available.map(point => point[field]);
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = Math.max(1, max - min);
+  let path = '', previous = null;
+  points.forEach(point => {
+    const value = point[field], at = Date.parse(point.at);
+    if (value == null || !Number.isFinite(value)) { previous = null; return; }
+    const x = 2 + (at - start) / span * 196;
+    const y = 35 - (value - min) / range * 29;
+    path += `${previous == null || at - previous > 90000 ? 'M' : 'L'}${x},${y} `;
+    previous = at;
+  });
+  const line = document.createElementNS(ns, 'path');
+  line.setAttribute('d', path);
+  line.setAttribute('fill', 'none');
+  line.setAttribute('stroke', 'currentColor');
+  line.setAttribute('stroke-width', '2');
+  line.setAttribute('stroke-linecap', 'round');
+  line.setAttribute('stroke-linejoin', 'round');
+  svg.append(line);
+  const format = value => field === 'queued' ? value : bytes(value);
+  svg.setAttribute('aria-label', `${svg.dataset.label}: минимум ${format(min)}, максимум ${format(max)} за последний час`);
 }
 function render(data) {
   text('version', `Версия ${data.version || 'неизвестна'}`);
@@ -62,13 +109,23 @@ function render(data) {
   const queued = sum('queued'), processing = sum('processing');
   text('queued', data.queuesUpdatedAt ? queued : '—');
   text('processing', data.queuesUpdatedAt ? processing : '—');
-  ring('queue-ring', data.queuesUpdatedAt ? processing : null, queued + processing);
+  sparkline('queue-sparkline', data.history || [], 'queued');
   text('metadata', data.runtime.metadataQueued);
   const workers = data.runtime.workers;
   const busyWorkers = workers.filter(w => w.state === 'BUSY').length;
   text('worker-active', busyWorkers);
-  text('worker-total', `/ ${workers.length}`);
-  ring('worker-ring', busyWorkers, workers.length);
+  text('worker-total', `из ${workers.length} заняты`);
+  const slots = $('worker-slots');
+  const workerStates = workers.map(worker => worker.state);
+  if (slots.dataset.states !== workerStates.join(',')) {
+    slots.dataset.states = workerStates.join(',');
+    slots.replaceChildren(...workers.map(worker => {
+      const segment = document.createElement('span');
+      segment.className = `worker-slot ${worker.state.toLowerCase()}`;
+      return segment;
+    }));
+  }
+  slots.setAttribute('aria-label', `${busyWorkers} из ${workers.length} заняты; ${workers.filter(worker => worker.state === 'BACKOFF').length} в паузе; ${workers.filter(worker => worker.state === 'STOPPED').length} остановлены`);
   text('items', `${workers.reduce((n, w) => n + w.activeItems, 0)} / ${workers.reduce((n, w) => n + w.waitingItems, 0)}`);
   table('workers', workers.map(w => [w.id, {state: w.state}, w.jobId == null ? '—' : `#${w.jobId}`, w.platform, phases[w.phase] || '—', duration(w.since), w.category === 'playlist' ? `${w.activeItems} / ${w.waitingItems}` : '—']),
     workers.map(w => [w.id, states[w.state] || w.state, w.jobId, w.platform, phases[w.phase], w.since ? -Date.parse(w.since) : null, w.category === 'playlist' ? [w.activeItems, w.waitingItems] : null]));
@@ -100,29 +157,33 @@ function renderOutcomes() {
     ? `${Math.round(dayCompleted / (dayCompleted + dayFailed) * 100)}%` : '—');
   const completed = count(minutes, 'completed'), failed = count(minutes, 'failed');
   const cancelled = count(minutes, 'cancelled_by_user'), total = completed + failed + cancelled;
-  [['outcome-ring-total', total], ['outcome-completed', completed], ['outcome-failed', failed], ['outcome-cancelled', cancelled]]
+  [['outcome-total', total], ['outcome-completed', completed], ['outcome-failed', failed], ['outcome-cancelled', cancelled]]
     .forEach(([id, value]) => text(id, latest.outcomesUpdatedAt ? value : '—'));
-  const completeEnd = total ? completed / total * 100 : 0;
-  const failedEnd = total ? (completed + failed) / total * 100 : 0;
-  $('outcome-ring').style.background = total && latest.outcomesUpdatedAt
-    ? 'conic-gradient(#69d7b4 0 ' + completeEnd + '%, #f1989e ' + completeEnd + '% ' + failedEnd + '%, #e8bb75 ' + failedEnd + '% 100%)'
-    : 'conic-gradient(#344457 0 100%)';
-  $('outcome-ring').setAttribute('aria-label', latest.outcomesUpdatedAt
+  [completed, failed, cancelled].forEach((value, index) => {
+    $('outcome-stack').children[index].style.width = `${total && latest.outcomesUpdatedAt ? value / total * 100 : 0}%`;
+  });
+  $('outcome-stack').setAttribute('aria-label', latest.outcomesUpdatedAt
     ? `Завершено ${completed}, неуспешно ${failed}, отменено ${cancelled}` : 'Нет данных о результатах задач');
-  const bars = Object.entries(categories).map(([category, label]) => {
-    const values = ['completed', 'failed', 'cancelled_by_user'].map(status => count(minutes, status, category));
+  const byCategory = Object.entries(categories).map(([category, label]) => ({label, values: ['completed', 'failed', 'cancelled_by_user'].map(status => count(minutes, status, category))}));
+  const maxCategory = Math.max(1, ...byCategory.map(entry => entry.values.reduce((sum, value) => sum + value, 0)));
+  const bars = byCategory.map(({label, values}) => {
     const row = document.createElement('div'); row.className = 'outcome-bar-row';
     const name = document.createElement('span'); name.textContent = label;
-    const track = document.createElement('div'); track.className = 'bar-track';
+    const track = document.createElement('div'); track.className = 'bar-track'; track.setAttribute('role', 'img');
+    track.setAttribute('aria-label', latest.outcomesUpdatedAt
+      ? `${label}: завершено ${values[0]}, неуспешно ${values[1]}, отменено ${values[2]}` : `${label}: данные недоступны`);
     const sum = values.reduce((n, value) => n + value, 0);
     values.forEach((value, index) => {
       const segment = document.createElement('span');
       segment.className = ['completed', 'failed', 'cancelled'][index];
-      segment.style.width = `${total ? value / total * 100 : 0}%`;
+      segment.style.width = `${latest.outcomesUpdatedAt ? value / maxCategory * 100 : 0}%`;
       track.append(segment);
     });
     const amount = document.createElement('strong'); amount.textContent = latest.outcomesUpdatedAt ? sum : '—';
-    row.append(name, track, amount);
+    const details = document.createElement('span'); details.className = 'outcome-bar-details';
+    details.textContent = latest.outcomesUpdatedAt
+      ? `${values[0]} завершено · ${values[1]} неуспешно · ${values[2]} отменено` : 'Данные недоступны';
+    row.append(name, track, amount, details);
     return row;
   });
   $('outcome-bars').replaceChildren(...bars);
@@ -136,6 +197,7 @@ function renderOutcomes() {
     }
     const value = String(counts[key] || 0);
     if (box.lastChild.textContent !== value) box.lastChild.textContent = value;
+    box.classList.toggle('has-errors', Number(value) > 0);
   });
 }
 function chart(points) {
@@ -150,14 +212,17 @@ function chart(points) {
   ['queued', 'processing'].forEach((field, i) => {
     const line = document.createElementNS(ns, 'polyline');
     line.setAttribute('points', points.map(p => `${35 + (Date.parse(p.at) - start) / span * 555},${120 - p[field] / max * 100}`).join(' '));
-    line.setAttribute('fill', 'none'); line.setAttribute('stroke', i ? '#72e0c0' : '#78a7ff'); line.setAttribute('stroke-width', '2');
+    line.setAttribute('fill', 'none'); line.setAttribute('stroke', i ? '#79bbff' : '#8196ac'); line.setAttribute('stroke-width', '2');
+    line.setAttribute('stroke-linecap', 'round'); line.setAttribute('stroke-linejoin', 'round');
     $('chart').append(line);
   });
   [0, max].forEach(value => { const label = document.createElementNS(ns, 'text'); label.setAttribute('x', '0'); label.setAttribute('y', value ? '24' : '124'); label.textContent = value; $('chart').append(label); });
 }
 function bytes(value) {
   if (value == null) return '—';
-  return value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} ГиБ` : `${(value / 1024 ** 2).toFixed(1)} МиБ`;
+  return value >= 1024 ** 3
+    ? `${(value / 1024 ** 3).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} GiB`
+    : `${(value / 1024 ** 2).toLocaleString('ru-RU', {minimumFractionDigits: 1, maximumFractionDigits: 1})} MiB`;
 }
 function renderMemory(memory) {
   if (!memory) return;
@@ -165,14 +230,18 @@ function renderMemory(memory) {
   text('memory-status', memory.available ? '' : `Измерение недоступно · ${date(point?.at)}`);
   $('memory-status').classList.toggle('warning', !memory.available);
   text('heap-used', bytes(point?.heapUsed));
-  text('heap-limit', `Выделено: ${bytes(point?.heapCommitted)} / максимум: ${bytes(point?.heapMax)}`);
-  text('container-used', point?.containerUsed == null ? 'Нет данных' : bytes(point.containerUsed));
-  text('container-limit', point?.containerLimit == null ? 'Лимит не задан или недоступен' : `Лимит: ${bytes(point.containerLimit)}`);
-  const percent = (used, max) => used != null && max > 0 ? `${(used / max * 100).toFixed(1)}%` : '';
-  text('heap-percent', percent(point?.heapUsed, point?.heapMax));
-  text('container-percent', percent(point?.containerUsed, point?.containerLimit));
-  ring('heap-ring', point?.heapUsed, point?.heapMax);
-  ring('container-ring', point?.containerUsed, point?.containerLimit);
+  text('heap-limit', `Выделено ${bytes(point?.heapCommitted)} · лимит ${bytes(point?.heapMax)}`);
+  text('container-used', bytes(point?.containerUsed));
+  text('container-limit', point?.containerUsed == null ? 'Измерение недоступно'
+    : point?.containerLimit == null ? 'Лимит не задан или недоступен' : `Лимит ${bytes(point.containerLimit)}`);
+  const percent = (used, max) => used != null && max > 0
+    ? `${(used / max * 100).toLocaleString('ru-RU', {minimumFractionDigits: 1, maximumFractionDigits: 1})}%` : '';
+  text('heap-percent', point?.heapMax > 0 ? percent(point.heapUsed, point.heapMax) : '');
+  text('container-percent', point?.containerLimit > 0 ? percent(point.containerUsed, point.containerLimit) : '');
+  meter('heap-meter', point?.heapUsed, point?.heapMax);
+  meter('container-meter', point?.containerUsed, point?.containerLimit);
+  $('heap-used').closest('.technical-card').classList.toggle('is-stale', !memory.available);
+  $('container-used').closest('.technical-card').classList.toggle('is-stale', !memory.available);
   text('nonheap-used', bytes(point?.nonHeapUsed));
   text('memory-pools', `Metaspace: ${bytes(point?.metaspaceUsed)} · Code cache: ${bytes(point?.codeCacheUsed)}`);
   text('gc-value', `${point?.gcCount ?? '—'} сборок · ${point?.gcTimeMillis ?? '—'} мс`);
@@ -180,12 +249,15 @@ function renderMemory(memory) {
   text('memory-history-status', memory.historyAvailable ? '' : 'История памяти недоступна');
   $('memory-history-status').classList.toggle('warning', !memory.historyAvailable);
   const points = memory.history || [];
-  memoryChart('heap-chart', points, 'heapUsed', 'heapMax');
-  memoryChart('container-chart', points, 'containerUsed', 'containerLimit');
+  sparkline('heap-sparkline', points, 'heapUsed');
+  sparkline('container-sparkline', points, 'containerUsed');
+  memoryChart('heap-chart', points, 'heapUsed');
+  memoryChart('container-chart', points, 'containerUsed');
 }
 function renderHealth(data) {
   const critical = [], warning = [];
   const stale = Date.now() - Date.parse(data.generatedAt) > 10000;
+  document.body.classList.toggle('snapshot-stale', stale);
   if (stale) critical.push('снимок состояния не обновляется');
   if (!data.queuesAvailable || !data.outcomesAvailable) warning.push('статистика базы недоступна');
   if (!data.memory.available || !data.memory.current || Date.now() - Date.parse(data.memory.current.at) > 20000) warning.push('нет свежих данных о памяти');
@@ -200,9 +272,9 @@ function renderHealth(data) {
   if (data.runtime.workers.some(w => w.state === 'BACKOFF')) warning.push('воркер ждёт после ошибки');
   if (!data.statistics.available || !data.historyAvailable || !data.memory.historyAvailable) warning.push('история метрик сохраняется не полностью');
   $('health-title').className = critical.length ? 'critical' : warning.length ? 'warning' : 'healthy';
-  text('health-title', critical.length ? 'Боту требуется внимание' : warning.length ? 'Есть проблемы, требующие проверки' : 'По доступным метрикам бот работает нормально');
+  text('health-title', critical.length ? 'Требуется внимание' : warning.length ? 'Нужна проверка' : 'Работает нормально');
   text('health-details', [...critical, ...warning].join(' · '));
-  text('connection', stale ? 'Снимок устарел' : 'На связи');
+  text('connection', stale ? 'Снимок устарел' : '');
 }
 function renderBackup(status) {
   const descriptions = {
@@ -214,8 +286,21 @@ function renderBackup(status) {
   text('backup-status', descriptions[status.state] ?? 'Состояние неизвестно');
   $('backup').disabled = !csrfReady || status.state === 'running';
 }
-function memoryChart(id, points, used, limit) {
-  const key = JSON.stringify(points.map(p => [p.at, p[used], p[limit]]));
+async function refreshDatabaseSize() {
+  if (Date.now() < databaseSizeNextAt) return;
+  databaseSizeNextAt = Date.now() + 30000;
+  try {
+    const result = await request('/admin/api/database-size');
+    text('database-size', bytes(result.bytes));
+    text('database-size-status', '');
+    databaseSizeLoaded = true;
+    databaseSizeNextAt = Date.now() + 300000;
+  } catch (_) {
+    text('database-size-status', databaseSizeLoaded ? 'Не удалось обновить' : 'Размер недоступен');
+  }
+}
+function memoryChart(id, points, used) {
+  const key = JSON.stringify(points.map(p => [p.at, p[used]]));
   const svg = $(id);
   if (svg.dataset.points === key) return;
   svg.dataset.points = key;
@@ -226,27 +311,27 @@ function memoryChart(id, points, used, limit) {
     node.textContent = value; node.setAttribute('x', x); node.setAttribute('y', y); svg.append(node);
   }
   if (!points.some(p => p[used] != null)) { label('Нет данных', 10, 70); return; }
-  const max = Math.max(1, ...points.flatMap(p => [p[used] || 0, p[limit] || 0]));
+  const max = Math.max(1024 ** 2, ...points.map(p => p[used] || 0)) * 1.15;
   const end = Date.parse(points[points.length - 1].at), start = end - 3600000;
-  [limit, used].forEach((field, index) => {
-    let path = '', previous = null;
-    points.forEach(p => {
-      const at = Date.parse(p.at);
-      if (p[field] == null) { previous = null; return; }
-      const x = 60 + (at - start) / 3600000 * 530, y = 120 - p[field] / max * 100;
-      path += `${previous == null || at - previous > 90000 ? 'M' : 'L'}${x},${y} `;
-      previous = at;
-      if (index === 1) {
-        const dot = document.createElementNS(ns, 'circle');
-        dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('r', '2'); dot.setAttribute('fill', '#72e0c0'); svg.append(dot);
-      }
-    });
-    const line = document.createElementNS(ns, 'path'); line.setAttribute('d', path);
-    line.setAttribute('fill', 'none'); line.setAttribute('stroke', index ? '#72e0c0' : '#7d91a7'); line.setAttribute('stroke-width', '2');
-    if (!index) line.setAttribute('stroke-dasharray', '5 5');
-    svg.append(line);
+  let path = '', previous = null, last = null;
+  points.forEach(p => {
+    const at = Date.parse(p.at);
+    if (p[used] == null) { previous = null; return; }
+    const x = 60 + (at - start) / 3600000 * 530, y = 120 - p[used] / max * 100;
+    path += `${previous == null || at - previous > 90000 ? 'M' : 'L'}${x},${y} `;
+    previous = at;
+    last = [x, y];
   });
+  const line = document.createElementNS(ns, 'path'); line.setAttribute('d', path);
+  line.setAttribute('fill', 'none'); line.setAttribute('stroke', '#79bbff'); line.setAttribute('stroke-width', '2');
+  line.setAttribute('stroke-linecap', 'round'); line.setAttribute('stroke-linejoin', 'round');
+  svg.append(line);
+  if (last) {
+    const dot = document.createElementNS(ns, 'circle');
+    dot.setAttribute('cx', last[0]); dot.setAttribute('cy', last[1]); dot.setAttribute('r', '3'); dot.setAttribute('fill', '#79bbff'); svg.append(dot);
+  }
   label((max / 1024 ** 2).toFixed(0), 0, 24); label('0', 0, 124);
+  label('1 ч назад', 60, 138); label('сейчас', 546, 138);
 }
 async function request(path) {
   const response = await fetch(path, {cache: 'no-store', signal: AbortSignal.timeout(5000)});
@@ -267,8 +352,9 @@ async function poll() {
     latest = await request('/admin/api/snapshot'); render(latest); renderHealth(latest);
     try { renderBackup(await request('/admin/api/backup')); }
     catch (_) { text('backup-status', 'Не удалось получить состояние дампа'); }
+    await refreshDatabaseSize();
     retry = 2000;
-  } catch (_) { text('connection', 'Связь потеряна'); text('health-title', 'Состояние бота неизвестно'); text('health-details', 'Нет связи с админкой'); $('health-title').className = 'critical'; retry = Math.min(retry * 2, 30000); }
+  } catch (_) { document.body.classList.add('snapshot-stale'); text('connection', 'Связь потеряна'); text('health-title', 'Состояние бота неизвестно'); text('health-details', 'Нет связи с админкой'); $('health-title').className = 'critical'; retry = Math.min(retry * 2, 30000); }
   finally { inFlight = false; if (!document.hidden) timer = setTimeout(poll, retry); }
 }
 ['workers', 'queues', 'outcomes'].forEach(id => {

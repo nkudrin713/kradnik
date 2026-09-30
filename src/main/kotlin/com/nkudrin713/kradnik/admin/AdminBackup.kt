@@ -29,11 +29,14 @@ class AdminBackup(private val environment: Environment, private val jdbc: JdbcTe
 
     fun status(): BackupStatus = current
 
+    fun databaseSize(): Long = requireNotNull(
+        jdbc.queryForObject("SELECT pg_database_size(current_database())", Long::class.java),
+    )
+
     fun estimate(): BackupEstimate {
         val directory = Path.of(environment.getRequiredProperty("admin.backup-dir"))
         Files.createDirectories(directory)
-        val databaseBytes = requireNotNull(jdbc.queryForObject("SELECT pg_database_size(current_database())", Long::class.java))
-        return BackupEstimate(databaseBytes, Files.getFileStore(directory).usableSpace)
+        return BackupEstimate(databaseSize(), Files.getFileStore(directory).usableSpace)
     }
 
     @Synchronized
@@ -117,3 +120,5 @@ data class BackupStatus(
 )
 
 data class BackupEstimate(val databaseBytes: Long, val freeBytes: Long)
+
+data class DatabaseSize(val bytes: Long)

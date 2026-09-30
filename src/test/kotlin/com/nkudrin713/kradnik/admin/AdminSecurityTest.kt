@@ -39,6 +39,7 @@ class AdminSecurityTest @Autowired constructor(private val mvc: MockMvc) {
         mvc.perform(get("/admin/api/snapshot")).andExpect(status().isUnauthorized())
         mvc.perform(get("/admin/api/csrf")).andExpect(status().isUnauthorized())
         mvc.perform(get("/admin/api/backup")).andExpect(status().isUnauthorized())
+        mvc.perform(get("/admin/api/database-size")).andExpect(status().isUnauthorized())
         mvc.perform(get("/admin/api/backup/estimate")).andExpect(status().isUnauthorized())
         mvc.perform(post("/admin/api/backup").with(csrf())).andExpect(status().isUnauthorized())
         mvc.perform(get("/login")).andExpect(status().isOk()).andExpect(forwardedUrl("/login/index.html"))
@@ -53,6 +54,7 @@ class AdminSecurityTest @Autowired constructor(private val mvc: MockMvc) {
     fun loginCreatesSessionAndLogoutRequiresCsrfThenInvalidatesSession() {
         val now = Instant.now()
         `when`(backup.status()).thenReturn(BackupStatus("idle"))
+        `when`(backup.databaseSize()).thenReturn(1024)
         `when`(backup.estimate()).thenReturn(BackupEstimate(1024, 2048))
         `when`(backup.start()).thenReturn(BackupStatus("running", startedAt = now))
         `when`(snapshots.snapshot()).thenReturn(DashboardSnapshot(now, RuntimeView(now, listOf(WorkerView("download-1", "download", "IDLE")), 0, emptyList()), memory = MemoryView(current = MemoryPoint(now, 100, 200, 300, 40, 20, 10, null, null, 2, 4, 60), available = true)))
@@ -77,6 +79,7 @@ class AdminSecurityTest @Autowired constructor(private val mvc: MockMvc) {
         mvc.perform(get("/admin/admin.js").session(session)).andExpect(status().isOk())
         mvc.perform(get("/admin/api/csrf").session(session)).andExpect(status().isOk()).andExpect(jsonPath("$.token").isNotEmpty)
         mvc.perform(get("/admin/api/backup").session(session)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("idle"))
+        mvc.perform(get("/admin/api/database-size").session(session)).andExpect(status().isOk()).andExpect(jsonPath("$.bytes").value(1024))
         mvc.perform(get("/admin/api/backup/estimate").session(session)).andExpect(status().isOk()).andExpect(jsonPath("$.databaseBytes").value(1024))
         mvc.perform(post("/admin/api/backup").session(session)).andExpect(status().isForbidden())
         mvc.perform(post("/admin/api/backup").session(session).with(csrf())).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("running"))

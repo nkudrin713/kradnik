@@ -6,6 +6,7 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanningException
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
 import com.nkudrin713.kradnik.observability.BotTelemetry
 import com.nkudrin713.kradnik.observability.RuntimeError
@@ -138,6 +139,8 @@ class DownloadChoiceCoordinator(
             )
         } catch (error: CancellationException) {
             throw error
+        } catch (error: PlatformDisabledException) {
+            telegramSender.editMessage(address = messageAddress, text = error.userMessage(command.language))
         } catch (error: Exception) {
             runtime.error(RuntimeError.METADATA)
             logger.warn(
@@ -156,6 +159,8 @@ class DownloadChoiceCoordinator(
     private fun Exception.userMessage(language: BotLanguage): String {
         return when (this) {
             is DownloadChoicePlanningException -> userMessage
+
+            is PlatformDisabledException -> messages.text(language, TelegramMessage.ERROR_PLATFORM_DISABLED, platform.displayName)
 
             is UnsupportedPlatformException -> messages.text(
                 language,

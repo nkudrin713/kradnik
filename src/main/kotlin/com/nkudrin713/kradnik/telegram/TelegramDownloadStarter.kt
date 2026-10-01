@@ -4,6 +4,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
+import com.nkudrin713.kradnik.download.platform.PlatformAvailability
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.video.TelegramVideoPolicy
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Component
 class TelegramDownloadStarter(
     private val downloadJobService: DownloadJobService,
     private val telegramSender: TelegramSender,
+    private val availability: PlatformAvailability,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -32,6 +34,7 @@ class TelegramDownloadStarter(
         spec: DownloadSpec,
         language: BotLanguage = BotLanguage.EN,
     ) {
+        availability.requireEnabled(spec.platform)
         val statusMessageId = when (messageAddress) {
             is TelegramMessageAddress.Chat -> telegramSender.sendStatus(
                 telegramChatId,
@@ -72,6 +75,7 @@ class TelegramDownloadStarter(
     }
 
     fun retryPlaylist(source: DownloadJob, telegramUserId: Long, telegramUpdateId: Int, deliveryMode: PlaylistDeliveryMode): DownloadJob? {
+        availability.requireEnabled(source.platform)
         val chatId = source.telegramChatId
         val statusMessageId = telegramSender.sendStatus(chatId, TelegramDownloadStatus.QUEUED, source.language)
         val created = try {

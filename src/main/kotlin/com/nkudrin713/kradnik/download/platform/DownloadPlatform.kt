@@ -3,10 +3,11 @@ package com.nkudrin713.kradnik.download.platform
 enum class DownloadPlatform(
     val dbValue: String,
     val displayName: String,
+    val icon: String = "/admin/icons/service.svg",
 ) {
-    YOUTUBE("youtube", "YouTube"),
-    INSTAGRAM("instagram", "Instagram"),
-    VK("vk", "VK"),
+    YOUTUBE("youtube", "YouTube", "/admin/icons/youtube.svg"),
+    INSTAGRAM("instagram", "Instagram", "/admin/icons/instagram.svg"),
+    VK("vk", "VK", "/admin/icons/vk.svg"),
     ;
 
     companion object {

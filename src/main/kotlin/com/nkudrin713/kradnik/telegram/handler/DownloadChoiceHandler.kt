@@ -7,6 +7,7 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.choice.SelectDownloadChoiceCommand
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.telegram.CANCEL_OPTION_KEY
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
@@ -196,6 +197,10 @@ class DownloadChoiceHandler(
                 spec = selection.option.spec,
                 language = selection.session.language,
             )
+        } catch (error: PlatformDisabledException) {
+            sessionService.release(callback.sessionToken)
+            answer(callbackQueryId, messages.text(selection.session.language, TelegramMessage.ERROR_PLATFORM_DISABLED, error.platform.displayName), showAlert = true)
+            return
         } catch (error: Exception) {
             sessionService.release(callback.sessionToken)
             throw error

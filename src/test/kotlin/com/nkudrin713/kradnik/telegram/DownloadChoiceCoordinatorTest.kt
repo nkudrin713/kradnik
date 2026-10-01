@@ -3,14 +3,18 @@ package com.nkudrin713.kradnik.telegram
 import com.nkudrin713.kradnik.admin.AdminRuntime
 import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -19,6 +23,28 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class DownloadChoiceCoordinatorTest {
+    @Test
+    fun disabledServiceShowsLocalizedMessageWithoutCountingMetadataFailure() = runTest {
+        val planner = mockk<DownloadChoicePlanner>()
+        val sessions = mockk<DownloadChoiceSessionService>()
+        val sender = mockk<TelegramSender>(relaxed = true)
+        val runtime = AdminRuntime(true)
+        val coordinator = DownloadChoiceCoordinator(planner, sessions, sender, telegramMessages(), runtime)
+        coEvery { planner.plan(any(), any()) } throws PlatformDisabledException(DownloadPlatform.VK)
+        try {
+            coordinator.prepareAsync(
+                PrepareDownloadChoiceCommand(1, 2, 3, 4, "https://vk.com/video1_2", BotLanguage.RU),
+                TelegramMessageAddress.Chat(2, 5),
+            )
+
+            verify { sender.editMessage(TelegramMessageAddress.Chat(2, 5), "⚠️ Скачивание из VK временно отключено. Попробуйте позже.") }
+            verify(exactly = 0) { sessions.create(any()) }
+            assertEquals(0L, runtime.snapshot().errors.first().counts["METADATA"])
+        } finally {
+            coordinator.shutdown()
+        }
+    }
+
     @Test
     fun boundsPendingMetadataRequestsAndCancelsActiveRequestsOnShutdown() {
         val planner = mockk<DownloadChoicePlanner>()

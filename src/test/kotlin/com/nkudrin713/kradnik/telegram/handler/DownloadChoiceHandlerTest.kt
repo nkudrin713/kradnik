@@ -8,6 +8,7 @@ import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.telegram.CANCEL_OPTION_KEY
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
@@ -42,6 +43,20 @@ class DownloadChoiceHandlerTest {
         messages = telegramMessages(),
     )
     private val token = UUID.randomUUID()
+
+    @Test
+    fun disabledPlatformShowsAlertReleasesSelectionAndKeepsMenu() {
+        every { preferenceService.resolveLanguage(300) } returns BotLanguage.RU
+        every { sessionService.select(any()) } returns readySelection()
+        every { starter.start(any(), any(), any(), any(), any(), any(), any()) } throws PlatformDisabledException(DownloadPlatform.YOUTUBE)
+        every { sessionService.release(token) } just runs
+        every { telegramSender.answerCallback("callback-id", "⚠️ Скачивание из YouTube временно отключено. Попробуйте позже.", true) } just runs
+
+        handler.handle(callbackQuery(userId = 300))
+
+        verify { sessionService.release(token) }
+        verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
+    }
 
     @Test
     fun ignoresUnrelatedCallbacks() {

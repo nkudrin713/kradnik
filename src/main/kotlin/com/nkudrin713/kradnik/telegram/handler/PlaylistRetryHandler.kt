@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.telegram.handler
 
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
+import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.telegram.DownloadJobAction
 import com.nkudrin713.kradnik.telegram.DownloadJobCallback
@@ -35,7 +36,12 @@ class PlaylistRetryHandler(
             sender.answerCallback(callbackQuery.id(), messages.text(language, TelegramMessage.RETRY_UNAVAILABLE), true)
             return true
         }
-        val created = starter.retryPlaylist(source, userId, updateId, mode)
+        val created = try {
+            starter.retryPlaylist(source, userId, updateId, mode)
+        } catch (error: PlatformDisabledException) {
+            sender.answerCallback(callbackQuery.id(), messages.text(language, TelegramMessage.ERROR_PLATFORM_DISABLED, error.platform.displayName), true)
+            return true
+        }
         sender.answerCallback(
             callbackQuery.id(),
             if (created == null) messages.text(language, TelegramMessage.RETRY_ALREADY_STARTED) else null,

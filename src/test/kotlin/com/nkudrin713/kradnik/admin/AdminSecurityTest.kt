@@ -1,10 +1,15 @@
 package com.nkudrin713.kradnik.admin
 
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.PlatformAvailability
+import com.nkudrin713.kradnik.download.platform.PlatformStatus
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
 import org.springframework.context.annotation.Import
+import org.springframework.http.MediaType
 import org.springframework.mock.web.MockHttpSession
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin
@@ -33,6 +38,9 @@ class AdminSecurityTest @Autowired constructor(private val mvc: MockMvc) {
     @MockitoBean
     private lateinit var backup: AdminBackup
 
+    @MockitoBean
+    private lateinit var availability: PlatformAvailability
+
     @Test
     fun anonymousClientsCannotReadStaticPageOrApi() {
         mvc.perform(get("/admin/index.html")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/login"))
@@ -41,6 +49,8 @@ class AdminSecurityTest @Autowired constructor(private val mvc: MockMvc) {
         mvc.perform(get("/admin/api/backup")).andExpect(status().isUnauthorized())
         mvc.perform(get("/admin/api/database-size")).andExpect(status().isUnauthorized())
         mvc.perform(get("/admin/api/backup/estimate")).andExpect(status().isUnauthorized())
+        mvc.perform(get("/admin/api/services")).andExpect(status().isUnauthorized())
+        mvc.perform(post("/admin/api/services/youtube").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":false}")).andExpect(status().isUnauthorized())
         mvc.perform(post("/admin/api/backup").with(csrf())).andExpect(status().isUnauthorized())
         mvc.perform(get("/login")).andExpect(status().isOk()).andExpect(forwardedUrl("/login/index.html"))
         mvc.perform(get("/login/index.html")).andExpect(status().isOk())
@@ -48,6 +58,31 @@ class AdminSecurityTest @Autowired constructor(private val mvc: MockMvc) {
         mvc.perform(get("/login/csrf")).andExpect(status().isOk()).andExpect(jsonPath("$.token").isNotEmpty)
         mvc.perform(get("/login?error")).andExpect(status().isOk())
         mvc.perform(formLogin().user("operator").password("wrong")).andExpect(unauthenticated())
+    }
+
+    @Test
+    fun serviceSwitchRequiresSessionCsrfAndKnownPlatform() {
+        val session = mvc.perform(formLogin().user("operator").password("test-admin-password"))
+            .andExpect(authenticated()).andReturn().request.session as MockHttpSession
+        val platform = DownloadPlatform.YOUTUBE
+        val disabled = PlatformStatus(platform.dbValue, platform.displayName, platform.icon, false)
+        `when`(availability.list()).thenReturn(DownloadPlatform.entries.map { PlatformStatus(it.dbValue, it.displayName, it.icon, true) })
+        `when`(availability.setEnabled(platform, false)).thenReturn(disabled)
+
+        mvc.perform(get("/admin/api/services").session(session)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(DownloadPlatform.entries.size))
+            .andExpect(jsonPath("$[0].icon").value(platform.icon))
+        mvc.perform(post("/admin/api/services/youtube").session(session).contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":false}"))
+            .andExpect(status().isForbidden())
+        mvc.perform(post("/admin/api/services/youtube").session(session).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":false}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.enabled").value(false))
+        verify(availability).setEnabled(platform, false)
+        mvc.perform(post("/admin/api/services/unknown").session(session).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true}"))
+            .andExpect(status().isNotFound())
+        mvc.perform(post("/admin/api/services/youtube").session(session).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isBadRequest())
+        mvc.perform(post("/admin/api/services/youtube").session(session).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":null}"))
+            .andExpect(status().isBadRequest())
     }
 
     @Test

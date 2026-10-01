@@ -6,6 +6,8 @@ const phases = {DOWNLOADING: 'Скачивание', PACKING: 'Упаковка'
 const errors = {METADATA: 'Подготовка меню', PLAYLIST_ITEM: 'Треки плейлистов', WORKER: 'Циклы воркеров', METADATA_REJECTED: 'Переполнение очереди меню'};
 let latest, timer, inFlight = false, retry = 2000, csrfReady = false, csrfToken, backupEstimated = false, backupPendingRequest = false, backupRunning = false, backupError = '';
 let databaseSizeNextAt = 0, databaseSizeLoaded = false;
+let servicesRevision = 0, servicesAvailable = false;
+const serviceRows = new Map(), servicesPending = new Set();
 const sorting = {};
 const collator = new Intl.Collator('ru', {numeric: true, sensitivity: 'base'});
 function text(id, value) { if ($(id).textContent !== String(value)) $(id).textContent = value; }
@@ -454,6 +456,65 @@ async function request(path) {
   if (!response.ok) throw new Error('http');
   return response.json();
 }
+function renderServices(services) {
+  const ids = new Set(services.map(service => service.id));
+  serviceRows.forEach((row, id) => { if (!ids.has(id)) { row.element.remove(); serviceRows.delete(id); } });
+  services.forEach(service => {
+    let row = serviceRows.get(service.id);
+    if (!row) {
+      const element = document.createElement('li'); element.className = 'service-row';
+      const icon = document.createElement('img'); icon.className = 'service-icon'; icon.alt = ''; icon.width = 32; icon.height = 32;
+      const name = document.createElement('span'); name.className = 'service-name';
+      const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'service-toggle'; toggle.setAttribute('role', 'switch');
+      toggle.addEventListener('click', () => toggleService(service.id));
+      element.append(icon, name, toggle); $('services').append(element);
+      row = {element, icon, name, toggle}; serviceRows.set(service.id, row);
+    }
+    row.service = service; row.icon.src = service.icon; row.name.textContent = service.name;
+    row.toggle.setAttribute('aria-label', service.name);
+    row.toggle.setAttribute('aria-checked', String(service.enabled));
+    row.toggle.title = service.enabled ? 'Включён' : 'Выключен';
+    row.toggle.disabled = !csrfReady || !servicesAvailable || servicesPending.has(service.id);
+  });
+}
+async function refreshServices() {
+  const revision = servicesRevision;
+  try {
+    const services = await request('/admin/api/services');
+    if (revision !== servicesRevision || servicesPending.size) return;
+    servicesAvailable = true; renderServices(services);
+    text('services-status', '');
+  } catch (_) {
+    if (revision !== servicesRevision) return;
+    servicesAvailable = false;
+    serviceRows.forEach(row => { row.toggle.disabled = true; });
+    text('services-status', 'Не удалось получить состояние сервисов');
+  }
+}
+async function toggleService(id) {
+  const row = serviceRows.get(id);
+  if (!row || !csrfReady || !servicesAvailable || servicesPending.has(id)) return;
+  servicesPending.add(id); servicesRevision++; row.toggle.disabled = true;
+  row.toggle.setAttribute('aria-busy', 'true'); text('services-status', '');
+  let failed = false;
+  try {
+    const response = await fetch(`/admin/api/services/${encodeURIComponent(id)}`, {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken},
+      body: JSON.stringify({enabled: !row.service.enabled}), signal: AbortSignal.timeout(5000)
+    });
+    if (response.status === 401 || response.status === 403 || response.redirected) { location.assign('/login'); throw new Error('session'); }
+    if (!response.ok) throw new Error('http');
+    const service = await response.json();
+    row.service = service; row.toggle.setAttribute('aria-checked', String(service.enabled));
+    row.toggle.title = service.enabled ? 'Включён' : 'Выключен';
+  } catch (_) { failed = true; }
+  finally {
+    servicesPending.delete(id); servicesRevision++; row.toggle.removeAttribute('aria-busy');
+    await refreshServices();
+    row.toggle.disabled = !csrfReady || !servicesAvailable;
+    if (failed) text('services-status', 'Не удалось подтвердить изменение. Проверьте состояние сервиса.');
+  }
+}
 async function poll() {
   clearTimeout(timer);
   if (document.hidden || inFlight) return;
@@ -465,6 +526,7 @@ async function poll() {
       $('logout').append(input); $('logout').querySelector('button').disabled = false; csrfReady = true; csrfToken = csrf.token;
     }
     latest = await request('/admin/api/snapshot'); render(latest); renderHealth(latest);
+    await refreshServices();
     try { renderBackup(await request('/admin/api/backup')); }
     catch (_) { text('backup-status', 'Не удалось получить состояние дампа'); }
     await refreshDatabaseSize();

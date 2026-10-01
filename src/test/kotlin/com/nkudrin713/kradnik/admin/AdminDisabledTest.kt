@@ -13,7 +13,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 class AdminDisabledTest @Autowired constructor(private val mvc: MockMvc) {
     @Test
     fun disabledAdminHasNoPublicLoginStaticContentOrApi() {
-        listOf("/login", "/login/index.html", "/login/csrf", "/admin/index.html", "/admin/api/snapshot").forEach {
+        listOf("/login", "/login/index.html", "/login/csrf", "/admin/index.html", "/admin/api/snapshot", "/admin/api/services").forEach {
             mvc.perform(get(it)).andExpect(status().isNotFound())
         }
     }

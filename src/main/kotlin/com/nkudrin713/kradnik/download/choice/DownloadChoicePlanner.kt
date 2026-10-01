@@ -5,6 +5,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.PlatformAvailability
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
 import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
@@ -25,8 +26,10 @@ class DownloadChoicePlanner(
     private val instagram: InstagramChoicePlanner,
     private val messages: TelegramMessages,
     private val youtubePlaylistPlanner: YouTubePlaylistPlanner,
+    private val availability: PlatformAvailability,
 ) {
     suspend fun plan(url: String, language: BotLanguage = BotLanguage.EN): DownloadChoicePlan {
+        availability.requireEnabled(platformResolver.platformOf(url))
         youtubePlaylistPlanner.planOrNull(url, language)?.let { return it }
         val specs = platformResolver.resolve(url)
         val metadata = extractCatalog(specs.video, language).metadata

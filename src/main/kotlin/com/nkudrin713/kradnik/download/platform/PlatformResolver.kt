@@ -24,11 +24,17 @@ class UnsupportedPlatformException(message: String) : RuntimeException(message)
 /** Recognizes the three supported sources and builds normalized download specifications. */
 @Service
 class PlatformResolver {
-    fun resolve(url: String): PlatformDownloadSpecs = when {
-        supportsYoutube(url) -> resolveYoutube(url)
-        supportsInstagram(url) -> resolveInstagram(url)
-        supportsVk(url) -> resolveVk(url)
+    fun platformOf(url: String): DownloadPlatform = when {
+        supportsYoutube(url) -> DownloadPlatform.YOUTUBE
+        supportsInstagram(url) -> DownloadPlatform.INSTAGRAM
+        supportsVk(url) -> DownloadPlatform.VK
         else -> throw UnsupportedPlatformException("Unsupported platform")
+    }
+
+    fun resolve(url: String): PlatformDownloadSpecs = when (platformOf(url)) {
+        DownloadPlatform.YOUTUBE -> resolveYoutube(url)
+        DownloadPlatform.INSTAGRAM -> resolveInstagram(url)
+        DownloadPlatform.VK -> resolveVk(url)
     }
 
     private fun supportsYoutube(url: String): Boolean {

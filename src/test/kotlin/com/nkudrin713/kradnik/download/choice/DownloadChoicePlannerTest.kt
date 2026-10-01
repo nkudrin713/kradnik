@@ -11,6 +11,8 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.PlatformAvailability
+import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
@@ -23,6 +25,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
 import java.net.URI
@@ -38,6 +41,7 @@ class DownloadChoicePlannerTest {
     private val downloadEngine: DownloadEngine = mockk()
     private val uploadLimits = TelegramUploadLimits(2_000_000_000, localMode = true)
     private val youtubePlaylistPlanner = mockk<YouTubePlaylistPlanner>()
+    private val availability = mockk<PlatformAvailability>(relaxed = true)
     private val choices = MediaChoiceBuilder(AudioUploadPlanner(uploadLimits), uploadLimits, telegramMessages())
     private val planner = DownloadChoicePlanner(
         platformResolver = platformResolver,
@@ -46,10 +50,36 @@ class DownloadChoicePlannerTest {
         instagram = InstagramChoicePlanner(choices, telegramMessages()),
         messages = telegramMessages(),
         youtubePlaylistPlanner = youtubePlaylistPlanner,
+        availability = availability,
     )
 
     init {
+        every { platformResolver.platformOf(any()) } returns DownloadPlatform.YOUTUBE
         coEvery { youtubePlaylistPlanner.planOrNull(any(), any()) } returns null
+    }
+
+    @Test
+    fun rejectsEveryDisabledPlatformBeforeAnySourceRequest() = runTest {
+        DownloadPlatform.entries.forEach { platform ->
+            every { platformResolver.platformOf(URL) } returns platform
+            every { availability.requireEnabled(platform) } throws PlatformDisabledException(platform)
+
+            assertFailsWith<PlatformDisabledException> { planner.plan(URL) }
+        }
+        coVerify(exactly = 0) { youtubePlaylistPlanner.planOrNull(any(), any()) }
+        coVerify(exactly = 0) { downloadEngine.prepare(any(), any()) }
+        verify(exactly = 0) { platformResolver.resolve(any()) }
+    }
+
+    @Test
+    fun disabledYoutubeAlsoBlocksPlaylistLinks() = runTest {
+        val url = "https://www.youtube.com/playlist?list=PL123"
+        every { platformResolver.platformOf(url) } returns PlatformResolver().platformOf(url)
+        every { availability.requireEnabled(DownloadPlatform.YOUTUBE) } throws PlatformDisabledException(DownloadPlatform.YOUTUBE)
+
+        assertFailsWith<PlatformDisabledException> { planner.plan(url) }
+
+        coVerify(exactly = 0) { youtubePlaylistPlanner.planOrNull(any(), any()) }
     }
 
     @Test

@@ -2,6 +2,8 @@ package com.nkudrin713.kradnik.telegram.handler
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.telegram.DownloadJobAction
 import com.nkudrin713.kradnik.telegram.DownloadJobCallback
@@ -28,6 +30,17 @@ class PlaylistRetryHandlerTest {
     private val sender = mockk<TelegramSender>()
     private val preferences = mockk<TelegramUserPreferenceService>()
     private val handler = PlaylistRetryHandler(jobs, starter, sender, preferences, telegramMessages())
+
+    @Test
+    fun disabledPlatformShowsLocalizedAlert() {
+        val source = source()
+        every { preferences.resolveLanguage(10) } returns BotLanguage.RU
+        every { jobs.retrySource(1, 10, 20) } returns source
+        every { starter.retryPlaylist(source, 10, 100, PlaylistDeliveryMode.ZIP) } throws PlatformDisabledException(DownloadPlatform.YOUTUBE)
+        every { sender.answerCallback("callback", "⚠️ Скачивание из YouTube временно отключено. Попробуйте позже.", true) } just runs
+
+        assertTrue(handler.handle(callback(DownloadJobAction.RETRY_ZIP), 100))
+    }
 
     @Test
     fun startsZipRetryForOwner() {

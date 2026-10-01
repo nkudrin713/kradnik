@@ -5,6 +5,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.PlatformAvailability
+import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
@@ -21,14 +23,36 @@ import kotlin.test.assertFailsWith
 class TelegramDownloadStarterTest {
     private val downloadJobService: DownloadJobService = mockk()
     private val telegramSender: TelegramSender = mockk()
+    private val availability = mockk<PlatformAvailability>(relaxed = true)
     private val starter = TelegramDownloadStarter(
         downloadJobService = downloadJobService,
         telegramSender = telegramSender,
+        availability = availability,
     )
 
     init {
         every { downloadJobService.queuePosition(any()) } returns 1
         every { telegramSender.editQueuedJob(any(), any(), any(), any(), any(), any()) } just runs
+    }
+
+    @Test
+    fun disabledPlatformRejectsOldChoiceWithoutStatusOrJob() {
+        every { availability.requireEnabled(DownloadPlatform.YOUTUBE) } throws PlatformDisabledException(DownloadPlatform.YOUTUBE)
+
+        assertFailsWith<PlatformDisabledException> { start(OutputType.VIDEO) }
+
+        verify(exactly = 0) { telegramSender.sendStatus(any(), any(), any()) }
+        verify(exactly = 0) { downloadJobService.createJob(any()) }
+    }
+
+    @Test
+    fun disabledPlatformRejectsPlaylistRetryWithoutStatusOrJob() {
+        every { availability.requireEnabled(DownloadPlatform.YOUTUBE) } throws PlatformDisabledException(DownloadPlatform.YOUTUBE)
+
+        assertFailsWith<PlatformDisabledException> { starter.retryPlaylist(DownloadJob(), 300, 400, PlaylistDeliveryMode.ZIP) }
+
+        verify(exactly = 0) { telegramSender.sendStatus(any(), any(), any()) }
+        verify(exactly = 0) { downloadJobService.createRetryJob(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test

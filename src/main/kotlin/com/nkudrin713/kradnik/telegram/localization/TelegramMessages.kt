@@ -114,6 +114,7 @@ enum class TelegramMessage(val key: String) {
     ERROR_METADATA_UNAVAILABLE("error.metadata-unavailable"),
     ERROR_TOO_LARGE("error.too-large"),
     ERROR_UNSUPPORTED_PLATFORM("error.unsupported-platform"),
+    ERROR_PLATFORM_DISABLED("error.platform-disabled"),
     ERROR_UNSUPPORTED_URL("error.unsupported-url"),
     ERROR_CHOICE_PREPARATION("error.choice-preparation"),
     ERROR_IMAGES_DIRECT_CHAT_ONLY("error.images-direct-chat-only"),

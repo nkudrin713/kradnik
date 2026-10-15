@@ -70,7 +70,7 @@ class TelegramUpdateHandler(
                     !playlistRetryHandler.handle(callbackQuery, update.updateId()) &&
                     !downloadCancellationHandler.handle(callbackQuery, update.updateId())
                 ) {
-                    downloadChoiceHandler.handle(callbackQuery)
+                    downloadChoiceHandler.handle(callbackQuery, update.updateId())
                 }
             }
         }
@@ -78,16 +78,8 @@ class TelegramUpdateHandler(
 
     private fun handleGuestMessage(update: Update, message: Message) {
         val guestQueryId = message.guestQueryId() ?: return
+        val url = guestUrl(message.text()) ?: return
         val language = resolveLanguage(message)
-        val url = guestUrl(message.text())
-        if (url == null) {
-            telegramSender.answerGuestMessage(
-                guestQueryId = guestQueryId,
-                text = messages.text(language, TelegramMessage.LINK_REQUIRED),
-                language = language,
-            )
-            return
-        }
 
         downloadChoiceCoordinator.prepare(
             PrepareDownloadChoiceCommand(

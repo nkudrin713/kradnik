@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.repository
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
@@ -8,6 +9,8 @@ import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 
 interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
+    fun findAllByStatusOrderByCreatedAtAscIdAsc(status: DownloadJobStatus): List<DownloadJob>
+
     fun findByTelegramUpdateId(telegramUpdateId: Int): DownloadJob?
 
     fun findByRetryOfJobId(retryOfJobId: Long): DownloadJob?

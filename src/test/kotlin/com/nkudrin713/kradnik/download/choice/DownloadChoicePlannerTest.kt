@@ -273,6 +273,10 @@ class DownloadChoicePlannerTest {
             DownloadFailureReason.SOURCE_RATE_LIMITED to TelegramMessage.ERROR_INSTAGRAM_RATE_LIMITED,
             DownloadFailureReason.SOURCE_REQUEST_FAILED to TelegramMessage.ERROR_INSTAGRAM_UNAVAILABLE,
             DownloadFailureReason.METADATA_UNAVAILABLE to TelegramMessage.ERROR_METADATA_UNAVAILABLE,
+            DownloadFailureReason.FORMAT_UNAVAILABLE to TelegramMessage.STATUS_FORMAT_UNAVAILABLE,
+            DownloadFailureReason.AUTHENTICATION_REQUIRED to TelegramMessage.STATUS_AUTHENTICATION_REQUIRED,
+            DownloadFailureReason.SOURCE_TIMEOUT to TelegramMessage.STATUS_SOURCE_TIMEOUT,
+            DownloadFailureReason.SOURCE_FAILED to TelegramMessage.STATUS_ERROR,
         )
         for ((reason, message) in categories) {
             val failure = DownloadFailure(reason, "Diagnostic details")
@@ -280,6 +284,20 @@ class DownloadChoicePlannerTest {
             val error = assertFailsWith<DownloadChoicePlanningException> { planner.plan(URL, BotLanguage.RU) }
             assertEquals(telegramMessages().text(BotLanguage.RU, message), error.userMessage)
             assertSame(failure, error.cause)
+        }
+    }
+
+    @Test
+    fun youtubeRequestFailuresDoNotMentionInstagram() = runTest {
+        every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(resolved(OutputType.VIDEO), resolved(OutputType.AUDIO))
+        val cases = mapOf(
+            DownloadFailureReason.SOURCE_RATE_LIMITED to TelegramMessage.STATUS_SOURCE_RATE_LIMITED,
+            DownloadFailureReason.SOURCE_REQUEST_FAILED to TelegramMessage.STATUS_SOURCE_REQUEST_FAILED,
+        )
+        for ((reason, key) in cases) {
+            coEvery { downloadEngine.prepare(any(), any()) } throws DownloadFailure(reason, "Private diagnostic")
+            val error = assertFailsWith<DownloadChoicePlanningException> { planner.plan(URL, BotLanguage.RU) }
+            assertEquals(telegramMessages().text(BotLanguage.RU, key), error.userMessage)
         }
     }
 

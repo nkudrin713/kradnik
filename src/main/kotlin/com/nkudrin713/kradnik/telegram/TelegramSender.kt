@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
@@ -112,6 +113,15 @@ class TelegramSender(
         }
     }
 
+    fun editFailure(address: TelegramMessageAddress, text: String, retryToken: UUID?, language: BotLanguage, jobId: Long? = null) {
+        val publish = { editText(address, text, retryToken?.let { downloadJobView.repeatKeyboard(it, language) } ?: EMPTY_KEYBOARD) }
+        if (jobId == null) {
+            publish()
+        } else {
+            synchronized(jobStatusLocks[Math.floorMod(jobId, jobStatusLocks.size.toLong()).toInt()]) { publish() }
+        }
+    }
+
     fun editQueuedJob(
         address: TelegramMessageAddress,
         jobId: Long,
@@ -202,8 +212,8 @@ class TelegramSender(
         editText(address, text, EMPTY_KEYBOARD, if (html) ParseMode.HTML else null)
     }
 
-    fun editPlaylistReport(address: TelegramMessageAddress, html: String, jobId: Long, language: BotLanguage, retryCount: Int, includeZip: Boolean) {
-        editText(address, html, downloadJobView.retryKeyboard(jobId, language, retryCount, includeZip), ParseMode.HTML)
+    fun editPlaylistReport(address: TelegramMessageAddress, html: String, jobId: Long, language: BotLanguage, retryCount: Int, includeZip: Boolean, repeatToken: UUID? = null) {
+        editText(address, html, downloadJobView.retryKeyboard(jobId, language, retryCount, includeZip, repeatToken), ParseMode.HTML)
     }
 
     fun answerCallback(
@@ -285,6 +295,26 @@ enum class TelegramDownloadStatus(val message: TelegramMessage) {
     REJECTED_TOO_LARGE(TelegramMessage.STATUS_REJECTED_TOO_LARGE),
     AUTHENTICATION_REQUIRED(TelegramMessage.STATUS_AUTHENTICATION_REQUIRED),
     SOURCE_UNAVAILABLE(TelegramMessage.STATUS_SOURCE_UNAVAILABLE),
+    FORMAT_UNAVAILABLE(TelegramMessage.STATUS_FORMAT_UNAVAILABLE),
+    SOURCE_RATE_LIMITED(TelegramMessage.STATUS_SOURCE_RATE_LIMITED),
+    SOURCE_REQUEST_FAILED(TelegramMessage.STATUS_SOURCE_REQUEST_FAILED),
+    SOURCE_TIMEOUT(TelegramMessage.STATUS_SOURCE_TIMEOUT),
+    METADATA_UNAVAILABLE(TelegramMessage.ERROR_METADATA_UNAVAILABLE),
     ERROR(TelegramMessage.STATUS_ERROR),
     CANCELLED(TelegramMessage.STATUS_CANCELLED_BY_USER),
+    ;
+
+    companion object {
+        fun forFailure(reason: DownloadFailureReason?): TelegramDownloadStatus = when (reason) {
+            DownloadFailureReason.TOO_LARGE -> REJECTED_TOO_LARGE
+            DownloadFailureReason.AUTHENTICATION_REQUIRED -> AUTHENTICATION_REQUIRED
+            DownloadFailureReason.SOURCE_UNAVAILABLE -> SOURCE_UNAVAILABLE
+            DownloadFailureReason.FORMAT_UNAVAILABLE -> FORMAT_UNAVAILABLE
+            DownloadFailureReason.SOURCE_RATE_LIMITED -> SOURCE_RATE_LIMITED
+            DownloadFailureReason.SOURCE_REQUEST_FAILED -> SOURCE_REQUEST_FAILED
+            DownloadFailureReason.SOURCE_TIMEOUT -> SOURCE_TIMEOUT
+            DownloadFailureReason.METADATA_UNAVAILABLE -> METADATA_UNAVAILABLE
+            else -> ERROR
+        }
+    }
 }

@@ -10,6 +10,8 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.telegram.CANCEL_OPTION_KEY
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
+import com.nkudrin713.kradnik.telegram.DownloadChoiceCoordinator
+import com.nkudrin713.kradnik.telegram.PrepareDownloadChoiceCommand
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
@@ -34,10 +36,11 @@ class DownloadChoiceHandler(
     private val telegramSender: TelegramSender,
     private val preferenceService: TelegramUserPreferenceService,
     private val messages: TelegramMessages,
+    private val choiceCoordinator: DownloadChoiceCoordinator,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun handle(callbackQuery: CallbackQuery) {
+    fun handle(callbackQuery: CallbackQuery, updateId: Int) {
         val callback = DownloadChoiceCallback.parse(callbackQuery.data().trim()) ?: return
         val fallbackLanguage = preferenceService.resolveLanguage(callbackQuery.from().id())
         val address = callbackQuery.inlineMessageId()
@@ -67,6 +70,26 @@ class DownloadChoiceHandler(
         )
 
         when (selection) {
+            is DownloadChoiceSelection.Retry -> {
+                try {
+                    telegramSender.answerCallback(callbackQuery.id())
+                    choiceCoordinator.prepareAgain(
+                        PrepareDownloadChoiceCommand(
+                            telegramUserId = selection.session.telegramUserId,
+                            telegramChatId = selection.session.telegramChatId,
+                            telegramUpdateId = updateId,
+                            telegramRequestMessageId = selection.session.telegramRequestMessageId,
+                            url = selection.url,
+                            language = selection.session.language,
+                        ),
+                        address,
+                    )
+                } catch (error: Exception) {
+                    sessionService.release(callback.sessionToken)
+                    throw error
+                }
+            }
+
             is DownloadChoiceSelection.Ready -> startDownload(
                 address = address,
                 callbackQueryId = callbackQuery.id(),

@@ -30,6 +30,10 @@ enum class PlaylistItemFailure(val message: TelegramMessage, val retryable: Bool
                 text.isDeletedSource() -> DELETED
                 text.isPrivateSource() -> PRIVATE
                 text.isGeoBlocked() -> GEO_BLOCKED
+                reason == DownloadFailureReason.SOURCE_REQUEST_FAILED -> if (text.isNetworkFailure()) NETWORK else SOURCE
+                reason == DownloadFailureReason.SOURCE_RATE_LIMITED -> RATE_LIMITED
+                reason == DownloadFailureReason.FORMAT_UNAVAILABLE -> NO_AUDIO
+                reason == DownloadFailureReason.SOURCE_TIMEOUT -> TIMEOUT
                 reason == DownloadFailureReason.AUTHENTICATION_REQUIRED || "login" in text || "sign in" in text -> AUTHENTICATION
                 "requested format" in text -> NO_AUDIO
                 "timed out" in text || "timeout" in text -> TIMEOUT
@@ -81,6 +85,8 @@ internal fun DownloadFailure.isPlaylistSourceFailure(): Boolean = reason in setO
     DownloadFailureReason.SOURCE_UNAVAILABLE,
     DownloadFailureReason.SOURCE_RATE_LIMITED,
     DownloadFailureReason.SOURCE_REQUEST_FAILED,
+    DownloadFailureReason.SOURCE_TIMEOUT,
+    DownloadFailureReason.FORMAT_UNAVAILABLE,
     DownloadFailureReason.METADATA_UNAVAILABLE,
     DownloadFailureReason.TOO_LARGE,
 )

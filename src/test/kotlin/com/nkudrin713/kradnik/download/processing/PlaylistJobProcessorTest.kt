@@ -101,7 +101,7 @@ class PlaylistJobProcessorTest {
 
         coVerify(exactly = 0) { ytDlp.download(any(), any()) }
         verify(exactly = 0) { jobs.savePlaylistResult(any(), any()) }
-        verify { telegram.editMessage(any<com.nkudrin713.kradnik.telegram.TelegramMessageAddress>(), match<String> { it.contains("storage", ignoreCase = true) }, any()) }
+        verify { telegram.editFailure(any(), match { it.contains("storage", ignoreCase = true) }, any(), any(), any()) }
         assertFalse(root.resolve("1").exists())
     }
 
@@ -139,12 +139,26 @@ class PlaylistJobProcessorTest {
 
         processor().process(job)
 
-        verify {
-            telegram.editFinalMessage(
-                com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(20, 22),
-                match { it.contains("2. <a href=\"https://www.youtube.com/watch?v=two\">Two</a>") && it.contains("private", ignoreCase = true) },
-                html = true,
-            )
+        if (hasSuccess) {
+            verify {
+                telegram.editFinalMessage(
+                    com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(20, 22),
+                    match { it.contains("2. <a href=\"https://www.youtube.com/watch?v=two\">Two</a>") && it.contains("private", ignoreCase = true) },
+                    html = true,
+                )
+            }
+        } else {
+            verify {
+                telegram.editPlaylistReport(
+                    com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(20, 22),
+                    match { it.contains("2. <a href=\"https://www.youtube.com/watch?v=two\">Two</a>") && it.contains("private", ignoreCase = true) },
+                    1,
+                    job.language,
+                    0,
+                    false,
+                    any(),
+                )
+            }
         }
         assertEquals(if (hasSuccess) 1 else 2, job.playlistResults.count { it.fileId == null })
         coVerify(exactly = if (hasSuccess) 1 else 0) { fileSender.sendPlaylistAudios(any(), any(), any()) }
@@ -154,8 +168,8 @@ class PlaylistJobProcessorTest {
     private fun processor() = PlaylistJobProcessor(
         telegramDelivery = AudioMessagesPlaylistWorkflow(jobs, PlaylistEntryDownloader(ytDlp), fileSender, TelegramResultCache(jobs), WorkDirCleaner(root.toString())),
         zipDelivery = mockk(),
-        lifecycle = JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs)),
-        progress = TelegramJobProgress(telegram, telegramMessages(), jobs),
+        lifecycle = JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true))),
+        progress = TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true)),
         workDirCleaner = WorkDirCleaner(root.toString()),
     )
 
@@ -165,7 +179,7 @@ class PlaylistJobProcessorTest {
         val job = DownloadJob(id = 1, telegramChatId = 20, telegramStatusMessageId = 22, workloadType = DownloadWorkloadType.PLAYLIST_AUDIO)
         coEvery { delivery.run(1, any(), any(), any(), any()) } returns PlaylistDeliveryResult(1, 1, PlaylistCompletion.AudioMessages(1))
         every { jobs.markCompleted(job, "playlist:1") } returns false
-        val processor = PlaylistJobProcessor(delivery, mockk(), JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs)), TelegramJobProgress(telegram, telegramMessages(), jobs), WorkDirCleaner(root.toString()))
+        val processor = PlaylistJobProcessor(delivery, mockk(), JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true))), TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true)), WorkDirCleaner(root.toString()))
 
         processor.process(job)
 

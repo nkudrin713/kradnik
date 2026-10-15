@@ -220,8 +220,8 @@ class ZipPlaylistDeliveryTest {
         return PlaylistJobProcessor(
             mockk(),
             ZipPlaylistWorkflow(jobs, downloader, builder, TelegramPlaylistSender(sender, TelegramBotProperties(token = "test")), TelegramUploadLimits(limit), cleaner, PlaylistWorkspaceBudget(TelegramUploadLimits(limit)), timeout = timeout),
-            JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs)),
-            TelegramJobProgress(telegram, telegramMessages(), jobs),
+            JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true))),
+            TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true)),
             cleaner,
         )
     }

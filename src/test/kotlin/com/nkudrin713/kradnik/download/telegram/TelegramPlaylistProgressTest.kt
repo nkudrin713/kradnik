@@ -29,7 +29,7 @@ class TelegramPlaylistProgressTest {
         val jobs = mockk<DownloadJobService>()
         every { jobs.isProcessing(1) } returns true
         val job = DownloadJob(id = 1, telegramChatId = 10, telegramStatusMessageId = 20, workloadType = DownloadWorkloadType.PLAYLIST_AUDIO)
-        val progress = TelegramJobProgress(sender, telegramMessages(), jobs).forJob(job)
+        val progress = TelegramJobProgress(sender, telegramMessages(), jobs, mockk(relaxed = true)).forJob(job)
         val state = PlaylistProgress(44, 0, 0, listOf(PlaylistAudioEntry(1, "id", "url", "Long recording", 7200)), true)
         repeat(3) { progress.playlist(state) }
         val warning = telegramMessages().text(job.language, TelegramMessage.PLAYLIST_LONG_WARNING)
@@ -48,7 +48,7 @@ class TelegramPlaylistProgressTest {
             val jobs = mockk<DownloadJobService>()
             every { jobs.isProcessing(1) } returns true
             val job = DownloadJob(id = 1, telegramChatId = 10, telegramStatusMessageId = 20, workloadType = DownloadWorkloadType.PLAYLIST_AUDIO, language = language)
-            val progress = TelegramJobProgress(sender, messages, jobs).forJob(job)
+            val progress = TelegramJobProgress(sender, messages, jobs, mockk(relaxed = true)).forJob(job)
             val state = PlaylistProgress(1, 0, 0, emptyList())
             progress.playlist(state)
             progress.playlist(state.copy(longWait = true))
@@ -74,7 +74,7 @@ class TelegramPlaylistProgressTest {
                 } else {
                     PlaylistCompletion.Archive("zip")
                 }
-                TelegramJobProgress(sender, messages, mockk()).playlistSummary(job, PlaylistDeliveryResult(count, 0, completion))
+                TelegramJobProgress(sender, messages, mockk(), mockk(relaxed = true)).playlistSummary(job, PlaylistDeliveryResult(count, 0, completion))
                 val expected = if (mode == PlaylistDeliveryMode.AUDIO_MESSAGES && count > 1) 1 else 0
                 verify(exactly = expected) { sender.sendMessage(10, messages.text(job.language, TelegramMessage.PLAYLIST_PLAYBACK_HINT)) }
             }
@@ -94,7 +94,7 @@ class TelegramPlaylistProgressTest {
                 language = language,
                 playlistEntries = listOf(PlaylistAudioEntry(1, "a", "url", "First", null)),
             )
-            val progress = TelegramJobProgress(sender, messages, mockk())
+            val progress = TelegramJobProgress(sender, messages, mockk(), mockk(relaxed = true))
 
             progress.completed(job)
             progress.playlistSummary(job, PlaylistDeliveryResult(1, 0, PlaylistCompletion.AudioMessages(1)))
@@ -126,7 +126,7 @@ class TelegramPlaylistProgressTest {
         )
         val failure = PlaylistAudioResult(2, failure = PlaylistItemFailure.TIMEOUT)
 
-        TelegramJobProgress(sender, messages, mockk()).playlistSummary(job, PlaylistDeliveryResult(1, 1, PlaylistCompletion.AudioMessages(1), listOf(failure)))
+        TelegramJobProgress(sender, messages, mockk(), mockk(relaxed = true)).playlistSummary(job, PlaylistDeliveryResult(1, 1, PlaylistCompletion.AudioMessages(1), listOf(failure)))
 
         verify(exactly = 1) {
             sender.editPlaylistReport(
@@ -136,6 +136,7 @@ class TelegramPlaylistProgressTest {
                 job.language,
                 1,
                 false,
+                any(),
             )
         }
         verify(exactly = 0) { sender.sendHtmlMessage(any(), any()) }
@@ -154,7 +155,7 @@ class TelegramPlaylistProgressTest {
             playlistEntries = listOf(entry),
         )
 
-        TelegramJobProgress(sender, messages, mockk()).playlistFailure(
+        TelegramJobProgress(sender, messages, mockk(), mockk(relaxed = true)).playlistFailure(
             job,
             PlaylistEmptyException(listOf(PlaylistAudioResult(1, failure = PlaylistItemFailure.TIMEOUT))),
         )
@@ -167,13 +168,14 @@ class TelegramPlaylistProgressTest {
                 job.language,
                 1,
                 false,
+                any(),
             )
         }
         verify(exactly = 0) { sender.sendHtmlMessage(any(), any()) }
     }
 
     @Test
-    fun omitsRetryForPermanentSourceFailure() {
+    fun offersWholeLinkRetryWithoutPerTrackRetryForPermanentSourceFailure() {
         val sender = mockk<TelegramSender>(relaxed = true)
         val messages = telegramMessages()
         val job = DownloadJob(
@@ -184,14 +186,14 @@ class TelegramPlaylistProgressTest {
             playlistEntries = listOf(PlaylistAudioEntry(1, "a", "url", "First", null)),
         )
 
-        TelegramJobProgress(sender, messages, mockk()).playlistFailure(
+        TelegramJobProgress(sender, messages, mockk(), mockk(relaxed = true)).playlistFailure(
             job,
             PlaylistEmptyException(listOf(PlaylistAudioResult(1, failure = PlaylistItemFailure.GEO_BLOCKED))),
         )
 
         verify(exactly = 1) {
-            sender.editFinalMessage(TelegramMessageAddress.Chat(10, 20), match { it.contains("1. <a") }, html = true)
+            sender.editPlaylistReport(TelegramMessageAddress.Chat(10, 20), match { it.contains("1. <a") }, 1, job.language, 0, false, any())
         }
-        verify(exactly = 0) { sender.editPlaylistReport(any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { sender.editFinalMessage(any(), any(), any()) }
     }
 }

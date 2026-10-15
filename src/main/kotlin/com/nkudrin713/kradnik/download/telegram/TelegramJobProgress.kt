@@ -1,5 +1,8 @@
 package com.nkudrin713.kradnik.download.telegram
 
+import com.nkudrin713.kradnik.download.choice.CreateDownloadRetryCommand
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
@@ -21,9 +24,10 @@ import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import java.util.UUID
 
 @Component
-class TelegramJobProgress(private val sender: TelegramSender, private val messages: TelegramMessages, private val jobs: DownloadJobService) {
+class TelegramJobProgress(private val sender: TelegramSender, private val messages: TelegramMessages, private val jobs: DownloadJobService, private val retrySessions: DownloadChoiceSessionService) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     fun forJob(job: DownloadJob): JobProgress = object : JobProgress {
@@ -82,9 +86,7 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         val status = when {
             reason == DownloadFailureReason.TOO_LARGE -> TelegramDownloadStatus.REJECTED_TOO_LARGE
             job.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO -> TelegramDownloadStatus.ERROR
-            reason == DownloadFailureReason.AUTHENTICATION_REQUIRED -> TelegramDownloadStatus.AUTHENTICATION_REQUIRED
-            reason == DownloadFailureReason.SOURCE_UNAVAILABLE -> TelegramDownloadStatus.SOURCE_UNAVAILABLE
-            else -> TelegramDownloadStatus.ERROR
+            else -> TelegramDownloadStatus.forFailure(reason)
         }
 
         if (job.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO) {
@@ -93,11 +95,8 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         }
         bestEffort(job) {
             if (address(job) == null) return@bestEffort
-            if (job.telegramInlineMessageId != null) {
-                sender.editStatus(TelegramMessageAddress.Inline(requireNotNull(job.telegramInlineMessageId)), status, job.language)
-            } else {
-                sender.editStatus(job.telegramChatId, job.telegramStatusMessageId, status, job.language)
-            }
+            val address = requireNotNull(address(job))
+            sender.editFailure(address, messages.text(job.language, status.message), retryToken(job, address), job.language, job.requiredId())
         }
     }
 
@@ -123,17 +122,36 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         bestEffort(job) {
             if (error is PlaylistEmptyException) {
                 val header = messages.text(job.language, TelegramMessage.PLAYLIST_ALL_FAILED)
-                publishReport(job, PlaylistFailureReport(messages).render(header, job.playlistEntries, error.failures, job.language), error.failures)
+                val token = address(job)?.let { retryToken(job, it) }
+                publishReport(job, PlaylistFailureReport(messages).render(header, job.playlistEntries, error.failures, job.language), error.failures, token)
                 return@bestEffort
             }
             val key = when {
                 error is PlaylistOperationException -> error.userMessage
                 error is PlaylistSizeLimitException && job.playlistDeliveryMode == PlaylistDeliveryMode.ZIP -> TelegramMessage.ERROR_PLAYLIST_ZIP_TOO_LARGE
-                else -> return@bestEffort
+                else -> TelegramDownloadStatus.forFailure((error as? DownloadFailure)?.reason).message
             }
             val address = address(job) ?: return@bestEffort
-            sender.editMessage(address, messages.text(job.language, key))
+            sender.editFailure(address, messages.text(job.language, key), retryToken(job, address), job.language, job.requiredId())
         }
+    }
+
+    private fun retryToken(job: DownloadJob, address: TelegramMessageAddress): UUID? = try {
+        retrySessions.createRetry(
+            CreateDownloadRetryCommand(
+                job.telegramUserId,
+                job.telegramChatId,
+                job.telegramUpdateId ?: 0,
+                job.telegramRequestMessageId ?: 0,
+                (address as? TelegramMessageAddress.Chat)?.messageId,
+                (address as? TelegramMessageAddress.Inline)?.inlineMessageId,
+                job.language,
+                job.originalUrl,
+            ),
+        ).token
+    } catch (error: Exception) {
+        logger.warn("JOB[{}] retry button persistence failed", job.id, error)
+        null
     }
 
     private fun address(job: DownloadJob): TelegramMessageAddress? {
@@ -141,7 +159,7 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         return job.telegramStatusMessageId?.let { TelegramMessageAddress.Chat(job.telegramChatId, it) }
     }
 
-    private fun publishReport(job: DownloadJob, report: List<String>, failures: List<PlaylistAudioResult>) {
+    private fun publishReport(job: DownloadJob, report: List<String>, failures: List<PlaylistAudioResult>, repeatToken: UUID? = null) {
         val retryCount = PlaylistRetrySelection.entries(job.playlistEntries, failures).size
         val includeZip = job.playlistDeliveryMode == PlaylistDeliveryMode.ZIP
         val address = address(job)
@@ -151,8 +169,8 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
             return
         }
         try {
-            if (retryCount > 0) {
-                sender.editPlaylistReport(address, report.first(), job.requiredId(), job.language, retryCount, includeZip)
+            if (retryCount > 0 || repeatToken != null) {
+                sender.editPlaylistReport(address, report.first(), job.requiredId(), job.language, retryCount, includeZip, repeatToken)
             } else {
                 sender.editFinalMessage(address, report.first(), html = true)
             }

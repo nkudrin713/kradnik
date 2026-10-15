@@ -293,12 +293,13 @@ class YtDlpService(
 
     private fun handleBaseErrors(result: ProcessExecutionResult) {
         if (result.timedOut) {
-            throw YtDlpException("yt-dlp command timed out")
+            throw YtDlpException("yt-dlp command timed out", DownloadFailureReason.SOURCE_TIMEOUT)
         }
 
         if (result.exitCode != 0) {
             val diagnosticOutput = result.diagnosticOutput
-            if (diagnosticOutput.isAuthenticationRequiredError()) {
+            val reason = diagnosticOutput.failureReason()
+            if (reason == DownloadFailureReason.AUTHENTICATION_REQUIRED) {
                 throw YtDlpAuthenticationRequiredException(
                     "yt-dlp authentication required: ${diagnosticOutput.takeLast(500)}",
                 )
@@ -306,13 +307,45 @@ class YtDlpService(
 
             throw YtDlpException(
                 "yt-dlp command failed: ${diagnosticOutput.takeLast(500)}",
+                reason,
             )
+        }
+    }
+
+    private fun String.failureReason(): DownloadFailureReason {
+        val text = lowercase()
+        return when {
+            "requested format is not available" in text -> DownloadFailureReason.FORMAT_UNAVAILABLE
+
+            "this content isn't available to everyone" in text || "can't be seen by certain audiences" in text ||
+                "private video" in text || "video is private" in text || "video has been removed" in text ||
+                "video has been deleted" in text || "video does not exist" in text ||
+                "not available in your country" in text || "not made this video available in your country" in text -> DownloadFailureReason.SOURCE_UNAVAILABLE
+
+            "rate-limit reached or login required" in text -> DownloadFailureReason.SOURCE_REQUEST_FAILED
+
+            "sign in to confirm" in text && "not a bot" in text -> DownloadFailureReason.SOURCE_REQUEST_FAILED
+
+            "http error 429" in text || "too many requests" in text || "rate-limit reached" in text ||
+                "try again later" in text -> DownloadFailureReason.SOURCE_RATE_LIMITED
+
+            text.isAuthenticationRequiredError() -> DownloadFailureReason.AUTHENTICATION_REQUIRED
+
+            "timed out" in text || "timeout" in text -> DownloadFailureReason.SOURCE_TIMEOUT
+
+            "connection reset" in text || "connection refused" in text || "network is unreachable" in text ||
+                "temporary failure in name resolution" in text || "http error 502" in text ||
+                "http error 503" in text || "http error 504" in text -> DownloadFailureReason.SOURCE_REQUEST_FAILED
+
+            else -> DownloadFailureReason.SOURCE_FAILED
         }
     }
 
     private fun String.isAuthenticationRequiredError(): Boolean {
         val normalized = lowercase()
         return normalized.contains("login required") ||
+            normalized.contains("sign in to confirm") ||
+            normalized.contains("sign in to view") ||
             normalized.contains("--cookies") ||
             normalized.contains("--cookies-from-browser")
     }

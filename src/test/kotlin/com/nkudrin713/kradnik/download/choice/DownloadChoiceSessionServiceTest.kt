@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.choice
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.telegram.REPEAT_LAST_OPTION_KEY
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import io.mockk.every
@@ -45,6 +46,48 @@ class DownloadChoiceSessionServiceTest {
         assertEquals(BotLanguage.EN, actual.language)
         assertEquals(listOf("video_720"), actual.options.map { it.key })
         assertEquals(now.plus(Duration.ofMinutes(30)), actual.cleanupAfter)
+    }
+
+    @Test
+    fun storesFailedRequestWithoutReusingItsSelectedOption() {
+        every { repository.save(any()) } answers { firstArg() }
+        val result = service.createRetry(CreateDownloadRetryCommand(300, 100, 400, 200, 500, null, BotLanguage.RU, "https://youtu.be/id"))
+        assertEquals("https://youtu.be/id", result.retryUrl)
+        assertTrue(result.options.isEmpty())
+        assertEquals(300, result.telegramUserId)
+        assertEquals(500, result.telegramMenuMessageId)
+        assertEquals(BotLanguage.RU, result.language)
+    }
+
+    @Test
+    fun consumesRetryOnceAndValidatesOwnerMessageAndAge() {
+        val retry = session().apply {
+            retryUrl = "https://youtu.be/id"
+            options = emptyList()
+        }
+        every { repository.findForUpdate(retry.token) } returns retry
+        val command = selectCommand(retry.token).copy(optionKey = REPEAT_LAST_OPTION_KEY)
+        assertEquals(DownloadChoiceSelection.NotOwner, service.select(command.copy(telegramUserId = 301)))
+        assertEquals(DownloadChoiceSelection.Invalid, service.select(command.copy(telegramMenuMessageId = 501)))
+        retry.createdAt = now.minus(Duration.ofDays(31))
+        assertEquals(DownloadChoiceSelection.Invalid, service.select(command))
+        retry.createdAt = now
+        val result = assertIs<DownloadChoiceSelection.Retry>(service.select(command))
+        assertEquals("https://youtu.be/id", result.url)
+        assertEquals(now, retry.selectedAt)
+        assertEquals(DownloadChoiceSelection.AlreadySelected, service.select(command))
+    }
+
+    @Test
+    fun inlineRetryRequiresOriginalInlineMessage() {
+        val retry = session().apply {
+            retryUrl = "https://youtu.be/id"
+            telegramInlineMessageId = "original"
+        }
+        every { repository.findForUpdate(retry.token) } returns retry
+        val command = selectCommand(retry.token).copy(optionKey = REPEAT_LAST_OPTION_KEY, telegramInlineMessageId = "other")
+        assertEquals(DownloadChoiceSelection.Invalid, service.select(command))
+        assertIs<DownloadChoiceSelection.Retry>(service.select(command.copy(telegramInlineMessageId = "original")))
     }
 
     @Test

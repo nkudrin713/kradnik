@@ -11,6 +11,9 @@ import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.telegram.CANCEL_OPTION_KEY
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
+import com.nkudrin713.kradnik.telegram.DownloadChoiceCoordinator
+import com.nkudrin713.kradnik.telegram.PrepareDownloadChoiceCommand
+import com.nkudrin713.kradnik.telegram.REPEAT_LAST_OPTION_KEY
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
@@ -35,8 +38,10 @@ class DownloadChoiceHandlerTest {
     private val starter: TelegramDownloadStarter = mockk()
     private val telegramSender: TelegramSender = mockk()
     private val preferenceService: TelegramUserPreferenceService = mockk()
+    private val coordinator = mockk<DownloadChoiceCoordinator>(relaxed = true)
     private val handler = DownloadChoiceHandler(
         sessionService = sessionService,
+        choiceCoordinator = coordinator,
         telegramDownloadStarter = starter,
         telegramSender = telegramSender,
         preferenceService = preferenceService,
@@ -52,15 +57,33 @@ class DownloadChoiceHandlerTest {
         every { sessionService.release(token) } just runs
         every { telegramSender.answerCallback("callback-id", "⚠️ Скачивание из YouTube временно отключено. Попробуйте позже.", true) } just runs
 
-        handler.handle(callbackQuery(userId = 300))
+        handler.handle(callbackQuery(userId = 300), 1000)
 
         verify { sessionService.release(token) }
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
     }
 
     @Test
+    fun repeatsOriginalLinkUsingFreshUpdateIdentityWithoutStartingOldSelection() {
+        val selection = readySelection()
+        every { preferenceService.resolveLanguage(300) } returns BotLanguage.RU
+        every { sessionService.select(any()) } returns DownloadChoiceSelection.Retry(selection.session, "https://youtu.be/last")
+        every { telegramSender.answerCallback("callback-id", null, false) } just runs
+
+        handler.handle(callbackQuery(userId = 300, callbackData = DownloadChoiceCallback.encode(token, REPEAT_LAST_OPTION_KEY)), 1000)
+
+        verify {
+            coordinator.prepareAgain(
+                PrepareDownloadChoiceCommand(300, 100, 1000, 200, "https://youtu.be/last", BotLanguage.RU),
+                TelegramMessageAddress.Chat(100, 500),
+            )
+        }
+        verify(exactly = 0) { starter.start(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
     fun ignoresUnrelatedCallbacks() {
-        handler.handle(callbackQuery(userId = 300, callbackData = "mode:video"))
+        handler.handle(callbackQuery(userId = 300, callbackData = "mode:video"), 1000)
 
         verify(exactly = 0) { sessionService.select(any()) }
     }
@@ -74,7 +97,7 @@ class DownloadChoiceHandlerTest {
         every { telegramSender.answerCallback("callback-id", "✅ Выбрано: 720p", false) } just runs
         every { telegramSender.deleteMessage(100, 500) } just runs
 
-        handler.handle(callbackQuery(userId = 300))
+        handler.handle(callbackQuery(userId = 300), 1000)
 
         verify {
             starter.start(
@@ -102,6 +125,7 @@ class DownloadChoiceHandlerTest {
                 userId = 300,
                 callbackData = DownloadChoiceCallback.encode(token, CANCEL_OPTION_KEY),
             ),
+            1000,
         )
 
         verify { telegramSender.deleteMessage(100, 500) }
@@ -115,7 +139,7 @@ class DownloadChoiceHandlerTest {
         every { sessionService.select(any()) } returns DownloadChoiceSelection.NotOwner
         every { telegramSender.answerCallback("callback-id", "🔒 Это меню другого пользователя", true) } just runs
 
-        handler.handle(callbackQuery(userId = 301))
+        handler.handle(callbackQuery(userId = 301), 1000)
 
         verify(exactly = 0) { starter.start(any(), any(), any(), any(), any(), any(), any()) }
         verify(exactly = 0) { telegramSender.deleteMessage(any(), any()) }
@@ -132,7 +156,7 @@ class DownloadChoiceHandlerTest {
         every { starter.start(any(), any(), any(), any(), any(), any(), any()) } just runs
         every { telegramSender.answerCallback("callback-id", "✅ Выбрано: 720p", false) } just runs
 
-        handler.handle(callbackQuery(userId = 300, inlineMessageId = "inline-message"))
+        handler.handle(callbackQuery(userId = 300, inlineMessageId = "inline-message"), 1000)
 
         verify {
             starter.start(
@@ -178,6 +202,7 @@ class DownloadChoiceHandlerTest {
                 callbackData = DownloadChoiceCallback.encode(token, "images"),
                 inlineMessageId = "inline-message",
             ),
+            1000,
         )
 
         verify { sessionService.release(token) }
@@ -214,6 +239,7 @@ class DownloadChoiceHandlerTest {
                 callbackData = DownloadChoiceCallback.encode(token, "post"),
                 inlineMessageId = "inline-message",
             ),
+            1000,
         )
 
         verify { sessionService.release(token) }

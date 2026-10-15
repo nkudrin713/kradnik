@@ -10,6 +10,7 @@ import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
 import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.source.PreparedSource
+import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -52,10 +53,10 @@ class DownloadChoicePlanner(
         } catch (error: DownloadFailure) {
             val message = when (error.reason) {
                 DownloadFailureReason.SOURCE_UNAVAILABLE -> TelegramMessage.ERROR_SOURCE_UNAVAILABLE
-                DownloadFailureReason.SOURCE_RATE_LIMITED -> TelegramMessage.ERROR_INSTAGRAM_RATE_LIMITED
-                DownloadFailureReason.SOURCE_REQUEST_FAILED -> TelegramMessage.ERROR_INSTAGRAM_UNAVAILABLE
+                DownloadFailureReason.SOURCE_RATE_LIMITED -> if (spec.platform == DownloadPlatform.INSTAGRAM) TelegramMessage.ERROR_INSTAGRAM_RATE_LIMITED else TelegramMessage.STATUS_SOURCE_RATE_LIMITED
+                DownloadFailureReason.SOURCE_REQUEST_FAILED -> if (spec.platform == DownloadPlatform.INSTAGRAM) TelegramMessage.ERROR_INSTAGRAM_UNAVAILABLE else TelegramMessage.STATUS_SOURCE_REQUEST_FAILED
                 DownloadFailureReason.METADATA_UNAVAILABLE -> TelegramMessage.ERROR_METADATA_UNAVAILABLE
-                else -> throw error
+                else -> TelegramDownloadStatus.forFailure(error.reason).message
             }
             throw DownloadChoicePlanningException(messages.text(language, message), error)
         }

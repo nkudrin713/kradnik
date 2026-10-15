@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.source
 
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaContentType
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
@@ -20,6 +21,10 @@ class InstagramSourceAdapter(private val instagram: InstagramEmbedDownloader, pr
             val metadata = try {
                 ytDlp.extractInstagramImageMetadata(request)
             } catch (fallbackError: YtDlpException) {
+                if (fallbackError.reason != DownloadFailureReason.SOURCE_FAILED) {
+                    fallbackError.addSuppressed(embedError)
+                    throw fallbackError
+                }
                 embedError.addSuppressed(fallbackError)
                 throw embedError
             }

@@ -110,6 +110,9 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
     @Transactional(readOnly = true)
     fun queuePosition(jobId: Long): Long? = downloadJobRepository.queuePosition(jobId)
 
+    @Transactional(readOnly = true)
+    fun queuedJobs(): List<DownloadJob> = downloadJobRepository.findAllByStatusOrderByCreatedAtAscIdAsc(DownloadJobStatus.QUEUED)
+
     /** Called once before workers start. The previous application instance must already be stopped. */
     @Transactional
     fun recoverInterruptedJobs(): Int = downloadJobRepository.requeueProcessingJobs()

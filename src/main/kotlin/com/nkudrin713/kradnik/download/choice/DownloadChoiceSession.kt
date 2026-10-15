@@ -48,6 +48,9 @@ class DownloadChoiceSession(
     @Column(name = "options_json", nullable = false)
     var options: List<DownloadChoiceOptionSnapshot> = emptyList(),
 
+    @Column(name = "retry_url")
+    var retryUrl: String? = null,
+
     @Column(name = "expires_at", nullable = false)
     var cleanupAfter: Instant = Instant.EPOCH,
 

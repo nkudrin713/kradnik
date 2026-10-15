@@ -145,6 +145,7 @@ class TelegramDownloadChoiceView(
 }
 
 const val CANCEL_OPTION_KEY = "cancel"
+const val REPEAT_LAST_OPTION_KEY = "repeat"
 
 data class DownloadChoiceCallback(
     val sessionToken: UUID,

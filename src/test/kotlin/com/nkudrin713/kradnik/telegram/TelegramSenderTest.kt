@@ -103,6 +103,22 @@ class TelegramSenderTest {
     }
 
     @Test
+    fun failedStatusKeepsRetryButtonWhenQueueRefreshArrivesLate() {
+        val request = slot<BaseRequest<*, *>>()
+        val token = UUID.randomUUID()
+        val keyboard = InlineKeyboardMarkup(InlineKeyboardButton("Retry last link"))
+        every { bot.execute(capture(request)) } returns okResponse()
+        every { downloadJobView.repeatKeyboard(token, BotLanguage.EN) } returns keyboard
+
+        sender.editFailure(TelegramMessageAddress.Chat(100, 10), "Unavailable", token, BotLanguage.EN, 42)
+        sender.editQueuedJob(TelegramMessageAddress.Chat(100, 10), 42, BotLanguage.EN, DownloadWorkloadType.SINGLE, 1) { false }
+
+        verify(exactly = 1) { bot.execute(any<BaseRequest<*, *>>()) }
+        request.captured.getParameters()["text"] shouldBe "Unavailable"
+        request.captured.getParameters()["reply_markup"] shouldBe keyboard
+    }
+
+    @Test
     fun unchangedQueuePositionIsHarmless() {
         val keyboard = InlineKeyboardMarkup(InlineKeyboardButton("Refresh"))
         every { downloadJobView.queueKeyboard(42, BotLanguage.EN) } returns keyboard

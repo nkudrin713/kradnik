@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.ytdlp
 
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
@@ -191,6 +192,7 @@ class YtDlpServiceTest {
         }
 
         assertTrue(exception.message!!.contains("timed out"))
+        assertEquals(DownloadFailureReason.SOURCE_TIMEOUT, exception.reason)
     }
 
     @Test
@@ -226,18 +228,45 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun downloadAuthenticationRequired(@TempDir tempDir: Path) = runTest {
+    fun ambiguousAccessFailureDoesNotClaimAuthenticationIsRequired(@TempDir tempDir: Path) = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             stderr = "ERROR: [Instagram] id: Requested content is not available, rate-limit reached or login required",
             timedOut = false,
             exitCode = 1,
         )
 
-        val exception = assertFailsWith<YtDlpAuthenticationRequiredException> {
+        val exception = assertFailsWith<YtDlpException> {
             service.download(testRequest(), tempDir)
         }
 
-        assertTrue(exception.message!!.contains("authentication required"))
+        assertEquals(DownloadFailureReason.SOURCE_REQUEST_FAILED, exception.reason)
+    }
+
+    @Test
+    fun classifiesSourceErrorsInMetadataAndDownloads(@TempDir tempDir: Path) = runTest {
+        val cases = mapOf(
+            "ERROR: [youtube] id: Requested format is not available. Use --list-formats" to DownloadFailureReason.FORMAT_UNAVAILABLE,
+            "ERROR: [Instagram] id: This content isn't available to everyone: It can't be seen by certain audiences." to DownloadFailureReason.SOURCE_UNAVAILABLE,
+            "ERROR: Private video. Sign in to view. Use --cookies" to DownloadFailureReason.SOURCE_UNAVAILABLE,
+            "ERROR: This video has been removed" to DownloadFailureReason.SOURCE_UNAVAILABLE,
+            "ERROR: The uploader has not made this video available in your country" to DownloadFailureReason.SOURCE_UNAVAILABLE,
+            "ERROR: Login required. Use --cookies" to DownloadFailureReason.AUTHENTICATION_REQUIRED,
+            "ERROR: Sign in to confirm your age. Use --cookies" to DownloadFailureReason.AUTHENTICATION_REQUIRED,
+            "ERROR: Sign in to confirm you’re not a bot. Use --cookies" to DownloadFailureReason.SOURCE_REQUEST_FAILED,
+            "ERROR: HTTP Error 429: Too Many Requests. Use --cookies" to DownloadFailureReason.SOURCE_RATE_LIMITED,
+            "ERROR: This content isn't available, try again later" to DownloadFailureReason.SOURCE_RATE_LIMITED,
+            "ERROR: Connection timed out" to DownloadFailureReason.SOURCE_TIMEOUT,
+            "ERROR: Connection reset by peer" to DownloadFailureReason.SOURCE_REQUEST_FAILED,
+            "ERROR: HTTP Error 503: Service Unavailable" to DownloadFailureReason.SOURCE_REQUEST_FAILED,
+            "ERROR: Unrecognized failure" to DownloadFailureReason.SOURCE_FAILED,
+        )
+        for ((diagnostic, reason) in cases) {
+            coEvery { processRunner.run(any()) } returns ProcessExecutionResult(stderr = diagnostic, timedOut = false, exitCode = 1)
+            val metadataFailure = assertFailsWith<YtDlpException>(diagnostic) { service.extractMetadata(testRequest()) }
+            val downloadFailure = assertFailsWith<YtDlpException>(diagnostic) { service.download(testRequest(), tempDir) }
+            assertEquals(reason, metadataFailure.reason, diagnostic)
+            assertEquals(reason, downloadFailure.reason, diagnostic)
+        }
     }
 
     @Test

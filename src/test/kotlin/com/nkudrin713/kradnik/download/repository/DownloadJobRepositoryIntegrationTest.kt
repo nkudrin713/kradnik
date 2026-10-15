@@ -76,6 +76,18 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     }
 
     @Test
+    fun persistsRetryLinkAndReadsOnlyQueuedJobsInStableOrder() {
+        val token = choiceSessionRepository.saveAndFlush(
+            DownloadChoiceSession(telegramUserId = 10, telegramChatId = 20, telegramMenuMessageId = 30, retryUrl = "https://youtu.be/original"),
+        ).token
+        assertEquals("https://youtu.be/original", choiceSessionRepository.findById(token).orElseThrow().retryUrl)
+        val first = repository.saveAndFlush(job("first-queued"))
+        val second = repository.saveAndFlush(job("second-queued"))
+        repository.saveAndFlush(job("finished").apply { status = DownloadJobStatus.FAILED })
+        assertEquals(listOf(first.requiredId(), second.requiredId()), downloadJobService.queuedJobs().map { it.requiredId() })
+    }
+
+    @Test
     fun playlistCacheMatchesSavedEncodingAndOnlySuccessfulCompletedItems() {
         val entries = listOf(PlaylistAudioEntry(1, "video", "url", "Title", 60))
         val saved = repository.saveAndFlush(

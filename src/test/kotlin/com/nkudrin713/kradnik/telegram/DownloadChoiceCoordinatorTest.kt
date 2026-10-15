@@ -2,7 +2,10 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.admin.AdminRuntime
 import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
@@ -24,9 +27,44 @@ import kotlin.test.assertTrue
 
 class DownloadChoiceCoordinatorTest {
     @Test
+    fun sourceFailuresDuringPlanningShowActionableLocalizedMessages() = runTest {
+        val planner = mockk<DownloadChoicePlanner>()
+        val sessions = mockk<DownloadChoiceSessionService>()
+        every { sessions.createRetry(any()) } returns DownloadChoiceSession()
+        val sender = mockk<TelegramSender>(relaxed = true)
+        val messages = telegramMessages()
+        val coordinator = DownloadChoiceCoordinator(planner, sessions, sender, messages)
+        val statuses = mapOf(
+            DownloadFailureReason.FORMAT_UNAVAILABLE to TelegramMessage.STATUS_FORMAT_UNAVAILABLE,
+            DownloadFailureReason.AUTHENTICATION_REQUIRED to TelegramMessage.STATUS_AUTHENTICATION_REQUIRED,
+            DownloadFailureReason.SOURCE_UNAVAILABLE to TelegramMessage.STATUS_SOURCE_UNAVAILABLE,
+            DownloadFailureReason.SOURCE_RATE_LIMITED to TelegramMessage.STATUS_SOURCE_RATE_LIMITED,
+            DownloadFailureReason.SOURCE_REQUEST_FAILED to TelegramMessage.STATUS_SOURCE_REQUEST_FAILED,
+            DownloadFailureReason.SOURCE_TIMEOUT to TelegramMessage.STATUS_SOURCE_TIMEOUT,
+            DownloadFailureReason.SOURCE_FAILED to TelegramMessage.STATUS_ERROR,
+        )
+        try {
+            for (language in BotLanguage.entries) {
+                for ((reason, key) in statuses) {
+                    coEvery { planner.plan(any(), any()) } throws DownloadFailure(reason, "Private diagnostic")
+                    coordinator.prepareAsync(
+                        PrepareDownloadChoiceCommand(1, 2, 3, 4, "https://youtu.be/id", language),
+                        TelegramMessageAddress.Inline("inline"),
+                    )
+                    verify { sender.editFailure(TelegramMessageAddress.Inline("inline"), messages.text(language, key), any(), language, null) }
+                }
+            }
+            verify(exactly = 0) { sessions.create(any()) }
+        } finally {
+            coordinator.shutdown()
+        }
+    }
+
+    @Test
     fun disabledServiceShowsLocalizedMessageWithoutCountingMetadataFailure() = runTest {
         val planner = mockk<DownloadChoicePlanner>()
         val sessions = mockk<DownloadChoiceSessionService>()
+        every { sessions.createRetry(any()) } returns DownloadChoiceSession()
         val sender = mockk<TelegramSender>(relaxed = true)
         val runtime = AdminRuntime(true)
         val coordinator = DownloadChoiceCoordinator(planner, sessions, sender, telegramMessages(), runtime)
@@ -37,7 +75,7 @@ class DownloadChoiceCoordinatorTest {
                 TelegramMessageAddress.Chat(2, 5),
             )
 
-            verify { sender.editMessage(TelegramMessageAddress.Chat(2, 5), "⚠️ Скачивание из VK временно отключено. Попробуйте позже.") }
+            verify { sender.editFailure(TelegramMessageAddress.Chat(2, 5), "⚠️ Скачивание из VK временно отключено. Попробуйте позже.", any(), BotLanguage.RU, null) }
             verify(exactly = 0) { sessions.create(any()) }
             assertEquals(0L, runtime.snapshot().errors.first().counts["METADATA"])
         } finally {
@@ -49,6 +87,7 @@ class DownloadChoiceCoordinatorTest {
     fun boundsPendingMetadataRequestsAndCancelsActiveRequestsOnShutdown() {
         val planner = mockk<DownloadChoicePlanner>()
         val sessions = mockk<DownloadChoiceSessionService>()
+        every { sessions.createRetry(any()) } returns DownloadChoiceSession()
         val sender = mockk<TelegramSender>(relaxed = true)
         val messages = mockk<TelegramMessages>(relaxed = true)
         val started = CountDownLatch(2)
@@ -85,7 +124,7 @@ class DownloadChoiceCoordinatorTest {
             assertEquals(2, runtime.snapshot().workers.count { it.state == "BUSY" })
             assertEquals(32, runtime.snapshot().metadataQueued)
             assertEquals(1L, runtime.snapshot().errors.first().counts["METADATA_REJECTED"])
-            verify(exactly = 1) { sender.editMessage(any(), "Preparation failed") }
+            verify(exactly = 1) { sender.editFailure(any(), "Preparation failed", any(), any(), null) }
         } finally {
             coordinator.shutdown()
         }

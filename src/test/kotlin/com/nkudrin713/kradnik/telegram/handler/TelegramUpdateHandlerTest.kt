@@ -4,7 +4,6 @@ import com.nkudrin713.kradnik.telegram.DownloadChoiceCoordinator
 import com.nkudrin713.kradnik.telegram.PrepareDownloadChoiceCommand
 import com.nkudrin713.kradnik.telegram.TelegramDonationSender
 import com.nkudrin713.kradnik.telegram.TelegramLanguageSelector
-import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.UserActivity
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
@@ -42,7 +41,7 @@ class TelegramUpdateHandlerTest {
 
         verify { telegramSender.deleteMessage(100, 200) }
         verify(exactly = 0) { coordinator.prepare(any()) }
-        verify(exactly = 0) { choiceHandler.handle(any()) }
+        verify(exactly = 0) { choiceHandler.handle(any(), any()) }
     }
 
     @Test
@@ -54,7 +53,7 @@ class TelegramUpdateHandlerTest {
 
         verify(exactly = 1) { telegramSender.deleteMessage(100, 200) }
         verify(exactly = 0) { coordinator.prepare(any()) }
-        verify(exactly = 0) { choiceHandler.handle(any()) }
+        verify(exactly = 0) { choiceHandler.handle(any(), any()) }
     }
 
     @Test
@@ -153,11 +152,11 @@ class TelegramUpdateHandlerTest {
         every { languageSelector.handle(callbackQuery) } returns false
         every { retryHandler.handle(callbackQuery, 500) } returns false
         every { cancellationHandler.handle(callbackQuery, 500) } returns false
-        every { choiceHandler.handle(callbackQuery) } just runs
+        every { choiceHandler.handle(callbackQuery, 500) } just runs
 
         handler().handle(update)
 
-        verify { choiceHandler.handle(callbackQuery) }
+        verify { choiceHandler.handle(callbackQuery, 500) }
         verify { userActivity.record(300) }
     }
 
@@ -184,15 +183,14 @@ class TelegramUpdateHandlerTest {
     }
 
     @Test
-    fun answersInvalidGuestQueryOnce() {
-        every { preferenceService.resolveLanguage(300) } returns BotLanguage.RU
-        every {
-            telegramSender.answerGuestMessage("guest-query", "🔗 Нужна ссылка", BotLanguage.RU)
-        } returns TelegramMessageAddress.Inline("inline-message")
-
+    fun ignoresGuestMentionsWithoutDownloadLink() {
+        handler().handle(guestUpdate("@kradnik_bot"))
         handler().handle(guestUpdate("@kradnik_bot не-ссылка"))
+        handler().handle(guestUpdate("@kradnik_bot советую этого бота"))
 
-        verify { telegramSender.answerGuestMessage("guest-query", "🔗 Нужна ссылка", BotLanguage.RU) }
+        verify(exactly = 0) { telegramSender.answerGuestMessage(any(), any(), any()) }
+        verify(exactly = 0) { telegramSender.sendMessage(any(), any()) }
+        verify(exactly = 0) { preferenceService.resolveLanguage(any()) }
         verify(exactly = 0) { coordinator.prepare(any()) }
     }
 

@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.playlist
 
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import kotlin.test.Test
@@ -8,6 +9,15 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class PlaylistRetrySelectionTest {
+    @Test
+    fun specificSourceReasonsTakePrecedenceOverLoginHints() {
+        assertEquals(PlaylistItemFailure.SOURCE, PlaylistItemFailure.from("Sign in to confirm you’re not a bot", DownloadFailureReason.SOURCE_REQUEST_FAILED))
+        assertEquals(PlaylistItemFailure.SOURCE, PlaylistItemFailure.from("Requested content is not available, rate-limit reached or login required", DownloadFailureReason.SOURCE_REQUEST_FAILED))
+        assertEquals(PlaylistItemFailure.RATE_LIMITED, PlaylistItemFailure.from("HTTP Error 429. Sign in", DownloadFailureReason.SOURCE_RATE_LIMITED))
+        assertEquals(PlaylistItemFailure.NO_AUDIO, PlaylistItemFailure.from("Diagnostic truncated", DownloadFailureReason.FORMAT_UNAVAILABLE))
+        assertEquals(PlaylistItemFailure.TIMEOUT, PlaylistItemFailure.from(null, DownloadFailureReason.SOURCE_TIMEOUT))
+    }
+
     @Test
     fun separatesExplicitSourceRestrictionsFromTemporaryFailures() {
         assertEquals(PlaylistItemFailure.DELETED, PlaylistItemFailure.from("This video has been removed for violating policy"))

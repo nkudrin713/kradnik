@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.choice
 
+import com.nkudrin713.kradnik.telegram.REPEAT_LAST_OPTION_KEY
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -53,6 +54,21 @@ class DownloadChoiceSessionService(
         )
     }
 
+    @Transactional
+    fun createRetry(command: CreateDownloadRetryCommand): DownloadChoiceSession = repository.save(
+        DownloadChoiceSession(
+            telegramUserId = command.telegramUserId,
+            telegramChatId = command.telegramChatId,
+            telegramUpdateId = command.telegramUpdateId,
+            telegramRequestMessageId = command.telegramRequestMessageId,
+            telegramMenuMessageId = command.telegramMenuMessageId,
+            telegramInlineMessageId = command.telegramInlineMessageId,
+            language = command.language,
+            retryUrl = command.url,
+            cleanupAfter = clock.instant().plus(consumedSessionTtl),
+        ),
+    )
+
     /**
      * Locks the session and marks a valid, available option as selected before job creation.
      * Validates the owner, originating menu, session age, and option availability under the same row lock.
@@ -84,6 +100,12 @@ class DownloadChoiceSessionService(
         val createdAt = session.createdAt ?: return DownloadChoiceSelection.Invalid
         if (!createdAt.isAfter(now.minus(unselectedSessionMaxAge))) {
             return DownloadChoiceSelection.Invalid
+        }
+
+        if (command.optionKey == REPEAT_LAST_OPTION_KEY && session.retryUrl != null) {
+            session.selectedAt = now
+            session.cleanupAfter = now.plus(consumedSessionTtl)
+            return DownloadChoiceSelection.Retry(session, requireNotNull(session.retryUrl))
         }
 
         val option = session.options.firstOrNull { it.key == command.optionKey }
@@ -168,6 +190,17 @@ data class CreateDownloadChoiceSessionCommand(
     val plan: DownloadChoicePlan,
 )
 
+data class CreateDownloadRetryCommand(
+    val telegramUserId: Long,
+    val telegramChatId: Long,
+    val telegramUpdateId: Int,
+    val telegramRequestMessageId: Int,
+    val telegramMenuMessageId: Int?,
+    val telegramInlineMessageId: String?,
+    val language: BotLanguage,
+    val url: String,
+)
+
 data class SelectDownloadChoiceCommand(
     val token: UUID,
     val optionKey: String,
@@ -193,6 +226,8 @@ sealed interface DownloadChoiceCancellation {
 }
 
 sealed interface DownloadChoiceSelection {
+    data class Retry(val session: DownloadChoiceSession, val url: String) : DownloadChoiceSelection
+
     data class Ready(
         val session: DownloadChoiceSession,
         val option: DownloadChoiceOptionSnapshot,

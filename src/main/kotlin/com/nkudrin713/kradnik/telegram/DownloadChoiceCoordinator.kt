@@ -1,9 +1,11 @@
 package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.choice.CreateDownloadChoiceSessionCommand
+import com.nkudrin713.kradnik.download.choice.CreateDownloadRetryCommand
 import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner
 import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanningException
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
@@ -105,10 +107,7 @@ class DownloadChoiceCoordinator(
         } catch (error: RejectedExecutionException) {
             runtime.metadataQueue(-1)
             runtime.error(RuntimeError.METADATA_REJECTED)
-            telegramSender.editMessage(
-                address = messageAddress,
-                text = messages.text(command.language, TelegramMessage.ERROR_CHOICE_PREPARATION),
-            )
+            showFailure(command, messageAddress, messages.text(command.language, TelegramMessage.ERROR_CHOICE_PREPARATION))
         }
     }
 
@@ -140,7 +139,7 @@ class DownloadChoiceCoordinator(
         } catch (error: CancellationException) {
             throw error
         } catch (error: PlatformDisabledException) {
-            telegramSender.editMessage(address = messageAddress, text = error.userMessage(command.language))
+            showFailure(command, messageAddress, error.userMessage(command.language))
         } catch (error: Exception) {
             runtime.error(RuntimeError.METADATA)
             logger.warn(
@@ -149,16 +148,37 @@ class DownloadChoiceCoordinator(
                 command.telegramUpdateId,
                 error,
             )
-            telegramSender.editMessage(
-                address = messageAddress,
-                text = error.userMessage(command.language),
-            )
+            showFailure(command, messageAddress, error.userMessage(command.language))
         }
+    }
+
+    private fun showFailure(command: PrepareDownloadChoiceCommand, address: TelegramMessageAddress, text: String) {
+        val session = try {
+            sessionService.createRetry(
+                CreateDownloadRetryCommand(
+                    command.telegramUserId,
+                    command.telegramChatId,
+                    command.telegramUpdateId,
+                    command.telegramRequestMessageId,
+                    (address as? TelegramMessageAddress.Chat)?.messageId,
+                    (address as? TelegramMessageAddress.Inline)?.inlineMessageId,
+                    command.language,
+                    command.url,
+                ),
+            )
+        } catch (error: Exception) {
+            logger.warn("Retry button persistence failed", error)
+            telegramSender.editMessage(address, text)
+            return
+        }
+        telegramSender.editFailure(address, text, session.token, command.language)
     }
 
     private fun Exception.userMessage(language: BotLanguage): String {
         return when (this) {
             is DownloadChoicePlanningException -> userMessage
+
+            is DownloadFailure -> messages.text(language, TelegramDownloadStatus.forFailure(reason).message)
 
             is PlatformDisabledException -> messages.text(language, TelegramMessage.ERROR_PLATFORM_DISABLED, platform.displayName)
 

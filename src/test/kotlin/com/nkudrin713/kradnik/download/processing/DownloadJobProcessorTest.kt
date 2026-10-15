@@ -65,7 +65,7 @@ class DownloadJobProcessorTest {
     private val prepared = YtDlpPreparedSource(mockk<MediaMetadata>(relaxed = true))
 
     private fun processor(preflightService: DownloadPreflightService = preflight): DownloadJobProcessor {
-        val progress = TelegramJobProgress(telegram, telegramMessages(), jobs)
+        val progress = TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true))
         return DownloadJobProcessor(
             SingleMediaHandlers(VideoHandler(engine, preflightService, video), AudioHandler(engine, preflightService), CoverHandler(engine, preflightService, mockk()), ImagesHandler(engine, preflightService), mockk()),
             TelegramResultCache(jobs),
@@ -123,7 +123,7 @@ class DownloadJobProcessorTest {
         coEvery { engine.download(any(), any(), any(), any()) } returns DownloadedFile(root.resolve("large"), 101)
         processor().process(job)
         verify { jobs.markFailed(job, any()) }
-        verify { telegram.editStatus(2, 3, TelegramDownloadStatus.REJECTED_TOO_LARGE, job.language) }
+        verify { telegram.editFailure(com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(2, 3), telegramMessages().text(job.language, TelegramDownloadStatus.REJECTED_TOO_LARGE.message), any(), job.language, 1) }
         coVerify(exactly = 0) { sender.send(any(), any()) }
         assertFalse(root.resolve("1").exists())
     }
@@ -207,7 +207,7 @@ class DownloadJobProcessorTest {
         coEvery { engine.prepare(any(), any()) } throws
             com.nkudrin713.kradnik.ytdlp.YtDlpAuthenticationRequiredException("login needed")
         processor().process(job)
-        verify { telegram.editStatus(2, 3, TelegramDownloadStatus.AUTHENTICATION_REQUIRED, job.language) }
+        verify { telegram.editFailure(com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(2, 3), telegramMessages().text(job.language, TelegramDownloadStatus.AUTHENTICATION_REQUIRED.message), any(), job.language, 1) }
         verify { jobs.markFailed(job, "login needed") }
     }
 

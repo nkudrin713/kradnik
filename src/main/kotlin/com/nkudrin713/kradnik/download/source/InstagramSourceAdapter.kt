@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component
 import java.nio.file.Path
 
 @Component
-class InstagramSourceAdapter(private val instagram: InstagramEmbedDownloader, private val ytDlp: YtDlpService) : SourceAdapter {
+class InstagramSourceAdapter(private val instagram: InstagramEmbedDownloader, private val ytDlp: YtDlpService) : PostSourceAdapter {
     override suspend fun prepare(request: SourceRequest, catalog: Boolean): InstagramPreparedSource {
         val prepared = try {
             instagram.prepare(request)
@@ -33,7 +33,8 @@ class InstagramSourceAdapter(private val instagram: InstagramEmbedDownloader, pr
         return InstagramPreparedSource(prepared)
     }
 
-    suspend fun downloadPostItem(request: SourceRequest, prepared: InstagramPreparedSource, index: Int, directory: Path): DownloadedFile {
+    override suspend fun downloadPostItem(request: SourceRequest, prepared: PreparedPostSource, index: Int, directory: Path): DownloadedFile {
+        require(prepared is InstagramPreparedSource)
         val item = prepared.content.items[index]
         return if (item.uri != null) {
             instagram.downloadItem(item, directory)
@@ -52,7 +53,8 @@ class InstagramSourceAdapter(private val instagram: InstagramEmbedDownloader, pr
     }
 }
 
-data class InstagramPreparedSource(val content: InstagramPreparedDownload) : PreparedSource {
+data class InstagramPreparedSource(val content: InstagramPreparedDownload) : PreparedPostSource {
+    override val mediaKinds = content.items.map { it.kind }
     override val metadata = content.metadata.toMediaMetadata().copy(
         contentType = when {
             content.items.all { it.kind == PostMediaKind.PHOTO } -> MediaContentType.IMAGES

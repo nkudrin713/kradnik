@@ -86,6 +86,8 @@ class YtDlpService(
     private val downloadTimeout: Duration = Duration.ofMinutes(30),
     @Value($$"${download.yt-dlp.cloud-max-workspace-bytes:536870912}")
     private val cloudMaxWorkspaceBytes: Long = 536_870_912,
+    @Value($$"${download.yt-dlp.plugin-directory:yt-dlp-plugins}")
+    private val pluginDirectory: String = "yt-dlp-plugins",
 ) {
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
 
@@ -148,6 +150,23 @@ class YtDlpService(
                     NO_WARNINGS,
                     spec.originalUrl,
                 ),
+                workingDir = null,
+                timeout = metadataTimeout.toKotlinDuration(),
+                maxCapturedStdoutChars = MAX_METADATA_STDOUT_CHARS,
+            ),
+        )
+        return parseMetadataResult(result)
+    }
+
+    suspend fun extractPostMetadata(spec: SourceRequest, catalog: Boolean): YtDlpMetadataDto {
+        val result = processRunner.run(
+            YtDlpCommand(
+                args = buildList {
+                    addAll(listOf(DUMP_SINGLE_JSON, NO_PLAYLIST, NO_WARNINGS))
+                    addAll(pluginArgs(spec.platform))
+                    if (!catalog) addAll(listOf(FORMAT, spec.formatSelector))
+                    add(spec.originalUrl)
+                },
                 workingDir = null,
                 timeout = metadataTimeout.toKotlinDuration(),
                 maxCapturedStdoutChars = MAX_METADATA_STDOUT_CHARS,
@@ -222,6 +241,7 @@ class YtDlpService(
             add(PRINT)
             add(FINAL_FILEPATH)
             addAll(youtubePoTokenArgs(spec.platform))
+            addAll(pluginArgs(spec.platform))
             addAll(spec.extraArgs)
             add(spec.originalUrl)
         }
@@ -253,9 +273,12 @@ class YtDlpService(
     }
 
     private fun getDownloadedFile(output: String): Path {
-        val path = output
+        val paths = output
             .lineSequence()
-            .lastOrNull { it.startsWith(FILEPATH_MARKER) }
+            .filter { it.startsWith(FILEPATH_MARKER) }
+            .toList()
+        if (paths.size > 1) throw YtDlpException("yt-dlp returned multiple files for a single media item")
+        val path = paths.singleOrNull()
             ?.removePrefix(FILEPATH_MARKER)
             ?.let { objectMapper.readValue<String>(it) }
             ?: throw YtDlpException("yt-dlp download did not print final filepath")
@@ -281,6 +304,12 @@ class YtDlpService(
             EXTRACTOR_ARGS,
             "youtubepot-bgutilhttp:base_url=$providerUrl",
         )
+    }
+
+    private fun pluginArgs(platform: DownloadPlatform): List<String> = if (platform == DownloadPlatform.THREADS) {
+        listOf("--plugin-dirs", Path.of(pluginDirectory).toAbsolutePath().toString(), "--concat-playlist", "never")
+    } else {
+        emptyList()
     }
 
     private fun maxWorkspaceBytes(): Long {
@@ -315,7 +344,7 @@ class YtDlpService(
     private fun String.failureReason(): DownloadFailureReason {
         val text = lowercase()
         return when {
-            "requested format is not available" in text -> DownloadFailureReason.FORMAT_UNAVAILABLE
+            "requested format is not available" in text || "no downloadable video" in text || "contains no videos" in text -> DownloadFailureReason.FORMAT_UNAVAILABLE
 
             "this content isn't available to everyone" in text || "can't be seen by certain audiences" in text ||
                 "private video" in text || "video is private" in text || "video has been removed" in text ||

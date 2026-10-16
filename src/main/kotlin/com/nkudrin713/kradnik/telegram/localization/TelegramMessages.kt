@@ -93,6 +93,7 @@ enum class TelegramMessage(val key: String) {
     CHOICE_COVER("choice.cover"),
     CHOICE_IMAGES("choice.images"),
     CHOICE_POST("choice.post"),
+    CHOICE_VIDEOS("choice.videos"),
     CHOICE_PLAYLIST_ZIP_ALL("choice.playlist-zip-all"),
     CHOICE_PLAYLIST_ZIP_FIRST("choice.playlist-zip-first"),
     CHOICE_PLAYLIST_ZIP_LAST("choice.playlist-zip-last"),

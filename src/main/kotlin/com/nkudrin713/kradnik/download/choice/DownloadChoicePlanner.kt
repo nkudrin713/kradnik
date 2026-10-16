@@ -7,6 +7,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformAvailability
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
+import com.nkudrin713.kradnik.download.platform.parseThreadsMediaUrl
 import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
 import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.source.PreparedSource
@@ -32,10 +33,20 @@ class DownloadChoicePlanner(
     suspend fun plan(url: String, language: BotLanguage = BotLanguage.EN): DownloadChoicePlan {
         availability.requireEnabled(platformResolver.platformOf(url))
         youtubePlaylistPlanner.planOrNull(url, language)?.let { return it }
-        val specs = platformResolver.resolve(url)
-        val metadata = extractCatalog(specs.video, language).metadata
+        var specs = platformResolver.resolve(url)
+        val prepared = extractCatalog(specs.video, language)
+        val metadata = prepared.metadata
+        if (specs.video.platform == DownloadPlatform.THREADS) {
+            val canonical = prepared.canonicalUrl?.let(::parseThreadsMediaUrl)?.takeUnless { it.shared }
+                ?: throw DownloadChoicePlanningException(messages.text(language, TelegramMessage.ERROR_METADATA_UNAVAILABLE))
+            specs = platformResolver.resolve(canonical.normalized)
+        }
         val isInstagram = specs.video.platform == DownloadPlatform.INSTAGRAM
-        val options = if (isInstagram) instagram.options(specs, metadata, language) else standard.options(specs, metadata, language)
+        val options = when (specs.video.platform) {
+            DownloadPlatform.INSTAGRAM -> instagram.options(specs, metadata, language)
+            DownloadPlatform.THREADS -> standard.videosOnly(specs.video, metadata, language, messages)
+            else -> standard.options(specs, metadata, language)
+        }
         if (options.isEmpty()) throw DownloadChoicePlanningException(messages.text(language, TelegramMessage.ERROR_NO_OPTIONS))
         return DownloadChoicePlan(
             DownloadChoiceMediaInfo(

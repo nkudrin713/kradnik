@@ -12,7 +12,7 @@ interface SingleMediaHandler {
 }
 
 @Component
-class SingleMediaHandlers(video: VideoHandler, audio: AudioHandler, cover: CoverHandler, images: ImagesHandler, post: InstagramPostHandler) {
+class SingleMediaHandlers(video: VideoHandler, audio: AudioHandler, cover: CoverHandler, images: ImagesHandler, post: PostHandler) {
     private val handlers = mapOf(OutputType.VIDEO to video, OutputType.AUDIO to audio, OutputType.COVER to cover, OutputType.IMAGES to images, OutputType.POST to post)
     fun forOutput(type: OutputType): SingleMediaHandler = handlers.getValue(type)
 }

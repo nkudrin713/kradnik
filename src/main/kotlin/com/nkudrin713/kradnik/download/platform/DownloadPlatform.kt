@@ -8,6 +8,7 @@ enum class DownloadPlatform(
     YOUTUBE("youtube", "YouTube", "/admin/icons/youtube.svg"),
     INSTAGRAM("instagram", "Instagram", "/admin/icons/instagram.svg"),
     VK("vk", "VK", "/admin/icons/vk.svg"),
+    THREADS("threads", "Threads"),
     ;
 
     companion object {

@@ -1,12 +1,13 @@
 # Kradnik
 
-Kradnik downloads public media from YouTube, Instagram, and VK to Telegram.
+Kradnik downloads public media from YouTube, Instagram, VK, and Threads to Telegram.
 
 It supports:
 
 - video quality, audio-only, and cover downloads;
 - YouTube playlists as 320 kbps CBR MP3, in audio albums or a ZIP (up to 100 tracks);
 - Instagram posts as ordered, mixed photo/video albums with captions;
+- Threads videos, including ordered video albums from mixed posts;
 - direct chats and inline guest mode; playlists and posts require a direct chat;
 - cancellation of queued and running downloads;
 - English, Russian, and informal Russian (“Свойский”) interfaces;
@@ -24,6 +25,7 @@ The diagram shows single-media jobs. Playlists use `PlaylistQueueWorker` and `Pl
 - Single-media yt-dlp metadata contains only fields used for options and preflight, including the needed fields from each format. Subtitle data is omitted. Metadata output has a 32 Mi-character capture limit; oversized responses fail before job creation.
 - Playlists up to 100 tracks offer all tracks; larger lists offer the first or last 100. Both audio and ZIP modes use 320 kbps CBR MP3. ZIP filenames include the successful file count and playlist title; oversized archives are rejected.
 - Instagram videos offer video, audio, and full-post options; static posts offer the full post. Posts support up to 20 ordered attachments. Public metadata may omit native music; Instagram login is not used.
+- Threads offers video downloads only. Single videos use the normal quality menu; multiple videos offer one video-album action and require a direct chat. Photos and other attachments are skipped. `threads.com` and `threads.net` post, `/t/`, and `/share/` links resolve to one post identity before a choice is saved; unresolved short links fail instead of selecting another post. Up to 20 videos retain their source order, with the existing upload-size, cancellation, and cache rules.
 - Available actions use Telegram's default button style, cancellation is red, unavailable options are hidden, and menu titles use ordinary text styling.
 - Guest mentions without a supported `@bot https://…` request are silent, so sharing the bot's username does not post a link prompt into the chat. Direct-chat link prompts are unchanged.
 - PostgreSQL stores menus, ownership, and language so callbacks survive restarts.
@@ -43,10 +45,12 @@ Failed menu preparation and failed downloads offer **Retry last link**. The butt
 | `VideoHandler` | Preflight, download, Telegram preparation, size check | `MediaArtifact.Video` |
 | `AudioHandler` | Preflight, quality selection, download, size check | `MediaArtifact.Audio` with metadata |
 | `CoverHandler` | Thumbnail lookup, download, size check | `MediaArtifact.Document` |
-| `InstagramPostHandler` | Ordered mixed-media download and video preparation | `MediaArtifact.Post` |
+| `PostHandler` | Ordered Instagram attachments or Threads videos, with video preparation | `MediaArtifact.Post` |
 | `ImagesHandler` | Ordered Instagram images with per-photo limits | `MediaArtifact.Photos` |
 
 Audio preflight checks source sizes when duration estimates are missing. Instagram uses embed metadata, then yt-dlp as fallback; available media URLs download directly. Carousel fallback selects one item at a time.
+
+Threads uses the bundled yt-dlp extractor in `yt-dlp-plugins/threads`, based on [yt-dlp-threads](https://github.com/tribixbite/yt-dlp-threads/tree/c4c44141cb10715f94296a808f5d89a0d24dfe94) (Unlicense; license included). Local changes require an exact post identity and return a canonical post URL. Public page extraction uses a crawler User-Agent and depends on Threads continuing to expose that payload; no login is used. Metadata retains `entries` for video albums, while each download explicitly selects one video. Signed media URLs are refreshed during execution and are not saved in jobs.
 
 ### Telegram delivery
 
@@ -220,6 +224,8 @@ Runtime ownership:
 ## Local development
 
 Requirements: Java 21, Docker, yt-dlp, ffmpeg/ffprobe, Deno for YouTube JavaScript challenges, and a Telegram bot token. See `Dockerfile` for the packaged media dependencies.
+
+Run locally from the repository root so yt-dlp can load `yt-dlp-plugins`; alternatively set `download.yt-dlp.plugin-directory` to that directory's absolute path. The Docker image includes it under `/app/yt-dlp-plugins`. Extractor tests use `python3 -m unittest discover -s yt-dlp-plugins/threads/tests -v` with the Docker-pinned yt-dlp version installed.
 
 ```bash
 cp .env.example .env

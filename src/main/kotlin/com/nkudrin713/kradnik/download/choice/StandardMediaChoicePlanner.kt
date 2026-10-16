@@ -1,12 +1,35 @@
 package com.nkudrin713.kradnik.download.choice
 
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
+import com.nkudrin713.kradnik.download.domain.MediaContentType
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import org.springframework.stereotype.Component
 
 @Component
 class StandardMediaChoicePlanner(private val choices: MediaChoiceBuilder) {
+    fun videosOnly(spec: DownloadSpec, metadata: MediaMetadata, language: BotLanguage, messages: TelegramMessages): List<DownloadChoiceOptionSnapshot> {
+        if (metadata.contentType != MediaContentType.CAROUSEL) {
+            return choices.videoOptions(spec, metadata, language, allowUnknownOriginalSize = true).ifEmpty {
+                listOf(choices.option(spec, "video_original", messages.text(language, TelegramMessage.CHOICE_ORIGINAL), null, false, language = language))
+            }
+        }
+        return listOf(
+            choices.option(
+                spec = spec.copy(outputType = OutputType.POST, presetName = "${spec.platform.dbValue}_videos"),
+                key = "videos",
+                label = messages.text(language, TelegramMessage.CHOICE_VIDEOS),
+                sizeBytes = null,
+                approximateSize = false,
+                language = language,
+            ),
+        )
+    }
+
     fun options(specs: PlatformDownloadSpecs, metadata: MediaMetadata, language: BotLanguage): List<DownloadChoiceOptionSnapshot> = buildList {
         addAll(choices.videoOptions(specs.video, metadata, language))
         choices.audioOption(specs.audio, metadata, language)?.let(::add)

@@ -3,6 +3,8 @@ package com.nkudrin713.kradnik.download
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.source.InstagramSourceAdapter
+import com.nkudrin713.kradnik.download.source.PostSourceAdapter
+import com.nkudrin713.kradnik.download.source.PreparedPostSource
 import com.nkudrin713.kradnik.download.source.PreparedSource
 import com.nkudrin713.kradnik.download.source.SourceAdapter
 import com.nkudrin713.kradnik.download.source.SourceMediaType
@@ -18,9 +20,12 @@ class DownloadEngine(ytDlp: YtDlpSourceAdapter, instagram: InstagramSourceAdapte
         DownloadPlatform.YOUTUBE to ytDlp,
         DownloadPlatform.VK to ytDlp,
         DownloadPlatform.INSTAGRAM to instagram,
+        DownloadPlatform.THREADS to ytDlp,
     )
 
     suspend fun prepare(request: SourceRequest, catalog: Boolean = false): PreparedSource = adapters.getValue(request.platform).prepare(request, catalog)
 
     suspend fun download(request: SourceRequest, type: SourceMediaType, prepared: PreparedSource, directory: Path): DownloadedFile = adapters.getValue(request.platform).download(request, type, prepared, directory)
+
+    suspend fun downloadPostItem(request: SourceRequest, prepared: PreparedPostSource, index: Int, directory: Path): DownloadedFile = (adapters.getValue(request.platform) as PostSourceAdapter).downloadPostItem(request, prepared, index, directory)
 }

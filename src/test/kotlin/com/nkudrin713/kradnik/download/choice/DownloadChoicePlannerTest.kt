@@ -37,6 +37,42 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class DownloadChoicePlannerTest {
+    @Test
+    fun threadsUsesCanonicalIdentityAndOnlyOffersVideos() = runTest {
+        val resolver = PlatformResolver()
+        val url = "https://threads.net/share/SHORT"
+        val initial = resolver.resolve(url)
+        val canonical = resolver.resolve("https://www.threads.com/t/POST/")
+        every { platformResolver.platformOf(url) } returns DownloadPlatform.THREADS
+        every { platformResolver.resolve(url) } returns initial
+        every { platformResolver.resolve(canonical.video.normalizedUrl) } returns canonical
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(initial.video), true) } returns YtDlpPreparedSource(
+            MediaMetadata(title = "Title", contentType = MediaContentType.CAROUSEL),
+            canonical.video.normalizedUrl,
+            2,
+        )
+        val album = planner.plan(url, BotLanguage.RU).options.single()
+        assertEquals("Скачать видео", album.label)
+        assertEquals(OutputType.POST, album.spec.outputType)
+        assertTrue(album.spec.cacheKey.startsWith(canonical.video.cacheKey))
+        assertEquals(canonical.video.normalizedUrl, album.spec.originalUrl)
+        assertEquals(null, album.spec.postText)
+
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(initial.video), true) } returns YtDlpPreparedSource(
+            MediaMetadata(title = "Title", thumbnail = "https://example.org/cover.jpg"),
+            canonical.video.normalizedUrl,
+        )
+        assertEquals(listOf(OutputType.VIDEO), planner.plan(url).options.map { it.spec.outputType })
+    }
+
+    @Test
+    fun threadsRejectsUnresolvedPostIdentity() = runTest {
+        val url = "https://threads.com/share/SHORT"
+        every { platformResolver.resolve(url) } returns PlatformResolver().resolve(url)
+        coEvery { downloadEngine.prepare(any(), true) } returns YtDlpPreparedSource(MediaMetadata())
+        assertFailsWith<DownloadChoicePlanningException> { planner.plan(url) }
+    }
+
     private val platformResolver: PlatformResolver = mockk()
     private val downloadEngine: DownloadEngine = mockk()
     private val uploadLimits = TelegramUploadLimits(2_000_000_000, localMode = true)

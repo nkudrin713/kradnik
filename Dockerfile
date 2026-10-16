@@ -13,5 +13,6 @@ RUN apk add --no-cache ca-certificates deno=2.7.4-r2 ffmpeg postgresql17-client 
         "curl-cffi==${CURL_CFFI_VERSION}"
 
 COPY .deploy/app.jar app.jar
+COPY yt-dlp-plugins yt-dlp-plugins
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

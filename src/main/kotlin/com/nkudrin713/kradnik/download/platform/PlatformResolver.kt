@@ -21,13 +21,14 @@ internal const val VK_AUDIO_PRESET = "vk_audio"
 
 class UnsupportedPlatformException(message: String) : RuntimeException(message)
 
-/** Recognizes the three supported sources and builds normalized download specifications. */
+/** Recognizes supported sources and builds normalized download specifications. */
 @Service
 class PlatformResolver {
     fun platformOf(url: String): DownloadPlatform = when {
         supportsYoutube(url) -> DownloadPlatform.YOUTUBE
         supportsInstagram(url) -> DownloadPlatform.INSTAGRAM
         supportsVk(url) -> DownloadPlatform.VK
+        isThreadsHost(url) -> DownloadPlatform.THREADS
         else -> throw UnsupportedPlatformException("Unsupported platform")
     }
 
@@ -35,6 +36,7 @@ class PlatformResolver {
         DownloadPlatform.YOUTUBE -> resolveYoutube(url)
         DownloadPlatform.INSTAGRAM -> resolveInstagram(url)
         DownloadPlatform.VK -> resolveVk(url)
+        DownloadPlatform.THREADS -> resolveThreads(url)
     }
 
     private fun supportsYoutube(url: String): Boolean {
@@ -138,6 +140,21 @@ class PlatformResolver {
                 extraArgs = YtDlpPresets.MP3_AUDIO_ARGS,
             ),
         )
+    }
+
+    private fun resolveThreads(url: String): PlatformDownloadSpecs {
+        val media = parseThreadsMediaUrl(url) ?: throw UnsupportedUrlException("Threads URL is not supported")
+        val video = DownloadSpec(
+            originalUrl = media.original,
+            normalizedUrl = media.normalized,
+            cacheKey = ResultKeyFactory.source("threads:${if (media.shared) "share" else "post"}:${media.id}", OutputType.VIDEO, "threads_video"),
+            outputType = OutputType.VIDEO,
+            platform = DownloadPlatform.THREADS,
+            presetName = "threads_video",
+            formatSelector = "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/b[height<=1280][ext=mp4]/b[height<=1280]/best",
+            extraArgs = YtDlpPresets.MERGE_MP4_ARGS,
+        )
+        return PlatformDownloadSpecs(video, video)
     }
 
     private fun supportsVk(url: String): Boolean {

@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.instagram
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.domain.DownloadRejectedException
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
@@ -13,7 +14,7 @@ import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.processing.JobProgress
-import com.nkudrin713.kradnik.download.single.InstagramPostHandler
+import com.nkudrin713.kradnik.download.single.PostHandler
 import com.nkudrin713.kradnik.download.source.InstagramPreparedSource
 import com.nkudrin713.kradnik.download.source.InstagramSourceAdapter
 import com.nkudrin713.kradnik.download.source.SourceRequest
@@ -35,7 +36,7 @@ class InstagramPostHandlerTest {
     private val source: InstagramSourceAdapter = mockk()
     private val videos: TelegramVideoPreparer = mockk()
     private val limits = TelegramUploadLimits(1_000)
-    private val handler = InstagramPostHandler(source, DownloadPreflightService(AudioUploadPlanner(limits), limits), videos)
+    private val handler = PostHandler(DownloadEngine(mockk(), source), DownloadPreflightService(AudioUploadPlanner(limits), limits), videos)
     private val sourceRequest = SourceRequest("https://www.instagram.com/p/TEST/", "https://www.instagram.com/p/TEST/", DownloadPlatform.INSTAGRAM, "best", presetName = "instagram")
     private val request = SingleMediaRequest(sourceRequest, OutputType.POST, "key")
     private val metadata = jacksonObjectMapper().readValue<YtDlpMetadataDto>("{}")

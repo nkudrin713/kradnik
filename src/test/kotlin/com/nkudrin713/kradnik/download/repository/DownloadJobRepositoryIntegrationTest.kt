@@ -76,6 +76,21 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     }
 
     @Test
+    fun persistsThreadsVideoAlbumWithTheMigratedPlatformConstraint() {
+        val saved = repository.saveAndFlush(
+            job("threads-album").apply {
+                platform = DownloadPlatform.THREADS
+                outputType = OutputType.POST
+                originalUrl = "https://www.threads.com/t/POST/"
+                normalizedUrl = originalUrl
+                downloadPreset = "threads_videos"
+            },
+        )
+        assertEquals(DownloadPlatform.THREADS, repository.findById(saved.requiredId()).orElseThrow().platform)
+        assertEquals("threads", jdbcTemplate.queryForObject("SELECT platform FROM download_jobs WHERE id = ?", String::class.java, saved.requiredId()))
+    }
+
+    @Test
     fun persistsRetryLinkAndReadsOnlyQueuedJobsInStableOrder() {
         val token = choiceSessionRepository.saveAndFlush(
             DownloadChoiceSession(telegramUserId = 10, telegramChatId = 20, telegramMenuMessageId = 30, retryUrl = "https://youtu.be/original"),

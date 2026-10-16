@@ -26,6 +26,34 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class YtDlpServiceTest {
+    @Test
+    fun threadsMetadataKeepsEntriesAndLoadsBundledPlugin() = runTest {
+        val source = testRequest().copy(platform = DownloadPlatform.THREADS)
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            stdout = """{"id":"POST","webpage_url":"https://www.threads.com/t/POST/","entries":[{"id":"POST_6"},{"id":"POST_9"}]}""",
+            timedOut = false,
+            exitCode = 0,
+        )
+        val metadata = service.extractPostMetadata(source, catalog = true)
+        assertEquals(listOf("POST_6", "POST_9"), metadata.entries?.map { it.id })
+        val command = slot<Command>()
+        coVerify { processRunner.run(capture(command)) }
+        assertTrue("--dump-single-json" in command.captured.args)
+        assertTrue("--plugin-dirs" in command.captured.args)
+        val concat = command.captured.args.indexOf("--concat-playlist")
+        assertEquals("never", command.captured.args[concat + 1])
+        assertFalse("--print" in command.captured.args)
+        assertEquals(32 * 1024 * 1024, command.captured.maxCapturedStdoutChars)
+    }
+
+    @Test
+    fun rejectsMultipleFinalFilesInsteadOfSilentlyLosingVideos(@TempDir directory: Path) = runTest {
+        val file = directory.resolve("video.mp4").apply { writeText("video") }
+        val marker = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\""
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(stdout = "$marker\n$marker", timedOut = false, exitCode = 0)
+        assertFailsWith<YtDlpException> { service.download(testRequest(), directory) }
+    }
+
     private val processRunner: ProcessRunner = mockk()
 
     private val service = YtDlpService(

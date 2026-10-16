@@ -164,6 +164,18 @@ class PlatformResolver {
 
     private fun resolveVk(url: String): PlatformDownloadSpecs {
         val originalUrl = url.trim()
+        parseVkPostUrl(originalUrl)?.let { post ->
+            val spec = DownloadSpec(
+                originalUrl = originalUrl,
+                normalizedUrl = post.normalized,
+                cacheKey = ResultKeyFactory.source("vk:wall:${post.id}", OutputType.POST, "vk_post"),
+                outputType = OutputType.POST,
+                platform = DownloadPlatform.VK,
+                presetName = "vk_post",
+                formatSelector = "best",
+            )
+            return PlatformDownloadSpecs(spec, spec)
+        }
         val uri = parseHttpUrl(originalUrl)
         val media = extractMedia(uri)
             ?: throw UnsupportedUrlException("VK URL is not supported")

@@ -8,6 +8,7 @@ import com.nkudrin713.kradnik.download.domain.MediaContentType
 import com.nkudrin713.kradnik.download.domain.MediaFormat
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
@@ -17,6 +18,12 @@ import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
 import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
+import com.nkudrin713.kradnik.download.source.PostMode
+import com.nkudrin713.kradnik.download.source.PreparedPostSource
+import com.nkudrin713.kradnik.download.source.SourcePost
+import com.nkudrin713.kradnik.download.source.SourcePostItem
+import com.nkudrin713.kradnik.download.source.ThreadsPreparedSource
+import com.nkudrin713.kradnik.download.source.VkPreparedSource
 import com.nkudrin713.kradnik.download.source.YtDlpPreparedSource
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
@@ -38,6 +45,27 @@ import kotlin.test.assertTrue
 
 class DownloadChoicePlannerTest {
     @Test
+    fun vkWallUsesTheSharedFullPostMenuWithoutAudioOrVideoChoices() = runTest {
+        val url = "https://m.vk.ru/wall-1_2?from=feed"
+        val canonical = "https://vk.com/wall-1_2"
+        val resolver = PlatformResolver()
+        every { platformResolver.platformOf(url) } returns DownloadPlatform.VK
+        every { platformResolver.resolve(url) } returns resolver.resolve(url)
+        every { platformResolver.resolve(canonical) } returns resolver.resolve(canonical)
+        coEvery { downloadEngine.prepare(any(), true) } returns VkPreparedSource(
+            MediaMetadata(title = "Post"),
+            canonical,
+            SourcePost(emptyList(), "Text only", singleVideoOptions = false),
+        )
+        val option = planner.plan(url, BotLanguage.RU).options.single()
+        assertEquals("Пост целиком", option.label)
+        assertEquals(OutputType.POST, option.spec.outputType)
+        assertEquals("Text only", option.spec.postText)
+        assertEquals(canonical, option.spec.normalizedUrl)
+        assertTrue(option.spec.cacheKey.startsWith("vk:wall:-1_2:"))
+    }
+
+    @Test
     fun threadsUsesCanonicalIdentityAndOnlyOffersVideos() = runTest {
         val resolver = PlatformResolver()
         val url = "https://threads.net/share/SHORT"
@@ -46,10 +74,10 @@ class DownloadChoicePlannerTest {
         every { platformResolver.platformOf(url) } returns DownloadPlatform.THREADS
         every { platformResolver.resolve(url) } returns initial
         every { platformResolver.resolve(canonical.video.normalizedUrl) } returns canonical
-        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(initial.video), true) } returns YtDlpPreparedSource(
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(initial.video), true) } returns ThreadsPreparedSource(
             MediaMetadata(title = "Title", contentType = MediaContentType.CAROUSEL),
             canonical.video.normalizedUrl,
-            2,
+            SourcePost(List(2) { SourcePostItem(PostMediaKind.VIDEO, it.toString()) }, mode = PostMode.VIDEOS_ONLY),
         )
         val album = planner.plan(url, BotLanguage.RU).options.single()
         assertEquals("Скачать видео", album.label)
@@ -58,9 +86,10 @@ class DownloadChoicePlannerTest {
         assertEquals(canonical.video.normalizedUrl, album.spec.originalUrl)
         assertEquals(null, album.spec.postText)
 
-        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(initial.video), true) } returns YtDlpPreparedSource(
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(initial.video), true) } returns ThreadsPreparedSource(
             MediaMetadata(title = "Title", thumbnail = "https://example.org/cover.jpg"),
             canonical.video.normalizedUrl,
+            SourcePost(listOf(SourcePostItem(PostMediaKind.VIDEO, "0")), mode = PostMode.VIDEOS_ONLY),
         )
         assertEquals(listOf(OutputType.VIDEO), planner.plan(url).options.map { it.spec.outputType })
     }
@@ -69,7 +98,7 @@ class DownloadChoicePlannerTest {
     fun threadsRejectsUnresolvedPostIdentity() = runTest {
         val url = "https://threads.com/share/SHORT"
         every { platformResolver.resolve(url) } returns PlatformResolver().resolve(url)
-        coEvery { downloadEngine.prepare(any(), true) } returns YtDlpPreparedSource(MediaMetadata())
+        coEvery { downloadEngine.prepare(any(), true) } throws DownloadFailure(DownloadFailureReason.METADATA_UNAVAILABLE, "No canonical identity")
         assertFailsWith<DownloadChoicePlanningException> { planner.plan(url) }
     }
 
@@ -83,7 +112,7 @@ class DownloadChoicePlannerTest {
         platformResolver = platformResolver,
         downloadEngine = downloadEngine,
         standard = StandardMediaChoicePlanner(choices),
-        instagram = InstagramChoicePlanner(choices, telegramMessages()),
+        posts = PostChoicePlanner(choices, telegramMessages()),
         messages = telegramMessages(),
         youtubePlaylistPlanner = youtubePlaylistPlanner,
         availability = availability,
@@ -232,7 +261,7 @@ class DownloadChoicePlannerTest {
             ),
         )
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
-        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns prepared(catalog)
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns preparedPost(catalog)
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
@@ -252,7 +281,7 @@ class DownloadChoicePlannerTest {
             channel = null,
         )
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
-        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns YtDlpPreparedSource(metadata)
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns preparedPost(metadata)
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
@@ -288,7 +317,7 @@ class DownloadChoicePlannerTest {
         val audio = resolved(OutputType.AUDIO).withInstagramPlatform()
         val metadata = metadata(formats = emptyList()).copy(description = "Post text", channel = "owner")
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
-        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns YtDlpPreparedSource(metadata.copy(contentType = MediaContentType.IMAGES))
+        coEvery { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) } returns preparedPost(metadata.copy(contentType = MediaContentType.IMAGES))
 
         val actual = planner.plan(URL, BotLanguage.RU)
 
@@ -364,6 +393,11 @@ class DownloadChoicePlannerTest {
                 "instagram_mobile_video"
             },
         )
+    }
+
+    private fun preparedPost(value: MediaMetadata): PreparedPostSource = object : PreparedPostSource {
+        override val metadata = value
+        override val post = SourcePost(listOf(SourcePostItem(if (value.contentType == MediaContentType.IMAGES) PostMediaKind.PHOTO else PostMediaKind.VIDEO, "0")), value.description, authorUsername = value.channel ?: value.uploader)
     }
 
     private fun prepared(metadata: MediaMetadata) = YtDlpPreparedSource(metadata)

@@ -4,10 +4,12 @@ import com.nkudrin713.kradnik.download.cover.CoverDownloader
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
 import com.nkudrin713.kradnik.download.instagram.InstagramContentUnavailableException
 import com.nkudrin713.kradnik.download.instagram.InstagramEmbedDownloader
 import com.nkudrin713.kradnik.download.instagram.InstagramEmbedException
+import com.nkudrin713.kradnik.download.instagram.InstagramMedia
 import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
@@ -19,6 +21,7 @@ import com.nkudrin713.kradnik.download.source.InstagramPreparedSource
 import com.nkudrin713.kradnik.download.source.InstagramSourceAdapter
 import com.nkudrin713.kradnik.download.source.SourceMediaType
 import com.nkudrin713.kradnik.download.source.SourceRequest
+import com.nkudrin713.kradnik.download.source.VkSourceAdapter
 import com.nkudrin713.kradnik.download.source.YtDlpSourceAdapter
 import com.nkudrin713.kradnik.download.source.toMediaMetadata
 import com.nkudrin713.kradnik.ytdlp.YtDlpException
@@ -40,7 +43,7 @@ class DownloadEngineTest {
     private val ytDlpService: YtDlpService = mockk()
     private val instagramDownloader: InstagramEmbedDownloader = mockk()
     private val coverDownloader: CoverDownloader = mockk()
-    private val engine = DownloadEngine(YtDlpSourceAdapter(ytDlpService), InstagramSourceAdapter(instagramDownloader, ytDlpService))
+    private val engine = DownloadEngine(YtDlpSourceAdapter(ytDlpService), InstagramSourceAdapter(instagramDownloader, ytDlpService), mockk(), VkSourceAdapter(mockk(), mockk(), ytDlpService, YtDlpSourceAdapter(ytDlpService)))
 
     @Test
     fun preparesAndDownloadsVkVideo() = runTest {
@@ -109,6 +112,7 @@ class DownloadEngineTest {
     fun instagramUsesDirectVideoButYtDlpForAudio() = runTest {
         val video = spec(DownloadPlatform.INSTAGRAM)
         val prepared = mockk<com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload>(relaxed = true) {
+            every { items } returns listOf(InstagramMedia(PostMediaKind.VIDEO, null))
             every { metadata } returns mockk(relaxed = true)
             every { mediaUri } returns java.net.URI("https://cdn.instagram.com/video.mp4")
         }
@@ -128,6 +132,7 @@ class DownloadEngineTest {
     fun instagramWithoutDirectUrlUsesYtDlp() = runTest {
         val spec = spec(DownloadPlatform.INSTAGRAM)
         val prepared = mockk<com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload>(relaxed = true) {
+            every { items } returns listOf(InstagramMedia(PostMediaKind.VIDEO, null))
             every { metadata } returns mockk(relaxed = true)
             every { mediaUri } returns null
         }
@@ -144,6 +149,7 @@ class DownloadEngineTest {
         val imageSpec = videoSpec
         val metadata: YtDlpMetadataDto = mockk(relaxed = true)
         val prepared = mockk<InstagramPreparedDownload>(relaxed = true) {
+            every { items } returns listOf(InstagramMedia(PostMediaKind.PHOTO, null))
             every { this@mockk.metadata } returns metadata
         }
         val preparation = InstagramPreparedSource(prepared)

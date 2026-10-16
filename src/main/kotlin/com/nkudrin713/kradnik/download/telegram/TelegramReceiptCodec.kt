@@ -9,9 +9,11 @@ import com.nkudrin713.kradnik.download.playlist.PlaylistCompletion
 object TelegramReceiptCodec {
     private const val PHOTO_GROUP_PREFIX = "photo-group:"
     private const val POST_PREFIX = "post:v1:"
+    private const val POST_CONTENT_PREFIX = "post:v2:"
     private val mapper = jacksonObjectMapper()
 
     fun decode(type: OutputType, value: String): CachedMedia {
+        if (value.startsWith(POST_CONTENT_PREFIX)) return mapper.readValue<CachedMedia.Post>(value.removePrefix(POST_CONTENT_PREFIX)).copy(usesLegacyText = false)
         if (value.startsWith(POST_PREFIX)) return CachedMedia.Post(mapper.readValue(value.removePrefix(POST_PREFIX)))
         return when (type) {
             OutputType.VIDEO -> CachedMedia.Single(TelegramMediaKind.VIDEO, value)
@@ -30,6 +32,7 @@ object TelegramReceiptCodec {
     }
 
     fun post(items: List<CachedPostItem>): String = POST_PREFIX + mapper.writeValueAsString(CachedMedia.Post(items).items)
+    fun post(items: List<CachedPostItem>, text: String?): String = POST_CONTENT_PREFIX + mapper.writeValueAsString(CachedMedia.Post(items, text, usesLegacyText = false))
     fun photos(fileIds: List<String>): String = PHOTO_GROUP_PREFIX + mapper.writeValueAsString(fileIds)
     fun playlist(completion: PlaylistCompletion): String = when (completion) {
         is PlaylistCompletion.AudioMessages -> "playlist:${completion.count}"

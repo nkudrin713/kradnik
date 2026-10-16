@@ -15,6 +15,15 @@ import kotlin.test.assertEquals
 
 class TelegramResultCacheTest {
     @Test
+    fun storesPostTextWithMediaAndSupportsTextOnlyResults() {
+        val items = listOf(CachedPostItem(PostMediaKind.PHOTO, "photo"))
+        for ((media, text) in listOf(items to "Saved caption", items to null, emptyList<CachedPostItem>() to "Text only")) {
+            val receipt = TelegramReceiptCodec.post(media, text)
+            assertEquals(CachedMedia.Post(media, text, usesLegacyText = false), TelegramReceiptCodec.decode(OutputType.POST, receipt))
+        }
+    }
+
+    @Test
     fun roundTripsMixedPostReceiptsAndVersionsPostCacheSeparately() {
         val items = listOf(CachedPostItem(PostMediaKind.VIDEO, "video"), CachedPostItem(PostMediaKind.PHOTO, "photo"))
         val receipt = TelegramReceiptCodec.post(items)

@@ -2,8 +2,11 @@ package com.nkudrin713.kradnik.download.instagram
 
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
+import com.nkudrin713.kradnik.download.domain.DownloadRejectedException
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
+import com.nkudrin713.kradnik.download.source.HttpMediaDownloader
+import com.nkudrin713.kradnik.download.source.MediaHttpException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import org.slf4j.LoggerFactory
@@ -14,7 +17,6 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 
@@ -70,6 +72,7 @@ class JdkInstagramHttpClient(
     private val metadataTimeout: Duration = Duration.ofSeconds(30),
     @Value($$"${download.instagram.download-timeout:10m}")
     private val downloadTimeout: Duration = Duration.ofMinutes(10),
+    private val media: HttpMediaDownloader = HttpMediaDownloader(),
 ) : InstagramHttpClient {
     private val httpClient = HttpClient.newBuilder()
         .connectTimeout(CONNECT_TIMEOUT)
@@ -156,82 +159,19 @@ class JdkInstagramHttpClient(
         outputFile: Path,
         expectedContentType: String,
         maxBytes: Long?,
-    ): DownloadedFile = runInterruptible(Dispatchers.IO) {
-        val request = HttpRequest.newBuilder(uri)
-            .timeout(downloadTimeout)
-            .header("Accept", "$expectedContentType*")
-            .header("User-Agent", USER_AGENT)
-            .GET()
-            .build()
-        val response = httpClient.send(
-            request,
-            HttpResponse.BodyHandlers.ofInputStream(),
-        )
-
-        if (response.statusCode() !in SUCCESS_STATUS_CODES) {
-            response.body().close()
-            throw InstagramHttpException(
-                stage = InstagramRequestStage.MEDIA,
-                statusCode = response.statusCode(),
-            )
-        }
-
-        val contentType = response.headers()
-            .firstValue("Content-Type")
-            .orElse("")
-        if (!contentType.startsWith(expectedContentType)) {
-            response.body().close()
-            throw InstagramEmbedException(
-                "Instagram media response has unexpected content type: expected=$expectedContentType, actual=$contentType",
-            )
-        }
-
-        val contentLength = response.headers().firstValueAsLong("Content-Length").orElse(-1)
-        if (maxBytes != null && contentLength > maxBytes) {
-            response.body().close()
-            throw InstagramMediaTooLargeException()
-        }
-
-        logger.info(
-            "Instagram media response accepted: host={}, status={}, contentType={}, contentLength={}",
-            uri.host,
-            response.statusCode(),
-            contentType,
-            contentLength,
-        )
-        try {
-            response.body().use { input ->
-                Files.newOutputStream(outputFile).use { output ->
-                    val buffer = ByteArray(DOWNLOAD_BUFFER_BYTES)
-                    var downloadedBytes = 0L
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) {
-                            break
-                        }
-                        downloadedBytes += count
-                        if (maxBytes != null && downloadedBytes > maxBytes) {
-                            throw InstagramMediaTooLargeException()
-                        }
-                        output.write(buffer, 0, count)
-                    }
-                }
-            }
-        } catch (error: InstagramMediaTooLargeException) {
-            Files.deleteIfExists(outputFile)
-            throw error
-        }
-
-        DownloadedFile(
-            file = outputFile,
-            sizeBytes = Files.size(outputFile),
-        )
+    ): DownloadedFile = try {
+        media.download(uri, outputFile, expectedContentType, maxBytes, downloadTimeout)
+    } catch (error: MediaHttpException) {
+        throw InstagramHttpException(InstagramRequestStage.MEDIA, error.statusCode)
+    } catch (error: DownloadRejectedException) {
+        throw InstagramMediaTooLargeException()
+    } catch (error: DownloadFailure) {
+        throw InstagramEmbedException(error.message ?: "Instagram media request failed", error, error.reason)
     }
 
     private companion object {
         private val CONNECT_TIMEOUT = Duration.ofSeconds(10)
         private val SUCCESS_STATUS_CODES = 200..299
-        private const val DOWNLOAD_BUFFER_BYTES = 64 * 1024
         private const val MAX_PHOTO_BYTES = 10_000_000L
         private const val USER_AGENT = "Mozilla/5.0"
     }

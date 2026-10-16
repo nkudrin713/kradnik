@@ -1,0 +1,118 @@
+package com.nkudrin713.kradnik.download.source
+
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.nkudrin713.kradnik.download.DownloadEngine
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.domain.MediaArtifact
+import com.nkudrin713.kradnik.download.domain.MediaMetadata
+import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PostMediaKind
+import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
+import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
+import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
+import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
+import com.nkudrin713.kradnik.download.platform.PlatformResolver
+import com.nkudrin713.kradnik.download.processing.JobProgress
+import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
+import com.nkudrin713.kradnik.download.single.PostHandler
+import com.nkudrin713.kradnik.ytdlp.YtDlpService
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.io.TempDir
+import java.net.URI
+import java.nio.file.Path
+import java.time.Duration
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
+
+class VkSourceAdapterTest {
+    private val client = mockk<VkPostClient>()
+    private val media = mockk<HttpMediaDownloader>()
+    private val ytDlp = mockk<YtDlpService>()
+    private val singles = mockk<YtDlpSourceAdapter>()
+    private val adapter = VkSourceAdapter(client, media, ytDlp, singles)
+    private val mapper = jacksonObjectMapper()
+    private val source = DownloadRequestMapper.source(PlatformResolver().resolve("https://vk.ru/wall-1_2").video)
+    private val photo = """{"type":"photo","photo":{"sizes":[{"url":"https://sun9-1.userapi.com/small.jpg","width":100,"height":100},{"url":"https://sun9-1.userapi.com/full.jpg","width":1200,"height":800}]}}"""
+    private val video = """{"type":"video","video":{"owner_id":-7,"id":9,"access_key":"abc123"}}"""
+
+    @Test
+    fun commonPostHandlerUsesFreshTextForVkTextOnlyResults(@TempDir directory: Path) = runTest {
+        coEvery { client.fetch("-1_2") } returns mapper.readTree("""{"text":"Fresh post text","attachments":[]}""")
+        val limits = TelegramUploadLimits(1000)
+        val handler = PostHandler(
+            DownloadEngine(mockk(), mockk(), mockk(), adapter),
+            DownloadPreflightService(AudioUploadPlanner(limits), limits),
+            mockk(),
+        )
+        val artifact = handler.produce(SingleMediaRequest(source, OutputType.POST, "key", "Stale menu text"), directory, 1, JobProgress {})
+        assertEquals(MediaArtifact.Post(emptyList(), "Fresh post text"), artifact)
+        coVerify(exactly = 0) { media.download(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { ytDlp.download(any(), any()) }
+    }
+
+    @Test
+    fun preservesMixedOrderDuplicatesAndOnlySelectedAttachmentTypes(@TempDir directory: Path) = runTest {
+        coEvery { client.fetch("-1_2") } returns mapper.readTree("""{"text":"A &amp; B<br>second line","attachments":[$photo,{"type":"audio"},$video,{"type":"doc"},$photo]}""")
+        val post = adapter.prepare(source, true) as VkPreparedSource
+        assertEquals("A & B\nsecond line", post.post.text)
+        assertEquals(listOf(PostMediaKind.PHOTO, PostMediaKind.VIDEO, PostMediaKind.PHOTO), post.mediaKinds)
+        assertEquals(post.items[0], post.items[2])
+        assertEquals("https://vk.com/wall-1_2", post.canonicalUrl)
+        assertEquals(false, post.post.singleVideoOptions)
+        val result = DownloadedFile(directory.resolve("photo.jpg"), 100)
+        coEvery { media.download(any(), any(), any(), any(), any()) } returns result
+        assertEquals(result, adapter.downloadPostItem(source, post, 0, directory))
+        coVerify { media.download(URI("https://sun9-1.userapi.com/full.jpg"), directory.resolve("photo.jpg"), "image/", 10_000_000L, Duration.ofMinutes(10)) }
+        coEvery { ytDlp.download(any(), directory) } returns result
+        adapter.downloadPostItem(source, post, 1, directory)
+        val videoSource = DownloadRequestMapper.source(PlatformResolver().resolve("https://vk.com/video-7_9?list=abc123").video)
+        coVerify { ytDlp.download(videoSource, directory) }
+    }
+
+    @Test
+    fun includesRepostedTextAndMediaWithoutFollowingLinks() = runTest {
+        coEvery { client.fetch(any()) } returns mapper.readTree("""{"text":"Comment","attachments":[{"type":"link","link":{"url":"https://example.org"}}],"copy_history":[{"text":"Original<br>post","attachments":[$photo,$video]}]}""")
+        val prepared = adapter.prepare(source, false) as VkPreparedSource
+        assertEquals("Comment\n\nOriginal\npost", prepared.post.text)
+        assertEquals(listOf(PostMediaKind.PHOTO, PostMediaKind.VIDEO), prepared.mediaKinds)
+    }
+
+    @Test
+    fun supportsTextOnlyAndMediaWithoutTextButRejectsEmptyPost() = runTest {
+        coEvery { client.fetch(any()) } returns mapper.readTree("""{"text":"Just text","attachments":[{"type":"audio"}]}""")
+        assertEquals(emptyList(), (adapter.prepare(source, true) as VkPreparedSource).items)
+        coEvery { client.fetch(any()) } returns mapper.readTree("""{"text":"","attachments":[$photo]}""")
+        assertNull((adapter.prepare(source, true) as VkPreparedSource).post.text)
+        coEvery { client.fetch(any()) } returns mapper.readTree("""{"text":"","attachments":[{"type":"audio"}]}""")
+        assertFailsWith<DownloadFailure> { adapter.prepare(source, true) }
+    }
+
+    @Test
+    fun rejectsMissingSupportedMediaUnexpectedHostsAndOversizedCollections() = runTest {
+        val invalid = listOf(
+            """{"attachments":[{"type":"photo","photo":{}}]}""",
+            """{"attachments":[{"type":"video","video":{}}]}""",
+            """{"attachments":[${photo.replace("sun9-1.userapi.com", "localhost")}]}""",
+            "{\"attachments\":[${List(21) { photo }.joinToString(",")}]}",
+        )
+        for (json in invalid) {
+            coEvery { client.fetch(any()) } returns mapper.readTree(json)
+            assertFailsWith<DownloadFailure> { adapter.prepare(source, false) }
+        }
+    }
+
+    @Test
+    fun delegatesStandaloneVideosWithoutRequestingWall() = runTest {
+        val request = DownloadRequestMapper.source(PlatformResolver().resolve("https://vk.com/video-1_2").video)
+        val prepared = YtDlpPreparedSource(MediaMetadata())
+        coEvery { singles.prepare(request, true) } returns prepared
+        assertEquals(prepared, adapter.prepare(request, true))
+        coVerify(exactly = 0) { client.fetch(any()) }
+    }
+}

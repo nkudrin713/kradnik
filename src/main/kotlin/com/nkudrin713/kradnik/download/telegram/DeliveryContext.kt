@@ -2,7 +2,7 @@ package com.nkudrin713.kradnik.download.telegram
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 
-/** Delivery inputs captured from the request, without queue state or source-specific download options. */
+/** Destination and legacy caption data. New posts carry text in their artifact or cached result. */
 data class DeliveryContext(
     val chatId: Long,
     val replyToMessageId: Int? = null,

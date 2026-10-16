@@ -5,9 +5,9 @@ import com.nkudrin713.kradnik.download.domain.PostMediaKind
 sealed interface CachedMedia {
     data class Single(val kind: TelegramMediaKind, val fileId: String) : CachedMedia
     data class Photos(val fileIds: List<String>) : CachedMedia
-    data class Post(val items: List<CachedPostItem>) : CachedMedia {
+    data class Post(val items: List<CachedPostItem>, val text: String? = null, val usesLegacyText: Boolean = true) : CachedMedia {
         init {
-            require(items.size in 1..20 && items.all { it.fileId.isNotBlank() }) { "Invalid cached post" }
+            require(items.size <= 20 && (items.isNotEmpty() || !text.isNullOrBlank()) && items.all { it.fileId.isNotBlank() }) { "Invalid cached post" }
         }
     }
 }

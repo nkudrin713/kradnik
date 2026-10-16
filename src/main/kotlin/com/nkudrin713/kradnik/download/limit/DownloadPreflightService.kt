@@ -66,6 +66,15 @@ class DownloadPreflightService(
         if (file.sizeBytes > uploadLimits.maxUploadBytes) throw DownloadRejectedException("File exceeds Telegram upload limit")
     }
 
+    fun validatePhoto(file: DownloadedFile) {
+        if (file.sizeBytes > 10_000_000L) throw DownloadRejectedException("Photo exceeds Telegram upload limit")
+    }
+
+    /** Preserve the existing aggregate post budget independently of album splitting. */
+    fun validatePostSize(totalBytes: Long) {
+        if (totalBytes > uploadLimits.maxUploadBytes) throw DownloadRejectedException("Post exceeds total media size limit")
+    }
+
     private fun selectedSize(metadata: MediaMetadata): Long? {
         return metadata.filesize
             ?: metadata.requestedFormats?.totalSize()

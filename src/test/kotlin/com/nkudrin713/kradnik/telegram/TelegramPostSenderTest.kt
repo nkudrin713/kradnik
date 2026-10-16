@@ -32,6 +32,21 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TelegramPostSenderTest {
+    @Test
+    fun sendsFreshAndCachedTextOnlyPostsWithTheNormalTextLimits() = runTest {
+        val requests = mutableListOf<SendMessage>()
+        coEvery { api.executeIo(capture(requests), any()) } returns BotUtils.fromJson("""{"ok":true,"result":{"message_id":99}}""", SendResponse::class.java)
+        val context = DeliveryContext(100, 200, postText = "Unrelated menu text")
+        val text = "я".repeat(4095) + "😀tail"
+        assertEquals(emptyList(), sender().send(context, emptyList(), text))
+        assertEquals(text, requests.joinToString("") { it.parameters["text"] as String })
+        assertEquals(2, requests.size)
+        assertTrue((requests[1].parameters["text"] as String).startsWith("😀"))
+        assertTrue(requests.all { mapper.readTree(BotUtils.toJson(it.parameters["reply_parameters"])).path("message_id").asInt() == 200 })
+        requests.clear()
+        assertEquals(emptyList(), sender().sendCached(context, emptyList(), "Short text"))
+        assertEquals("Short text", requests.single().parameters["text"])
+    }
     private val api: TelegramApiClient = mockk()
     private val probe: VideoMetadataProbe = mockk()
     private val mapper = jacksonObjectMapper()

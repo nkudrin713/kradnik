@@ -30,8 +30,8 @@ class TelegramPostSender(
 ) {
     private data class Item(val kind: PostMediaKind, val file: File? = null, val reference: String? = null, val metadata: VideoMetadata? = null)
 
-    suspend fun send(context: DeliveryContext, items: List<PostMedia>): List<CachedPostItem> {
-        validate(context, items.size)
+    suspend fun send(context: DeliveryContext, items: List<PostMedia>, text: String? = context.postText): List<CachedPostItem> {
+        validate(context, items.size, text)
         return sendItems(
             context,
             items.map { item ->
@@ -42,26 +42,27 @@ class TelegramPostSender(
                     metadata = if (item.kind == PostMediaKind.VIDEO) probe.probe(item.file) else null,
                 )
             },
+            text,
         )
     }
 
-    suspend fun sendCached(context: DeliveryContext, items: List<CachedPostItem>): List<CachedPostItem> {
-        validate(context, items.size)
-        return sendItems(context, items.map { Item(it.kind, reference = it.fileId) })
+    suspend fun sendCached(context: DeliveryContext, items: List<CachedPostItem>, text: String? = context.postText): List<CachedPostItem> {
+        validate(context, items.size, text)
+        return sendItems(context, items.map { Item(it.kind, reference = it.fileId) }, text)
     }
 
-    private fun validate(context: DeliveryContext, count: Int) {
+    private fun validate(context: DeliveryContext, count: Int, text: String?) {
         require(context.inlineMessageId == null) { "Full posts are available only in direct chats" }
-        require(count in 1..20) { "A post must contain 1 to 20 items" }
+        require(count <= 20 && (count > 0 || !text.isNullOrBlank())) { "A post requires text or up to 20 items" }
     }
 
-    private suspend fun sendItems(context: DeliveryContext, items: List<Item>): List<CachedPostItem> {
-        val text = context.postText?.takeIf(String::isNotBlank)
+    private suspend fun sendItems(context: DeliveryContext, items: List<Item>, postText: String?): List<CachedPostItem> {
+        val text = postText?.takeIf(String::isNotBlank)
         val returned = mutableListOf<CachedPostItem>()
         var firstMessageId: Int? = null
         // Eleven attachments need 9 + 2, so the final attachment stays in an album.
         val groups = items.chunked(if (items.size == 11) 9 else 10)
-        val caption = text?.takeIf { it.length + (if (groups.size > 1) 5 else 0) <= 1024 }
+        val caption = text?.takeIf { items.isNotEmpty() && it.length + (if (groups.size > 1) 5 else 0) <= 1024 }
         for ((index, group) in groups.withIndex()) {
             if (index > 0) delay(1000)
             val reply = context.replyToMessageId?.takeIf { index == 0 }?.let { ReplyParameters(it).allowSendingWithoutReply(true) }
@@ -91,7 +92,7 @@ class TelegramPostSender(
                 var end = minOf(start + 4096, text.length)
                 if (end < text.length && text[end - 1].isHighSurrogate()) end--
                 val request = SendMessage(context.chatId, text.substring(start, end)).linkPreviewOptions(LinkPreviewOptions().isDisabled(true))
-                firstMessageId?.let { request.replyParameters(ReplyParameters(it).allowSendingWithoutReply(true)) }
+                (firstMessageId ?: context.replyToMessageId)?.let { request.replyParameters(ReplyParameters(it).allowSendingWithoutReply(true)) }
                 api.executeIo(request)
                 start = end
             }

@@ -36,7 +36,7 @@ class InstagramPostHandlerTest {
     private val source: InstagramSourceAdapter = mockk()
     private val videos: TelegramVideoPreparer = mockk()
     private val limits = TelegramUploadLimits(1_000)
-    private val handler = PostHandler(DownloadEngine(mockk(), source), DownloadPreflightService(AudioUploadPlanner(limits), limits), videos)
+    private val handler = PostHandler(DownloadEngine(mockk(), source, mockk(), mockk()), DownloadPreflightService(AudioUploadPlanner(limits), limits), videos)
     private val sourceRequest = SourceRequest("https://www.instagram.com/p/TEST/", "https://www.instagram.com/p/TEST/", DownloadPlatform.INSTAGRAM, "best", presetName = "instagram")
     private val request = SingleMediaRequest(sourceRequest, OutputType.POST, "key")
     private val metadata = jacksonObjectMapper().readValue<YtDlpMetadataDto>("{}")

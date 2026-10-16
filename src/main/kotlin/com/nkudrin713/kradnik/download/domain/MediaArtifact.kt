@@ -10,9 +10,9 @@ sealed interface MediaArtifact {
 
     data class Document(val file: Path) : MediaArtifact
 
-    data class Post(val items: List<PostMedia>) : MediaArtifact {
+    data class Post(val items: List<PostMedia>, val text: String? = null) : MediaArtifact {
         init {
-            require(items.size in 1..20) { "A post must contain 1 to 20 media items" }
+            require(items.size <= 20 && (items.isNotEmpty() || !text.isNullOrBlank())) { "A post requires text or up to 20 media items" }
         }
     }
 

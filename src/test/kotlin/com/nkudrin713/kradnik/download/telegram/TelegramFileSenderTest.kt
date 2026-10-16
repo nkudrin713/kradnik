@@ -24,6 +24,20 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class TelegramFileSenderTest {
+    @Test
+    fun sendsAndCachesTheProducedPostTextInsteadOfTheMenuText(@TempDir directory: Path) = runTest {
+        val context = DeliveryContext(100, postText = "Menu text")
+        val items = listOf(PostMedia(PostMediaKind.PHOTO, directory.resolve("photo.jpg")))
+        val cached = listOf(CachedPostItem(PostMediaKind.PHOTO, "file"))
+        coEvery { postSender.send(context, items, "Produced text") } returns cached
+        assertEquals(TelegramReceiptCodec.post(cached, "Produced text"), sender.send(context, MediaArtifact.Post(items, "Produced text")))
+        coEvery { postSender.sendCached(context, cached, "Cached text") } returns cached
+        val receipt = TelegramReceiptCodec.post(cached, "Cached text")
+        assertEquals(receipt, sender.sendCached(context, TelegramReceiptCodec.decode(OutputType.POST, receipt)))
+        coEvery { postSender.sendCached(context, cached, null) } returns cached
+        val withoutText = TelegramReceiptCodec.post(cached, null)
+        assertEquals(withoutText, sender.sendCached(context, TelegramReceiptCodec.decode(OutputType.POST, withoutText)))
+    }
     private val telegramMediaSender: TelegramMediaSender = mockk()
     private val postSender: TelegramPostSender = mockk()
     private val sender = TelegramFileSender(
@@ -298,11 +312,11 @@ class TelegramFileSenderTest {
     @Test
     fun propagatesPostFailureWithoutSendingSeparateMedia(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("video.mp4")
-        coEvery { postSender.send(any(), any()) } throws TelegramSendException("Post failed")
+        coEvery { postSender.send(any(), any(), any()) } throws TelegramSendException("Post failed")
         assertFailsWith<TelegramSendException> {
             sender.send(DeliveryContext(100, 200, postText = "Saved text"), MediaArtifact.Video(file))
         }
-        coVerify(exactly = 1) { postSender.send(any(), any()) }
+        coVerify(exactly = 1) { postSender.send(any(), any(), any()) }
         coVerify(exactly = 0) { telegramMediaSender.sendVideo(any(), any(), any()) }
     }
 

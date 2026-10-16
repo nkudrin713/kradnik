@@ -19,7 +19,7 @@ object ResultKeyFactory {
     }
     fun forNewJob(menuKey: String, output: OutputType): String = when (output) {
         OutputType.VIDEO -> TelegramVideoPolicy.versionCacheKey(menuKey)
-        OutputType.POST -> TelegramVideoPolicy.versionCacheKey("$menuKey:post:v1")
+        OutputType.POST -> TelegramVideoPolicy.versionCacheKey("$menuKey:post:v2")
         else -> menuKey
     }
 }

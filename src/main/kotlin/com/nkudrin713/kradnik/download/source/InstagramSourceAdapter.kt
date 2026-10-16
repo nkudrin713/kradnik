@@ -54,7 +54,11 @@ class InstagramSourceAdapter(private val instagram: InstagramEmbedDownloader, pr
 }
 
 data class InstagramPreparedSource(val content: InstagramPreparedDownload) : PreparedPostSource {
-    override val mediaKinds = content.items.map { it.kind }
+    override val post = SourcePost(
+        content.items.mapIndexed { index, item -> SourcePostItem(item.kind, index.toString()) },
+        content.metadata.description,
+        authorUsername = content.metadata.channel ?: content.metadata.uploader,
+    )
     override val metadata = content.metadata.toMediaMetadata().copy(
         contentType = when {
             content.items.all { it.kind == PostMediaKind.PHOTO } -> MediaContentType.IMAGES

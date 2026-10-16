@@ -10,6 +10,20 @@ class VkPlatformResolverTest {
     private val resolver = PlatformResolver()
 
     @Test
+    fun wallLinksHaveOnePostIdentityAndDoNotSelectAnAttachedVideo() {
+        for (url in listOf("https://vk.com/wall-1_2", "https://m.vk.ru/wall-1_2?z=video-3_4", "https://vk.com/community?w=wall%2D1_2")) {
+            val spec = resolver.resolve(url).video
+            assertEquals("https://vk.com/wall-1_2", spec.normalizedUrl)
+            assertEquals(OutputType.POST, spec.outputType)
+            assertEquals("vk:wall:-1_2:post:vk_post", spec.cacheKey)
+            assertEquals(url, spec.originalUrl)
+        }
+        for (url in listOf("https://vk.com/wall-1_2/other", "https://vk.com/wall-1_0", "https://vkvideo.ru/wall-1_2", "https://user@vk.com/wall-1_2")) {
+            assertFailsWith<UnsupportedUrlException> { resolver.resolve(url) }
+        }
+    }
+
+    @Test
     fun supportsExpectedHosts() {
         assertEquals(DownloadPlatform.VK, resolver.resolve("https://vk.com/video-1_2").video.platform)
         assertEquals(DownloadPlatform.VK, resolver.resolve("https://m.vk.ru/clip1_2").video.platform)
@@ -83,7 +97,6 @@ class VkPlatformResolverTest {
         val urls = listOf(
             "https://vk.com/video/@channel/all",
             "https://vkvideo.ru/playlist/-1_2",
-            "https://vk.com/wall-1_2?z=video-1_2",
             "https://vk.com/audio",
         )
 

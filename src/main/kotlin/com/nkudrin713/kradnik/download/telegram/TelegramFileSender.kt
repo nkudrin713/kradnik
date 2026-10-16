@@ -20,7 +20,7 @@ class TelegramFileSender(
     private val postSender: TelegramPostSender,
 ) {
     suspend fun send(context: DeliveryContext, artifact: MediaArtifact): String {
-        if (artifact is MediaArtifact.Post) return TelegramReceiptCodec.post(postSender.send(context, artifact.items))
+        if (artifact is MediaArtifact.Post) return TelegramReceiptCodec.post(postSender.send(context, artifact.items, artifact.text), artifact.text)
         if (context.inlineMessageId == null && !context.postText.isNullOrBlank()) {
             val items = when (artifact) {
                 is MediaArtifact.Video -> listOf(PostMedia(PostMediaKind.VIDEO, artifact.file))
@@ -95,7 +95,10 @@ class TelegramFileSender(
     }
 
     suspend fun sendCached(context: DeliveryContext, media: CachedMedia): String {
-        if (media is CachedMedia.Post) return TelegramReceiptCodec.post(postSender.sendCached(context, media.items))
+        if (media is CachedMedia.Post) {
+            val text = if (media.usesLegacyText) context.postText else media.text
+            return TelegramReceiptCodec.post(postSender.sendCached(context, media.items, text), text)
+        }
         if (context.inlineMessageId == null && !context.postText.isNullOrBlank()) {
             val items = when {
                 media is CachedMedia.Photos -> media.fileIds.map { CachedPostItem(PostMediaKind.PHOTO, it) }

@@ -31,8 +31,8 @@ import kotlin.test.assertFailsWith
 
 class ThreadsSourceAdapterTest {
     private val ytDlp = mockk<YtDlpService>()
-    private val adapter = YtDlpSourceAdapter(ytDlp)
-    private val engine = DownloadEngine(adapter, mockk())
+    private val adapter = ThreadsSourceAdapter(ytDlp)
+    private val engine = DownloadEngine(mockk(), mockk(), adapter, mockk())
     private val source = DownloadRequestMapper.source(PlatformResolver().resolve("https://threads.com/t/POST").video)
     private val metadata = jacksonObjectMapper().readValue<YtDlpMetadataDto>(
         """{"id":"POST","webpage_url":"https://www.threads.com/t/POST/","entries":[{"id":"POST_6"},{"id":"POST_9"}]}""",

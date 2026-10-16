@@ -2,6 +2,7 @@ HELP.md
 .DS_Store
 .gradle
 build/
+/docs/
 .deploy/
 backups/
 !gradle/wrapper/gradle-wrapper.jar

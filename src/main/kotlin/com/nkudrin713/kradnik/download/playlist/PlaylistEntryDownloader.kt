@@ -1,15 +1,12 @@
 package com.nkudrin713.kradnik.download.playlist
 
+import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.domain.DownloadRejectedException
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
-import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.ytdlp.YtDlpPresets
-import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
@@ -24,26 +21,12 @@ import java.nio.file.Path
 /** Preserves saved encoding parameters. The caller owns the directory, including partial output on failure. */
 @Component
 class PlaylistEntryDownloader(
-    private val ytDlpService: YtDlpService,
+    private val engine: DownloadEngine,
     private val limits: TelegramUploadLimits = TelegramUploadLimits(TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES),
 ) {
-    fun cacheKey(entry: PlaylistAudioEntry, source: SourceRequest? = null): String {
-        val args = source?.extraArgs ?: YtDlpPresets.LEGACY_PLAYLIST_AUDIO_ARGS
-        val quality = args.getOrNull(args.indexOf("--audio-quality") + 1)?.takeIf { "--audio-quality" in args } ?: "96K"
-        return ResultKeyFactory.playlistAudioEntry(entry.videoId, quality)
-    }
+    fun cacheKey(entry: PlaylistAudioEntry, source: SourceRequest? = null): String = engine.playlistSource(entry, source).playlistItemCacheKey(entry, source)
 
     suspend fun download(entry: PlaylistAudioEntry, destination: Path, source: SourceRequest? = null): DownloadedFile = coroutineScope {
-        val spec = (
-            source ?: SourceRequest(
-                originalUrl = entry.url,
-                normalizedUrl = "https://www.youtube.com/watch?v=${entry.videoId}",
-                platform = DownloadPlatform.YOUTUBE,
-                formatSelector = YtDlpPresets.YOUTUBE_AUDIO_FORMAT,
-                extraArgs = YtDlpPresets.LEGACY_PLAYLIST_AUDIO_ARGS,
-                presetName = "youtube_audio",
-            )
-            ).copy(originalUrl = entry.url, normalizedUrl = "https://www.youtube.com/watch?v=${entry.videoId}")
         checkWorkspace(destination)
         val monitor = launch {
             while (true) {
@@ -52,12 +35,7 @@ class PlaylistEntryDownloader(
             }
         }
         try {
-            // YouTube sometimes exposes only combined video/audio formats for an otherwise playable track.
-            val downloadSpec = when (spec.formatSelector) {
-                YtDlpPresets.YOUTUBE_AUDIO_FORMAT, "ba", "bestaudio" -> spec.copy(formatSelector = YtDlpPresets.AUDIO_FORMAT_WITH_VIDEO_FALLBACK)
-                else -> spec
-            }
-            ytDlpService.download(downloadSpec, destination).also {
+            engine.playlistSource(entry, source).downloadPlaylistItem(entry, destination, source).also {
                 checkWorkspace(destination)
                 if (Files.size(it.file) > limits.maxUploadBytes) throw DownloadRejectedException("Playlist item exceeds size limit")
             }

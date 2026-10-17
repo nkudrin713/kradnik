@@ -29,35 +29,4 @@ class DownloadSpecTest {
         assertEquals("format", actual.formatSelector)
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.extraArgs)
     }
-
-    @Test
-    fun addsAudioQuality() {
-        val actual = spec(
-            extraArgs = listOf("-x", "--audio-format", "mp3"),
-        ).withAudioQuality("40K")
-
-        assertEquals(listOf("-x", "--audio-format", "mp3", "--audio-quality", "40K"), actual.extraArgs)
-    }
-
-    @Test
-    fun replacesAudioQuality() {
-        val actual = spec(
-            extraArgs = listOf("-x", "--audio-format", "mp3", "--audio-quality", "96K"),
-        ).withAudioQuality("40K")
-
-        assertEquals(listOf("-x", "--audio-format", "mp3", "--audio-quality", "40K"), actual.extraArgs)
-    }
-
-    private fun spec(extraArgs: List<String>): DownloadSpec {
-        return DownloadSpec(
-            originalUrl = "https://example.com/raw",
-            normalizedUrl = "https://example.com/normalized",
-            cacheKey = "cache-key",
-            outputType = OutputType.AUDIO,
-            platform = DownloadPlatform.YOUTUBE,
-            formatSelector = "format",
-            extraArgs = extraArgs,
-            presetName = "preset",
-        )
-    }
 }

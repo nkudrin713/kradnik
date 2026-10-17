@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download.source
+package com.nkudrin713.kradnik.download.http
 
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason

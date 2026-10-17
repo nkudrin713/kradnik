@@ -1,8 +1,9 @@
-package com.nkudrin713.kradnik.download.source
+package com.nkudrin713.kradnik.download.vk
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
+import com.nkudrin713.kradnik.download.vk.VkPostClient
 import org.springframework.web.util.HtmlUtils
 import kotlin.test.Test
 import kotlin.test.assertEquals

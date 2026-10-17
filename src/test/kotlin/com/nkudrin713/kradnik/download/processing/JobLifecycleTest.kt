@@ -1,11 +1,13 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramJobProgress
+import com.nkudrin713.kradnik.download.testPlatformResolver
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
@@ -20,7 +22,7 @@ import kotlin.test.assertFalse
 class JobLifecycleTest {
     private val jobs = mockk<DownloadJobService>(relaxed = true)
     private val sender = mockk<TelegramSender>(relaxed = true)
-    private val lifecycle = JobLifecycle(jobs, TelegramJobProgress(sender, telegramMessages(), jobs, mockk(relaxed = true)))
+    private val lifecycle = JobLifecycle(jobs, TelegramJobProgress(sender, telegramMessages(), jobs, mockk(relaxed = true), DownloadEngine(testPlatformResolver())))
 
     @Test
     fun failureCannotOverwriteCancellationOrItsStatus() {

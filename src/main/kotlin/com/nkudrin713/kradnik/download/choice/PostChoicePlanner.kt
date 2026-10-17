@@ -3,21 +3,22 @@ package com.nkudrin713.kradnik.download.choice
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.MediaContentType
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
-import com.nkudrin713.kradnik.download.source.PostMode
 import com.nkudrin713.kradnik.download.source.PreparedPostSource
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import org.springframework.stereotype.Component
 
+/** Owns post menu policy: Threads videos, full VK posts, and extra options for single Instagram videos. */
 @Component
 class PostChoicePlanner(private val choices: MediaChoiceBuilder, private val messages: TelegramMessages) {
     fun options(specs: PlatformDownloadSpecs, prepared: PreparedPostSource, language: BotLanguage): List<DownloadChoiceOptionSnapshot> {
         val metadata = prepared.metadata
-        if (prepared.post.mode == PostMode.VIDEOS_ONLY) return StandardMediaChoicePlanner(choices).videosOnly(specs.video, metadata, language, messages)
+        if (specs.video.platform == DownloadPlatform.THREADS) return StandardMediaChoicePlanner(choices).videosOnly(specs.video, metadata, language, messages)
         val post = postOption(specs.video, prepared.post.text, language)
-        if (!prepared.post.singleVideoOptions || metadata.contentType != MediaContentType.VIDEO) return listOf(post)
+        if (specs.video.platform != DownloadPlatform.INSTAGRAM || metadata.contentType != MediaContentType.VIDEO) return listOf(post)
         return buildList {
             add(post)
             addAll(choices.videoOptions(specs.video, metadata, language, allowUnknownOriginalSize = true))

@@ -3,11 +3,12 @@ package com.nkudrin713.kradnik.download.choice
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.MediaFormat
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlan
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
+import com.nkudrin713.kradnik.download.platform.PlatformResolver
+import com.nkudrin713.kradnik.download.source.MediaSelection
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -16,7 +17,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 @Component
-class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, private val uploadLimits: TelegramUploadLimits, private val messages: TelegramMessages) {
+class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, private val uploadLimits: TelegramUploadLimits, private val messages: TelegramMessages, private val sources: PlatformResolver) {
     fun videoOptions(
         spec: DownloadSpec,
         metadata: MediaMetadata,
@@ -92,10 +93,10 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
             Math.addExact(videoSize.bytes, audioSize?.bytes ?: 0L)
         }.getOrNull() ?: return null
         val videoId = requireNotNull(video.formatId)
-        val selector = audio?.formatId?.let { "$videoId+$it" } ?: videoId
 
         return SelectedMedia(
-            formatSelector = selector,
+            videoId = videoId,
+            audioId = audio?.formatId,
             height = requireNotNull(video.height),
             sizeBytes = totalSize,
             approximateSize = videoSize.approximate || audioSize?.approximate == true,
@@ -109,10 +110,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
         selected: SelectedMedia,
         language: BotLanguage,
     ): DownloadChoiceOptionSnapshot {
-        val selectedSpec = spec.copy(
-            formatSelector = selected.formatSelector,
-            presetName = "${presetPrefix(spec)}_video_${key.removePrefix("video_")}",
-        )
+        val selectedSpec = sources.adapter(spec.platform).select(spec, MediaSelection.Video(selected.videoId, selected.audioId, key))
         return option(
             spec = selectedSpec,
             key = key,
@@ -159,7 +157,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
         if (plan !is AudioUploadPlan.Allowed) {
             return null
         }
-        val selectedSpec = spec.withAudioQuality(plan.audioQuality)
+        val selectedSpec = sources.adapter(spec.platform).select(spec, MediaSelection.Audio(plan.audioQuality))
         return option(
             spec = selectedSpec,
             key = AUDIO_KEY,
@@ -177,12 +175,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
         language: BotLanguage,
     ): DownloadChoiceOptionSnapshot? {
         metadata.thumbnail?.takeIf { it.isNotBlank() } ?: return null
-        val coverSpec = spec.copy(
-            outputType = OutputType.COVER,
-            formatSelector = "best",
-            extraArgs = emptyList(),
-            presetName = "${presetPrefix(spec)}_cover",
-        )
+        val coverSpec = sources.adapter(spec.platform).select(spec, MediaSelection.Cover)
         return option(
             spec = coverSpec,
             key = COVER_KEY,
@@ -281,7 +274,8 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
 }
 
 private data class SelectedMedia(
-    val formatSelector: String,
+    val videoId: String,
+    val audioId: String?,
     val height: Int,
     val sizeBytes: Long,
     val approximateSize: Boolean,

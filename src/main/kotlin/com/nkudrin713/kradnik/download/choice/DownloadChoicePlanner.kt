@@ -7,7 +7,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformAvailability
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
-import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
+import com.nkudrin713.kradnik.download.playlist.PlaylistChoicePlanner
 import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.source.PreparedPostSource
 import com.nkudrin713.kradnik.download.source.PreparedSource
@@ -27,12 +27,12 @@ class DownloadChoicePlanner(
     private val standard: StandardMediaChoicePlanner,
     private val posts: PostChoicePlanner,
     private val messages: TelegramMessages,
-    private val youtubePlaylistPlanner: YouTubePlaylistPlanner,
+    private val playlistPlanner: PlaylistChoicePlanner,
     private val availability: PlatformAvailability,
 ) {
     suspend fun plan(url: String, language: BotLanguage = BotLanguage.EN): DownloadChoicePlan {
         availability.requireEnabled(platformResolver.platformOf(url))
-        youtubePlaylistPlanner.planOrNull(url, language)?.let { return it }
+        playlistPlanner.planOrNull(url, language)?.let { return it }
         var specs = platformResolver.resolve(url)
         val prepared = extractCatalog(specs.video, language)
         val metadata = prepared.metadata

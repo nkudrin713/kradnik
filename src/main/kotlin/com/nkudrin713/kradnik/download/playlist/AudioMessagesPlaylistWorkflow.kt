@@ -45,7 +45,7 @@ class AudioMessagesPlaylistWorkflow(
         val cached = pending.associate { entry ->
             entry.position to (
                 cache.findAudio(entryDownloader.cacheKey(entry, request.source))
-                    ?: request.source?.let { cache.findPlaylistAudio(entry.videoId, it) }
+                    ?: request.source?.let { cache.findPlaylistAudio(entry.sourceId, it) }
                 )
         }
         val tracker = PlaylistProgressTracker(request.entries, progress, request.completedEntries, pending.filter { cached[it.position] == null })

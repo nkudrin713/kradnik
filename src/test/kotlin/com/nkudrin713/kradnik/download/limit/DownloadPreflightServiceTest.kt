@@ -50,8 +50,8 @@ class DownloadPreflightServiceTest {
         )
 
         assertEquals(
-            listOf("-x", "--audio-format", "mp3", "--audio-quality", "40K"),
-            assertIs<DownloadPreflightDecision.Allowed>(actual).spec.source.extraArgs,
+            "40K",
+            assertIs<DownloadPreflightDecision.Allowed>(actual).spec.source.audioQuality,
         )
     }
 

@@ -1,8 +1,10 @@
 package com.nkudrin713.kradnik.download.telegram
 
+import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.playlist.PlaylistItemFailure
+import com.nkudrin713.kradnik.download.testPlatformResolver
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import kotlin.test.Test
@@ -11,7 +13,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class PlaylistFailureReportTest {
-    private val report = PlaylistFailureReport(telegramMessages())
+    private val report = PlaylistFailureReport(telegramMessages(), DownloadEngine(testPlatformResolver()))
 
     @Test
     fun escapesTitlesUsesSafeLinksAndKeepsOriginalPositionsAndLegacyReasons() {

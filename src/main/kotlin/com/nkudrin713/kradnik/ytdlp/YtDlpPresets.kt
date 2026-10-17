@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.ytdlp
 
 internal object YtDlpPresets {
-    const val YOUTUBE_AUDIO_FORMAT = "ba/bestaudio"
+    const val AUDIO_FORMAT = "ba/bestaudio"
     const val AUDIO_FORMAT_WITH_VIDEO_FALLBACK = "ba/bestaudio/best"
     const val AUDIO_QUALITY_ARG = "--audio-quality"
 
@@ -15,9 +15,9 @@ internal object YtDlpPresets {
         "jpg",
     )
 
-    val YOUTUBE_AUDIO_ARGS = MP3_AUDIO_ARGS + AUDIO_METADATA_ARGS
-    val LEGACY_PLAYLIST_AUDIO_ARGS = MP3_AUDIO_ARGS + listOf(AUDIO_QUALITY_ARG, "96K") + AUDIO_METADATA_ARGS
-    val PLAYLIST_AUDIO_ARGS = MP3_AUDIO_ARGS + listOf(AUDIO_QUALITY_ARG, "320K") + AUDIO_METADATA_ARGS
+    val TAGGED_MP3_ARGS = MP3_AUDIO_ARGS + AUDIO_METADATA_ARGS
+
+    fun playlistAudioArgs(quality: String): List<String> = MP3_AUDIO_ARGS + listOf(AUDIO_QUALITY_ARG, quality) + AUDIO_METADATA_ARGS
 
     fun withAudioQuality(extraArgs: List<String>, quality: String): List<String> {
         val args = mutableListOf<String>()

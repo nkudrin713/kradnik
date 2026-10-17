@@ -16,18 +16,18 @@ import com.nkudrin713.kradnik.download.platform.PlatformAvailability
 import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
-import com.nkudrin713.kradnik.download.playlist.YouTubePlaylistPlanner
+import com.nkudrin713.kradnik.download.playlist.PlaylistChoicePlanner
 import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
-import com.nkudrin713.kradnik.download.source.PostMode
 import com.nkudrin713.kradnik.download.source.PreparedPostSource
 import com.nkudrin713.kradnik.download.source.SourcePost
 import com.nkudrin713.kradnik.download.source.SourcePostItem
-import com.nkudrin713.kradnik.download.source.ThreadsPreparedSource
-import com.nkudrin713.kradnik.download.source.VkPreparedSource
-import com.nkudrin713.kradnik.download.source.YtDlpPreparedSource
+import com.nkudrin713.kradnik.download.testPlatformResolver
+import com.nkudrin713.kradnik.download.threads.ThreadsPreparedSource
+import com.nkudrin713.kradnik.download.vk.VkPreparedSource
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
+import com.nkudrin713.kradnik.ytdlp.YtDlpPreparedSource
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -35,7 +35,6 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
-import java.net.URI
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -48,14 +47,14 @@ class DownloadChoicePlannerTest {
     fun vkWallUsesTheSharedFullPostMenuWithoutAudioOrVideoChoices() = runTest {
         val url = "https://m.vk.ru/wall-1_2?from=feed"
         val canonical = "https://vk.com/wall-1_2"
-        val resolver = PlatformResolver()
+        val resolver = testPlatformResolver()
         every { platformResolver.platformOf(url) } returns DownloadPlatform.VK
         every { platformResolver.resolve(url) } returns resolver.resolve(url)
         every { platformResolver.resolve(canonical) } returns resolver.resolve(canonical)
         coEvery { downloadEngine.prepare(any(), true) } returns VkPreparedSource(
             MediaMetadata(title = "Post"),
             canonical,
-            SourcePost(emptyList(), "Text only", singleVideoOptions = false),
+            SourcePost(emptyList(), "Text only"),
         )
         val option = planner.plan(url, BotLanguage.RU).options.single()
         assertEquals("Пост целиком", option.label)
@@ -66,8 +65,43 @@ class DownloadChoicePlannerTest {
     }
 
     @Test
+    fun vkWallWithOneVideoStillOffersOnlyFullPost() = runTest {
+        val url = "https://vk.com/wall-1_2"
+        val specs = testPlatformResolver().resolve(url)
+        every { platformResolver.resolve(url) } returns specs
+        every { platformResolver.resolve(specs.video.normalizedUrl) } returns specs
+        coEvery { downloadEngine.prepare(any(), true) } returns VkPreparedSource(
+            metadata(listOf(videoFormat("v720", 720, 200_000_000), audioFormat("a1", 20_000_000))),
+            specs.video.normalizedUrl,
+            SourcePost(listOf(SourcePostItem(PostMediaKind.VIDEO, "video-1_3")), "Post text"),
+        )
+
+        val option = planner.plan(url, BotLanguage.RU).options.single()
+
+        assertEquals("post", option.key)
+        assertEquals("Пост целиком", option.label)
+        assertEquals(specs.video.copy(postText = "Post text", cacheKey = "vk:wall:-1_2:post:vk_post:choice:post:vk_post"), option.spec)
+    }
+
+    @Test
+    fun standaloneVkVideoKeepsQualityAudioAndCoverOptions() = runTest {
+        val url = "https://vk.com/video-1_2"
+        val specs = testPlatformResolver().resolve(url)
+        every { platformResolver.resolve(url) } returns specs
+        coEvery { downloadEngine.prepare(any(), true) } returns prepared(
+            metadata(listOf(videoFormat("v720", 720, 200_000_000), videoFormat("v480", 480, 100_000_000), audioFormat("a1", 20_000_000))),
+        )
+
+        val options = planner.plan(url).options
+
+        assertEquals(listOf("video_original", "video_480", "audio", "cover"), options.map { it.key })
+        assertEquals(listOf(OutputType.VIDEO, OutputType.VIDEO, OutputType.AUDIO, OutputType.COVER), options.map { it.spec.outputType })
+        assertTrue(options.all { it.spec.platform == DownloadPlatform.VK })
+    }
+
+    @Test
     fun threadsUsesCanonicalIdentityAndOnlyOffersVideos() = runTest {
-        val resolver = PlatformResolver()
+        val resolver = testPlatformResolver()
         val url = "https://threads.net/share/SHORT"
         val initial = resolver.resolve(url)
         val canonical = resolver.resolve("https://www.threads.com/t/POST/")
@@ -77,7 +111,7 @@ class DownloadChoicePlannerTest {
         coEvery { downloadEngine.prepare(DownloadRequestMapper.source(initial.video), true) } returns ThreadsPreparedSource(
             MediaMetadata(title = "Title", contentType = MediaContentType.CAROUSEL),
             canonical.video.normalizedUrl,
-            SourcePost(List(2) { SourcePostItem(PostMediaKind.VIDEO, it.toString()) }, mode = PostMode.VIDEOS_ONLY),
+            SourcePost(List(2) { SourcePostItem(PostMediaKind.VIDEO, it.toString()) }),
         )
         val album = planner.plan(url, BotLanguage.RU).options.single()
         assertEquals("Скачать видео", album.label)
@@ -89,7 +123,7 @@ class DownloadChoicePlannerTest {
         coEvery { downloadEngine.prepare(DownloadRequestMapper.source(initial.video), true) } returns ThreadsPreparedSource(
             MediaMetadata(title = "Title", thumbnail = "https://example.org/cover.jpg"),
             canonical.video.normalizedUrl,
-            SourcePost(listOf(SourcePostItem(PostMediaKind.VIDEO, "0")), mode = PostMode.VIDEOS_ONLY),
+            SourcePost(listOf(SourcePostItem(PostMediaKind.VIDEO, "0"))),
         )
         assertEquals(listOf(OutputType.VIDEO), planner.plan(url).options.map { it.spec.outputType })
     }
@@ -97,30 +131,48 @@ class DownloadChoicePlannerTest {
     @Test
     fun threadsRejectsUnresolvedPostIdentity() = runTest {
         val url = "https://threads.com/share/SHORT"
-        every { platformResolver.resolve(url) } returns PlatformResolver().resolve(url)
+        every { platformResolver.resolve(url) } returns testPlatformResolver().resolve(url)
         coEvery { downloadEngine.prepare(any(), true) } throws DownloadFailure(DownloadFailureReason.METADATA_UNAVAILABLE, "No canonical identity")
         assertFailsWith<DownloadChoicePlanningException> { planner.plan(url) }
+    }
+
+    @Test
+    fun threadsVideoNeverOffersAudioCoverOrFullPostDespiteAvailableMetadata() = runTest {
+        val url = "https://www.threads.com/t/POST"
+        val specs = testPlatformResolver().resolve(url)
+        every { platformResolver.resolve(url) } returns specs
+        every { platformResolver.resolve(specs.video.normalizedUrl) } returns specs
+        coEvery { downloadEngine.prepare(any(), true) } returns ThreadsPreparedSource(
+            metadata(listOf(videoFormat("v720", 720, 200_000_000), videoFormat("v480", 480, 100_000_000), audioFormat("a1", 20_000_000))),
+            specs.video.normalizedUrl,
+            SourcePost(listOf(SourcePostItem(PostMediaKind.VIDEO, "0"))),
+        )
+
+        val options = planner.plan(url).options
+
+        assertEquals(listOf("video_original", "video_480"), options.map { it.key })
+        assertTrue(options.all { it.spec.outputType == OutputType.VIDEO && it.spec.postText == null })
     }
 
     private val platformResolver: PlatformResolver = mockk()
     private val downloadEngine: DownloadEngine = mockk()
     private val uploadLimits = TelegramUploadLimits(2_000_000_000, localMode = true)
-    private val youtubePlaylistPlanner = mockk<YouTubePlaylistPlanner>()
+    private val playlistPlanner = mockk<PlaylistChoicePlanner>()
     private val availability = mockk<PlatformAvailability>(relaxed = true)
-    private val choices = MediaChoiceBuilder(AudioUploadPlanner(uploadLimits), uploadLimits, telegramMessages())
+    private val choices = MediaChoiceBuilder(AudioUploadPlanner(uploadLimits), uploadLimits, telegramMessages(), testPlatformResolver())
     private val planner = DownloadChoicePlanner(
         platformResolver = platformResolver,
         downloadEngine = downloadEngine,
         standard = StandardMediaChoicePlanner(choices),
         posts = PostChoicePlanner(choices, telegramMessages()),
         messages = telegramMessages(),
-        youtubePlaylistPlanner = youtubePlaylistPlanner,
+        playlistPlanner = playlistPlanner,
         availability = availability,
     )
 
     init {
         every { platformResolver.platformOf(any()) } returns DownloadPlatform.YOUTUBE
-        coEvery { youtubePlaylistPlanner.planOrNull(any(), any()) } returns null
+        coEvery { playlistPlanner.planOrNull(any(), any()) } returns null
     }
 
     @Test
@@ -131,7 +183,7 @@ class DownloadChoicePlannerTest {
 
             assertFailsWith<PlatformDisabledException> { planner.plan(URL) }
         }
-        coVerify(exactly = 0) { youtubePlaylistPlanner.planOrNull(any(), any()) }
+        coVerify(exactly = 0) { playlistPlanner.planOrNull(any(), any()) }
         coVerify(exactly = 0) { downloadEngine.prepare(any(), any()) }
         verify(exactly = 0) { platformResolver.resolve(any()) }
     }
@@ -139,12 +191,12 @@ class DownloadChoicePlannerTest {
     @Test
     fun disabledYoutubeAlsoBlocksPlaylistLinks() = runTest {
         val url = "https://www.youtube.com/playlist?list=PL123"
-        every { platformResolver.platformOf(url) } returns PlatformResolver().platformOf(url)
+        every { platformResolver.platformOf(url) } returns testPlatformResolver().platformOf(url)
         every { availability.requireEnabled(DownloadPlatform.YOUTUBE) } throws PlatformDisabledException(DownloadPlatform.YOUTUBE)
 
         assertFailsWith<PlatformDisabledException> { planner.plan(url) }
 
-        coVerify(exactly = 0) { youtubePlaylistPlanner.planOrNull(any(), any()) }
+        coVerify(exactly = 0) { playlistPlanner.planOrNull(any(), any()) }
     }
 
     @Test
@@ -327,6 +379,27 @@ class DownloadChoicePlannerTest {
         assertEquals("instagram_post", actual.options.single().spec.presetName)
         assertEquals("Post text", actual.options.single().spec.postText)
         assertEquals("owner", actual.mediaInfo.authorUsername)
+    }
+
+    @Test
+    fun mixedInstagramPostOffersOnlyFullPostDespiteVideoFormats() = runTest {
+        val video = resolved(OutputType.VIDEO).withInstagramPlatform()
+        val audio = resolved(OutputType.AUDIO).withInstagramPlatform()
+        val catalog = metadata(listOf(videoFormat("v720", 720, 200_000_000), audioFormat("a1", 20_000_000)))
+            .copy(contentType = MediaContentType.CAROUSEL, description = "Post text")
+        val items = listOf(SourcePostItem(PostMediaKind.PHOTO, "0"), SourcePostItem(PostMediaKind.VIDEO, "1"))
+        val prepared = object : PreparedPostSource {
+            override val metadata = catalog
+            override val post = SourcePost(items, catalog.description)
+        }
+        every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, audio)
+        coEvery { downloadEngine.prepare(any(), true) } returns prepared
+
+        val option = planner.plan(URL, BotLanguage.RU).options.single()
+
+        assertEquals("post", option.key)
+        assertEquals(OutputType.POST, option.spec.outputType)
+        assertEquals("Post text", option.spec.postText)
     }
 
     @Test

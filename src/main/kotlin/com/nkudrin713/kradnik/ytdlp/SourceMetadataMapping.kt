@@ -1,9 +1,12 @@
-package com.nkudrin713.kradnik.download.source
+package com.nkudrin713.kradnik.ytdlp
 
 import com.nkudrin713.kradnik.download.domain.MediaFormat
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
+import com.nkudrin713.kradnik.download.source.PreparedSource
 import com.nkudrin713.kradnik.ytdlp.YtDlpFormatDto
 import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
+
+data class YtDlpPreparedSource(override val metadata: MediaMetadata) : PreparedSource
 
 internal fun YtDlpMetadataDto.toMediaMetadata(): MediaMetadata = MediaMetadata(
     title = title,

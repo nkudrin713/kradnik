@@ -13,6 +13,17 @@ import kotlin.test.assertFailsWith
 
 class DownloadRequestMapperTest {
     @Test
+    fun oldPlaylistEntriesKeepTheirIdentityAndImplicitPlatform() {
+        val converter = PlaylistAudioEntriesJsonConverter()
+        val entries = converter.convertToEntityAttribute("""[{"position":3,"videoId":"legacy-id","url":"https://youtu.be/legacy-id","title":"Saved title","durationSeconds":60}]""")
+        assertEquals("legacy-id", entries.single().sourceId)
+        assertEquals(com.nkudrin713.kradnik.download.platform.DownloadPlatform.YOUTUBE, entries.single().platform)
+        val json = converter.convertToDatabaseColumn(entries)
+        kotlin.test.assertTrue("\"videoId\"" in json)
+        kotlin.test.assertFalse("\"sourceId\"" in json)
+    }
+
+    @Test
     fun oldMenuPreservesItsSelectionAndVersionsOnlyTheNewJobKey() {
         val options = DownloadChoiceOptionsJsonConverter().convertToEntityAttribute(
             """[{
@@ -51,7 +62,8 @@ class DownloadRequestMapperTest {
         assertEquals(job.cacheKey, adjusted.cacheKey)
         assertEquals("Saved description", request.postText)
         assertEquals("old-format", adjusted.source.formatSelector)
-        assertEquals(listOf("--embed-metadata", "--audio-quality", "96K"), adjusted.source.extraArgs)
+        assertEquals("96K", adjusted.source.audioQuality)
+        assertEquals(job.downloadExtraArgs, adjusted.source.extraArgs)
         assertEquals(listOf("--audio-quality", "40K", "--embed-metadata"), job.downloadExtraArgs)
     }
 

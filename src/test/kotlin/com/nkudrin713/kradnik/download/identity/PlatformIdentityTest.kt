@@ -2,16 +2,16 @@ package com.nkudrin713.kradnik.download.identity
 
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
-import com.nkudrin713.kradnik.download.platform.VK_AUDIO_PRESET
-import com.nkudrin713.kradnik.download.platform.VK_VIDEO_PRESET
+import com.nkudrin713.kradnik.download.testPlatformResolver
+import com.nkudrin713.kradnik.download.vk.VK_AUDIO_PRESET
+import com.nkudrin713.kradnik.download.vk.VK_VIDEO_PRESET
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class PlatformIdentityTest {
-    private val resolver = PlatformResolver()
+    private val resolver = testPlatformResolver()
 
     @Test
     fun resolvesYouTubeWatchUrl() {

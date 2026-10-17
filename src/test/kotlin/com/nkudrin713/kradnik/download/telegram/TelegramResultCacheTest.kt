@@ -2,11 +2,15 @@ package com.nkudrin713.kradnik.download.telegram
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.playlist.PlaylistCompletion
 import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.download.source.PlaylistSourceAdapter
+import com.nkudrin713.kradnik.download.testPlatformResolver
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -62,8 +66,7 @@ class TelegramResultCacheTest {
             ResultKeyFactory.audioSuffix("96K"),
         )
         assertEquals("youtube:video:track:audio:youtube_audio:audio:96K", singleKey)
-        assertEquals(singleKey, ResultKeyFactory.playlistAudioEntry("track"))
-        kotlin.test.assertNotEquals(singleKey, ResultKeyFactory.playlistAudioEntry("track", "320K"))
-        assertEquals("youtube:playlist:PL:audio:320:cbr:v1:playlist_first:zip", ResultKeyFactory.playlistZip(ResultKeyFactory.playlist("PL", "playlist_first")))
+        assertEquals(singleKey, testPlatformResolver().adapter(DownloadPlatform.YOUTUBE).let { (it as PlaylistSourceAdapter).playlistItemCacheKey(PlaylistAudioEntry(1, "track", "url", "title", null), null) })
+        assertEquals("youtube:playlist:PL:audio:320:cbr:v1:playlist_first:zip", ResultKeyFactory.playlistZip("youtube:playlist:PL:audio:320:cbr:v1:playlist_first"))
     }
 }

@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.telegram
 
+import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.choice.CreateDownloadRetryCommand
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
@@ -27,7 +28,7 @@ import org.springframework.stereotype.Component
 import java.util.UUID
 
 @Component
-class TelegramJobProgress(private val sender: TelegramSender, private val messages: TelegramMessages, private val jobs: DownloadJobService, private val retrySessions: DownloadChoiceSessionService) {
+class TelegramJobProgress(private val sender: TelegramSender, private val messages: TelegramMessages, private val jobs: DownloadJobService, private val retrySessions: DownloadChoiceSessionService, private val engine: DownloadEngine) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     fun forJob(job: DownloadJob): JobProgress = object : JobProgress {
@@ -113,7 +114,7 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
                 return@bestEffort
             }
             val header = messages.text(job.language, TelegramMessage.PLAYLIST_PARTIAL_SUCCESS, result.successfulCount, job.playlistEntries.size)
-            val report = PlaylistFailureReport(messages).render(header, job.playlistEntries, result.failures, job.language)
+            val report = PlaylistFailureReport(messages, engine).render(header, job.playlistEntries, result.failures, job.language)
             publishReport(job, report, result.failures)
         }
     }
@@ -123,7 +124,7 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
             if (error is PlaylistEmptyException) {
                 val header = messages.text(job.language, TelegramMessage.PLAYLIST_ALL_FAILED)
                 val token = address(job)?.let { retryToken(job, it) }
-                publishReport(job, PlaylistFailureReport(messages).render(header, job.playlistEntries, error.failures, job.language), error.failures, token)
+                publishReport(job, PlaylistFailureReport(messages, engine).render(header, job.playlistEntries, error.failures, job.language), error.failures, token)
                 return@bestEffort
             }
             val key = when {

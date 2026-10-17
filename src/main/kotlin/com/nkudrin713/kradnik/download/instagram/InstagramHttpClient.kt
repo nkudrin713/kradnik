@@ -4,9 +4,9 @@ import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadRejectedException
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
+import com.nkudrin713.kradnik.download.http.HttpMediaDownloader
+import com.nkudrin713.kradnik.download.http.MediaHttpException
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.source.HttpMediaDownloader
-import com.nkudrin713.kradnik.download.source.MediaHttpException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import org.slf4j.LoggerFactory

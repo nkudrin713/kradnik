@@ -2,7 +2,7 @@ package com.nkudrin713.kradnik.download.playlist
 
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
-import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
+import com.nkudrin713.kradnik.download.testPlatformResolver
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
@@ -13,16 +13,14 @@ import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class YouTubePlaylistPlannerTest {
+class PlaylistChoicePlannerTest {
     private val ytDlpService = mockk<YtDlpService>()
-    private val planner = YouTubePlaylistPlanner(
-        ytDlpService,
-        TelegramUploadLimits(2_000_000_000, localMode = true),
+    private val planner = PlaylistChoicePlanner(
+        testPlatformResolver(ytDlpService),
         telegramMessages(),
     )
 
@@ -65,7 +63,7 @@ class YouTubePlaylistPlannerTest {
     @Test
     fun keepsApproximateOversizeOptionsAvailableForRuntimeChecks() = runTest {
         coEvery { ytDlpService.extractPlaylistMetadata(URL) } returns playlist(3)
-        val smallLimitPlanner = YouTubePlaylistPlanner(ytDlpService, TelegramUploadLimits(1_000_000), telegramMessages())
+        val smallLimitPlanner = PlaylistChoicePlanner(testPlatformResolver(ytDlpService), telegramMessages())
         val plan = assertNotNull(smallLimitPlanner.planOrNull(URL, BotLanguage.RU))
         assertTrue(plan.options.first().available)
         assertTrue(plan.options.last().available)

@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
@@ -16,6 +17,7 @@ import com.nkudrin713.kradnik.download.playlist.ZipPlaylistWorkflow
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramJobProgress
 import com.nkudrin713.kradnik.download.telegram.TelegramPlaylistSender
+import com.nkudrin713.kradnik.download.testPlatformResolver
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
 import com.nkudrin713.kradnik.telegram.TelegramSender
@@ -220,8 +222,8 @@ class ZipPlaylistDeliveryTest {
         return PlaylistJobProcessor(
             mockk(),
             ZipPlaylistWorkflow(jobs, downloader, builder, TelegramPlaylistSender(sender, TelegramBotProperties(token = "test")), TelegramUploadLimits(limit), cleaner, PlaylistWorkspaceBudget(TelegramUploadLimits(limit)), timeout = timeout),
-            JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true))),
-            TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true)),
+            JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true), DownloadEngine(testPlatformResolver()))),
+            TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true), DownloadEngine(testPlatformResolver())),
             cleaner,
         )
     }

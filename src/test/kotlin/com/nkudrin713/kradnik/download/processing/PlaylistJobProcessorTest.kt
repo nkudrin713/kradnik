@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.processing
 
+import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
@@ -16,6 +17,7 @@ import com.nkudrin713.kradnik.download.telegram.DeliveryContext
 import com.nkudrin713.kradnik.download.telegram.TelegramJobProgress
 import com.nkudrin713.kradnik.download.telegram.TelegramPlaylistSender
 import com.nkudrin713.kradnik.download.telegram.TelegramResultCache
+import com.nkudrin713.kradnik.download.testPlatformResolver
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.nkudrin713.kradnik.ytdlp.YtDlpService
@@ -166,10 +168,10 @@ class PlaylistJobProcessorTest {
     }
 
     private fun processor() = PlaylistJobProcessor(
-        telegramDelivery = AudioMessagesPlaylistWorkflow(jobs, PlaylistEntryDownloader(ytDlp), fileSender, TelegramResultCache(jobs), WorkDirCleaner(root.toString())),
+        telegramDelivery = AudioMessagesPlaylistWorkflow(jobs, PlaylistEntryDownloader(DownloadEngine(testPlatformResolver(ytDlp))), fileSender, TelegramResultCache(jobs), WorkDirCleaner(root.toString())),
         zipDelivery = mockk(),
-        lifecycle = JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true))),
-        progress = TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true)),
+        lifecycle = JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true), DownloadEngine(testPlatformResolver()))),
+        progress = TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true), DownloadEngine(testPlatformResolver())),
         workDirCleaner = WorkDirCleaner(root.toString()),
     )
 
@@ -179,7 +181,7 @@ class PlaylistJobProcessorTest {
         val job = DownloadJob(id = 1, telegramChatId = 20, telegramStatusMessageId = 22, workloadType = DownloadWorkloadType.PLAYLIST_AUDIO)
         coEvery { delivery.run(1, any(), any(), any(), any()) } returns PlaylistDeliveryResult(1, 1, PlaylistCompletion.AudioMessages(1))
         every { jobs.markCompleted(job, "playlist:1") } returns false
-        val processor = PlaylistJobProcessor(delivery, mockk(), JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true))), TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true)), WorkDirCleaner(root.toString()))
+        val processor = PlaylistJobProcessor(delivery, mockk(), JobLifecycle(jobs, TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true), DownloadEngine(testPlatformResolver()))), TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true), DownloadEngine(testPlatformResolver())), WorkDirCleaner(root.toString()))
 
         processor.process(job)
 

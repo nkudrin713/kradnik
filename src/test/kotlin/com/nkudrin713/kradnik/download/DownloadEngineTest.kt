@@ -11,22 +11,23 @@ import com.nkudrin713.kradnik.download.instagram.InstagramEmbedDownloader
 import com.nkudrin713.kradnik.download.instagram.InstagramEmbedException
 import com.nkudrin713.kradnik.download.instagram.InstagramMedia
 import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
+import com.nkudrin713.kradnik.download.instagram.InstagramPreparedSource
+import com.nkudrin713.kradnik.download.instagram.InstagramSourceAdapter
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.processing.JobProgress
 import com.nkudrin713.kradnik.download.single.CoverHandler
-import com.nkudrin713.kradnik.download.source.InstagramPreparedSource
-import com.nkudrin713.kradnik.download.source.InstagramSourceAdapter
 import com.nkudrin713.kradnik.download.source.SourceMediaType
 import com.nkudrin713.kradnik.download.source.SourceRequest
-import com.nkudrin713.kradnik.download.source.VkSourceAdapter
-import com.nkudrin713.kradnik.download.source.YtDlpSourceAdapter
-import com.nkudrin713.kradnik.download.source.toMediaMetadata
+import com.nkudrin713.kradnik.download.vk.VkSourceAdapter
+import com.nkudrin713.kradnik.download.youtube.YouTubeSourceAdapter
 import com.nkudrin713.kradnik.ytdlp.YtDlpException
 import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import com.nkudrin713.kradnik.ytdlp.YtDlpService
+import com.nkudrin713.kradnik.ytdlp.toMediaMetadata
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -43,7 +44,7 @@ class DownloadEngineTest {
     private val ytDlpService: YtDlpService = mockk()
     private val instagramDownloader: InstagramEmbedDownloader = mockk()
     private val coverDownloader: CoverDownloader = mockk()
-    private val engine = DownloadEngine(YtDlpSourceAdapter(ytDlpService), InstagramSourceAdapter(instagramDownloader, ytDlpService), mockk(), VkSourceAdapter(mockk(), mockk(), ytDlpService, YtDlpSourceAdapter(ytDlpService)))
+    private val engine = DownloadEngine(PlatformResolver(listOf(YouTubeSourceAdapter(ytDlpService), InstagramSourceAdapter(instagramDownloader, ytDlpService), VkSourceAdapter(mockk(), mockk(), ytDlpService))))
 
     @Test
     fun preparesAndDownloadsVkVideo() = runTest {
@@ -160,7 +161,7 @@ class DownloadEngineTest {
             additionalFiles = listOf(outputDir.resolve("02.jpg")),
         )
         coEvery { instagramDownloader.prepare(videoSpec) } throws InstagramContentUnavailableException()
-        coEvery { ytDlpService.extractInstagramImageMetadata(videoSpec) } returns metadata
+        coEvery { ytDlpService.extractImageMetadata(videoSpec) } returns metadata
         every { instagramDownloader.prepareFromMetadata(videoSpec, metadata) } returns prepared
         coEvery { instagramDownloader.downloadImages(prepared, outputDir) } returns downloaded
 
@@ -176,7 +177,7 @@ class DownloadEngineTest {
         val embedError = InstagramEmbedException("Embed failed")
         val fallbackError = YtDlpException("Fallback failed")
         coEvery { instagramDownloader.prepare(request) } throws embedError
-        coEvery { ytDlpService.extractInstagramImageMetadata(request) } throws fallbackError
+        coEvery { ytDlpService.extractImageMetadata(request) } throws fallbackError
         val error = assertFailsWith<InstagramEmbedException> { engine.prepare(request) }
         assertSame(embedError, error)
         assertSame(fallbackError, error.suppressed.single())

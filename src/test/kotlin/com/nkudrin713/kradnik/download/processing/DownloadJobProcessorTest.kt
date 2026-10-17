@@ -3,7 +3,6 @@ package com.nkudrin713.kradnik.download.processing
 import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
-import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
@@ -19,18 +18,19 @@ import com.nkudrin713.kradnik.download.single.CoverHandler
 import com.nkudrin713.kradnik.download.single.ImagesHandler
 import com.nkudrin713.kradnik.download.single.SingleMediaHandlers
 import com.nkudrin713.kradnik.download.single.VideoHandler
-import com.nkudrin713.kradnik.download.source.YtDlpPreparedSource
 import com.nkudrin713.kradnik.download.telegram.CachedMedia
 import com.nkudrin713.kradnik.download.telegram.DeliveryContext
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.telegram.TelegramJobProgress
 import com.nkudrin713.kradnik.download.telegram.TelegramMediaKind
 import com.nkudrin713.kradnik.download.telegram.TelegramResultCache
+import com.nkudrin713.kradnik.download.testPlatformResolver
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
 import com.nkudrin713.kradnik.telegram.TelegramSendException
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
+import com.nkudrin713.kradnik.ytdlp.YtDlpPreparedSource
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
@@ -50,7 +50,6 @@ import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 
 class DownloadJobProcessorTest {
     @TempDir lateinit var root: Path
@@ -65,7 +64,7 @@ class DownloadJobProcessorTest {
     private val prepared = YtDlpPreparedSource(mockk<MediaMetadata>(relaxed = true))
 
     private fun processor(preflightService: DownloadPreflightService = preflight): DownloadJobProcessor {
-        val progress = TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true))
+        val progress = TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true), DownloadEngine(testPlatformResolver()))
         return DownloadJobProcessor(
             SingleMediaHandlers(VideoHandler(engine, preflightService, video), AudioHandler(engine, preflightService), CoverHandler(engine, preflightService, mockk()), ImagesHandler(engine, preflightService), mockk()),
             TelegramResultCache(jobs),

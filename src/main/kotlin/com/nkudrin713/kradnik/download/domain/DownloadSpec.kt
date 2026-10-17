@@ -1,7 +1,6 @@
 package com.nkudrin713.kradnik.download.domain
 
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.ytdlp.YtDlpPresets
 
 /** Persisted menu snapshot. Runtime execution uses separate single-media and playlist requests. */
 data class DownloadSpec(
@@ -19,8 +18,6 @@ data class DownloadSpec(
     val playlistTitle: String? = null,
     val playlistEntries: List<PlaylistAudioEntry> = emptyList(),
 ) {
-    fun withAudioQuality(audioQuality: String): DownloadSpec = copy(extraArgs = YtDlpPresets.withAudioQuality(extraArgs, audioQuality))
-
     companion object {
         fun fromJob(job: DownloadJob): DownloadSpec {
             return DownloadSpec(

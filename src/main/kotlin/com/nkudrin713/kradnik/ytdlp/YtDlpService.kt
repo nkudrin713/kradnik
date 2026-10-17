@@ -7,7 +7,6 @@ import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
@@ -37,8 +36,6 @@ private const val PRINT = "--print"
 private const val OUTPUT_NA_PLACEHOLDER = "--output-na-placeholder"
 private const val FILEPATH_MARKER = "KRADNIK_FILEPATH:"
 private const val FINAL_FILEPATH = "after_move:${FILEPATH_MARKER}%(filepath)j"
-private const val EXTRACTOR_ARGS = "--extractor-args"
-private const val YOUTUBE_PLAYER_CLIENT = "youtube:player_client=mweb"
 
 private const val TITLE_EXT = "%(title)s.%(ext)s"
 private const val MAX_METADATA_STDOUT_CHARS = 32 * 1024 * 1024
@@ -78,16 +75,12 @@ class YtDlpService(
     private val uploadLimits: TelegramUploadLimits = TelegramUploadLimits(
         TelegramUploadLimits.CLOUD_MAX_UPLOAD_BYTES,
     ),
-    @Value($$"${download.youtube.po-token-provider-url:}")
-    private val youtubePoTokenProviderUrl: String = "",
     @Value($$"${download.yt-dlp.metadata-timeout:30s}")
     private val metadataTimeout: Duration = Duration.ofSeconds(30),
     @Value($$"${download.yt-dlp.download-timeout:30m}")
     private val downloadTimeout: Duration = Duration.ofMinutes(30),
     @Value($$"${download.yt-dlp.cloud-max-workspace-bytes:536870912}")
     private val cloudMaxWorkspaceBytes: Long = 536_870_912,
-    @Value($$"${download.yt-dlp.plugin-directory:yt-dlp-plugins}")
-    private val pluginDirectory: String = "yt-dlp-plugins",
 ) {
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
 
@@ -102,31 +95,31 @@ class YtDlpService(
      * Disables playlist expansion and applies the metadata timeout without downloading media.
      * Process failures and empty or truncated output are rejected before JSON parsing.
      */
-    suspend fun extractMetadata(spec: SourceRequest): YtDlpMetadataDto {
-        return extractMetadata(spec, spec.formatSelector)
+    suspend fun extractMetadata(spec: SourceRequest, options: List<String> = emptyList()): YtDlpMetadataDto {
+        return extractMetadata(spec, spec.formatSelector, options)
     }
 
     /**
      * Leaves the format selector unset so [DownloadChoicePlanner][com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner]
      * receives the available format catalog. Uses the same single-item extraction and failure checks as [extractMetadata].
      */
-    suspend fun extractCatalogMetadata(spec: SourceRequest): YtDlpMetadataDto {
-        return extractMetadata(spec, formatSelector = null)
+    suspend fun extractCatalogMetadata(spec: SourceRequest, options: List<String> = emptyList()): YtDlpMetadataDto {
+        return extractMetadata(spec, formatSelector = null, options)
     }
 
     /**
-     * Extracts a flat YouTube playlist listing without downloading media or resolving each entry's formats.
-     * Applies the metadata timeout and configured YouTube token provider; item-count validation belongs to the caller.
+     * Extracts a flat playlist listing without downloading media or resolving each entry's formats.
+     * Applies the metadata timeout and adapter options; item-count validation belongs to the caller.
      * Rejects failed, empty, or truncated process output before parsing the playlist metadata.
      */
-    suspend fun extractPlaylistMetadata(url: String): YtDlpMetadataDto {
+    suspend fun extractPlaylistMetadata(url: String, options: List<String> = emptyList()): YtDlpMetadataDto {
         val result = processRunner.run(
             YtDlpCommand(
                 args = buildList {
                     add(DUMP_SINGLE_JSON)
                     add(FLAT_PLAYLIST)
                     add(NO_WARNINGS)
-                    addAll(youtubePoTokenArgs(DownloadPlatform.YOUTUBE))
+                    addAll(options)
                     add(url)
                 },
                 workingDir = null,
@@ -138,10 +131,10 @@ class YtDlpService(
     }
 
     /**
-     * Extracts Instagram posts and mixed carousels without treating absent video formats as an error.
+     * Extracts posts and mixed carousels without treating absent video formats as an error.
      * Applies the metadata timeout and normal process/output checks; this does not download the images.
      */
-    suspend fun extractInstagramImageMetadata(spec: SourceRequest): YtDlpMetadataDto {
+    suspend fun extractImageMetadata(spec: SourceRequest): YtDlpMetadataDto {
         val result = processRunner.run(
             YtDlpCommand(
                 args = listOf(
@@ -158,12 +151,12 @@ class YtDlpService(
         return parseMetadataResult(result)
     }
 
-    suspend fun extractPostMetadata(spec: SourceRequest, catalog: Boolean): YtDlpMetadataDto {
+    suspend fun extractPostMetadata(spec: SourceRequest, catalog: Boolean, options: List<String> = emptyList()): YtDlpMetadataDto {
         val result = processRunner.run(
             YtDlpCommand(
                 args = buildList {
                     addAll(listOf(DUMP_SINGLE_JSON, NO_PLAYLIST, NO_WARNINGS))
-                    addAll(pluginArgs(spec.platform))
+                    addAll(options)
                     if (!catalog) addAll(listOf(FORMAT, spec.formatSelector))
                     add(spec.originalUrl)
                 },
@@ -178,6 +171,7 @@ class YtDlpService(
     private suspend fun extractMetadata(
         spec: SourceRequest,
         formatSelector: String?,
+        options: List<String>,
     ): YtDlpMetadataDto {
         val result = processRunner.run(
             YtDlpCommand(
@@ -192,7 +186,7 @@ class YtDlpService(
                         add(FORMAT)
                         add(formatSelector)
                     }
-                    addAll(youtubePoTokenArgs(spec.platform))
+                    addAll(options)
                     add(spec.originalUrl)
                 },
                 workingDir = null,
@@ -225,6 +219,7 @@ class YtDlpService(
     suspend fun download(
         spec: SourceRequest,
         outputDir: Path,
+        options: List<String> = emptyList(),
     ): DownloadedFile {
         val args = buildList {
             add(NO_PLAYLIST)
@@ -240,9 +235,8 @@ class YtDlpService(
             }
             add(PRINT)
             add(FINAL_FILEPATH)
-            addAll(youtubePoTokenArgs(spec.platform))
-            addAll(pluginArgs(spec.platform))
-            addAll(spec.extraArgs)
+            addAll(options)
+            addAll(spec.audioQuality?.let { YtDlpPresets.withAudioQuality(spec.extraArgs, it) } ?: spec.extraArgs)
             add(spec.originalUrl)
         }
 
@@ -290,26 +284,6 @@ class YtDlpService(
         }
 
         return file
-    }
-
-    private fun youtubePoTokenArgs(platform: DownloadPlatform): List<String> {
-        val providerUrl = youtubePoTokenProviderUrl.trim().trimEnd('/')
-        if (platform != DownloadPlatform.YOUTUBE || providerUrl.isEmpty()) {
-            return emptyList()
-        }
-
-        return listOf(
-            EXTRACTOR_ARGS,
-            YOUTUBE_PLAYER_CLIENT,
-            EXTRACTOR_ARGS,
-            "youtubepot-bgutilhttp:base_url=$providerUrl",
-        )
-    }
-
-    private fun pluginArgs(platform: DownloadPlatform): List<String> = if (platform == DownloadPlatform.THREADS) {
-        listOf("--plugin-dirs", Path.of(pluginDirectory).toAbsolutePath().toString(), "--concat-playlist", "never")
-    } else {
-        emptyList()
     }
 
     private fun maxWorkspaceBytes(): Long {

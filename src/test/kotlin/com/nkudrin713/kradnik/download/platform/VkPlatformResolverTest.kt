@@ -2,12 +2,15 @@ package com.nkudrin713.kradnik.download.platform
 
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
+import com.nkudrin713.kradnik.download.testPlatformResolver
+import com.nkudrin713.kradnik.download.vk.VK_AUDIO_PRESET
+import com.nkudrin713.kradnik.download.vk.VK_VIDEO_PRESET
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class VkPlatformResolverTest {
-    private val resolver = PlatformResolver()
+    private val resolver = testPlatformResolver()
 
     @Test
     fun wallLinksHaveOnePostIdentityAndDoNotSelectAnAttachedVideo() {
@@ -64,6 +67,19 @@ class VkPlatformResolverTest {
         assertEquals(VK_AUDIO_PRESET, actual.presetName)
         assertEquals("ba/bestaudio/best", actual.formatSelector)
         assertEquals(listOf("-x", "--audio-format", "mp3"), actual.extraArgs)
+    }
+
+    @Test
+    fun directVideoKeepsAccessParametersAndTakesPriorityOverQueryTarget() {
+        val url = "https://vk.com/video-1_2?list=access_key&z=video-3_4"
+        val specs = resolver.resolve(" $url ")
+
+        assertEquals(url, specs.video.originalUrl)
+        assertEquals(url, specs.audio.originalUrl)
+        assertEquals("https://vk.com/video-1_2", specs.video.normalizedUrl)
+        assertEquals(specs.video.normalizedUrl, specs.audio.normalizedUrl)
+        assertEquals("vk:video:-1_2:video:$VK_VIDEO_PRESET", specs.video.cacheKey)
+        assertEquals("vk:video:-1_2:audio:$VK_AUDIO_PRESET", specs.audio.cacheKey)
     }
 
     @Test

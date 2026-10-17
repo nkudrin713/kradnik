@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download.platform
+package com.nkudrin713.kradnik.download.threads
 
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull
 import com.nkudrin713.kradnik.download.identity.pathSegments

@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download.platform
+package com.nkudrin713.kradnik.download.vk
 
 import com.nkudrin713.kradnik.download.identity.extractQueryParameter
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull

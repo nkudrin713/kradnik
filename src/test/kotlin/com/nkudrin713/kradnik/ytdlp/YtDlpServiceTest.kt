@@ -1,7 +1,6 @@
 package com.nkudrin713.kradnik.ytdlp
 
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.source.SourceRequest
@@ -27,14 +26,27 @@ import kotlin.test.assertTrue
 
 class YtDlpServiceTest {
     @Test
-    fun threadsMetadataKeepsEntriesAndLoadsBundledPlugin() = runTest {
+    fun appliesRuntimeAudioQualityWithoutChangingSavedArguments(@TempDir directory: Path) = runTest {
+        val source = testRequest().copy(extraArgs = listOf("-x", "--audio-quality", "96K", "--embed-metadata"), audioQuality = "40K")
+        val file = directory.resolve("track.mp3").apply { writeText("audio") }
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(stdout = "KRADNIK_FILEPATH:\"$file\"", timedOut = false, exitCode = 0)
+        service.download(source, directory)
+        val command = slot<Command>()
+        coVerify { processRunner.run(capture(command)) }
+        assertEquals("40K", command.captured.args[command.captured.args.indexOf("--audio-quality") + 1])
+        assertFalse("96K" in command.captured.args)
+        assertEquals(listOf("-x", "--audio-quality", "96K", "--embed-metadata"), source.extraArgs)
+    }
+
+    @Test
+    fun postMetadataKeepsEntriesAndAdapterOptions() = runTest {
         val source = testRequest().copy(platform = DownloadPlatform.THREADS)
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             stdout = """{"id":"POST","webpage_url":"https://www.threads.com/t/POST/","entries":[{"id":"POST_6"},{"id":"POST_9"}]}""",
             timedOut = false,
             exitCode = 0,
         )
-        val metadata = service.extractPostMetadata(source, catalog = true)
+        val metadata = service.extractPostMetadata(source, catalog = true, options = listOf("--plugin-dirs", "yt-dlp-plugins", "--concat-playlist", "never"))
         assertEquals(listOf("POST_6", "POST_9"), metadata.entries?.map { it.id })
         val command = slot<Command>()
         coVerify { processRunner.run(capture(command)) }
@@ -65,10 +77,6 @@ class YtDlpServiceTest {
             maxUploadBytes = TelegramUploadLimits.LOCAL_MAX_UPLOAD_BYTES,
             localMode = true,
         ),
-    )
-    private val serviceWithProvider = YtDlpService(
-        processRunner = processRunner,
-        youtubePoTokenProviderUrl = "http://youtube-pot-provider:4416/",
     )
 
     @Test
@@ -167,7 +175,7 @@ class YtDlpServiceTest {
             exitCode = 0,
         )
 
-        val actual = service.extractInstagramImageMetadata(testRequest())
+        val actual = service.extractImageMetadata(testRequest())
 
         assertEquals(2, actual.entries?.size)
         assertEquals("1", actual.entries?.first()?.thumbnails?.last()?.id)
@@ -344,14 +352,14 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun extractMetadataAddsPoTokenProviderArgsForYouTube() = runTest {
+    fun extractMetadataPassesAdapterOptions() = runTest {
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             stdout = """{"id":"video-id","title":"Test video"}""",
             timedOut = false,
             exitCode = 0,
         )
 
-        serviceWithProvider.extractMetadata(youtubeRequest())
+        service.extractMetadata(youtubeRequest(), listOf("--extractor-args", YOUTUBE_PLAYER_CLIENT_ARG, "--extractor-args", YOUTUBE_PROVIDER_ARG))
 
         val commandSlot = slot<Command>()
         coVerify { processRunner.run(capture(commandSlot)) }
@@ -366,7 +374,7 @@ class YtDlpServiceTest {
             exitCode = 0,
         )
 
-        serviceWithProvider.extractMetadata(testRequest())
+        service.extractMetadata(testRequest())
 
         val commandSlot = slot<Command>()
         coVerify { processRunner.run(capture(commandSlot)) }
@@ -524,7 +532,7 @@ class YtDlpServiceTest {
     }
 
     @Test
-    fun downloadAddsPoTokenProviderArgsForYouTube(@TempDir tempDir: Path) = runTest {
+    fun downloadPassesAdapterOptions(@TempDir tempDir: Path) = runTest {
         val file = tempDir.resolve("video.mp4")
         file.writeText("video")
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
@@ -533,7 +541,7 @@ class YtDlpServiceTest {
             exitCode = 0,
         )
 
-        serviceWithProvider.download(youtubeRequest(), tempDir)
+        service.download(youtubeRequest(), tempDir, listOf("--extractor-args", YOUTUBE_PLAYER_CLIENT_ARG, "--extractor-args", YOUTUBE_PROVIDER_ARG))
 
         val commandSlot = slot<Command>()
         coVerify { processRunner.run(capture(commandSlot)) }

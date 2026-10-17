@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download.source
+package com.nkudrin713.kradnik.download.vk
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.download.DownloadEngine
@@ -9,6 +9,7 @@ import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
+import com.nkudrin713.kradnik.download.http.HttpMediaDownloader
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
@@ -16,6 +17,11 @@ import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.processing.JobProgress
 import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.single.PostHandler
+import com.nkudrin713.kradnik.download.testPlatformResolver
+import com.nkudrin713.kradnik.download.vk.VkPostClient
+import com.nkudrin713.kradnik.download.vk.VkPreparedSource
+import com.nkudrin713.kradnik.download.vk.VkSourceAdapter
+import com.nkudrin713.kradnik.ytdlp.YtDlpPreparedSource
 import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -34,10 +40,9 @@ class VkSourceAdapterTest {
     private val client = mockk<VkPostClient>()
     private val media = mockk<HttpMediaDownloader>()
     private val ytDlp = mockk<YtDlpService>()
-    private val singles = mockk<YtDlpSourceAdapter>()
-    private val adapter = VkSourceAdapter(client, media, ytDlp, singles)
+    private val adapter = VkSourceAdapter(client, media, ytDlp)
     private val mapper = jacksonObjectMapper()
-    private val source = DownloadRequestMapper.source(PlatformResolver().resolve("https://vk.ru/wall-1_2").video)
+    private val source = DownloadRequestMapper.source(testPlatformResolver().resolve("https://vk.ru/wall-1_2").video)
     private val photo = """{"type":"photo","photo":{"sizes":[{"url":"https://sun9-1.userapi.com/small.jpg","width":100,"height":100},{"url":"https://sun9-1.userapi.com/full.jpg","width":1200,"height":800}]}}"""
     private val video = """{"type":"video","video":{"owner_id":-7,"id":9,"access_key":"abc123"}}"""
 
@@ -46,7 +51,7 @@ class VkSourceAdapterTest {
         coEvery { client.fetch("-1_2") } returns mapper.readTree("""{"text":"Fresh post text","attachments":[]}""")
         val limits = TelegramUploadLimits(1000)
         val handler = PostHandler(
-            DownloadEngine(mockk(), mockk(), mockk(), adapter),
+            DownloadEngine(PlatformResolver(listOf(adapter))),
             DownloadPreflightService(AudioUploadPlanner(limits), limits),
             mockk(),
         )
@@ -64,14 +69,13 @@ class VkSourceAdapterTest {
         assertEquals(listOf(PostMediaKind.PHOTO, PostMediaKind.VIDEO, PostMediaKind.PHOTO), post.mediaKinds)
         assertEquals(post.items[0], post.items[2])
         assertEquals("https://vk.com/wall-1_2", post.canonicalUrl)
-        assertEquals(false, post.post.singleVideoOptions)
         val result = DownloadedFile(directory.resolve("photo.jpg"), 100)
         coEvery { media.download(any(), any(), any(), any(), any()) } returns result
         assertEquals(result, adapter.downloadPostItem(source, post, 0, directory))
         coVerify { media.download(URI("https://sun9-1.userapi.com/full.jpg"), directory.resolve("photo.jpg"), "image/", 10_000_000L, Duration.ofMinutes(10)) }
         coEvery { ytDlp.download(any(), directory) } returns result
         adapter.downloadPostItem(source, post, 1, directory)
-        val videoSource = DownloadRequestMapper.source(PlatformResolver().resolve("https://vk.com/video-7_9?list=abc123").video)
+        val videoSource = DownloadRequestMapper.source(testPlatformResolver().resolve("https://vk.com/video-7_9?list=abc123").video)
         coVerify { ytDlp.download(videoSource, directory) }
     }
 
@@ -108,10 +112,10 @@ class VkSourceAdapterTest {
     }
 
     @Test
-    fun delegatesStandaloneVideosWithoutRequestingWall() = runTest {
-        val request = DownloadRequestMapper.source(PlatformResolver().resolve("https://vk.com/video-1_2").video)
+    fun preparesStandaloneVideoWithoutRequestingWall() = runTest {
+        val request = DownloadRequestMapper.source(testPlatformResolver().resolve("https://vk.com/video-1_2").video)
         val prepared = YtDlpPreparedSource(MediaMetadata())
-        coEvery { singles.prepare(request, true) } returns prepared
+        coEvery { ytDlp.extractCatalogMetadata(request) } returns mapper.treeToValue(mapper.readTree("{}"), com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto::class.java)
         assertEquals(prepared, adapter.prepare(request, true))
         coVerify(exactly = 0) { client.fetch(any()) }
     }

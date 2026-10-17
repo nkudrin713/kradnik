@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download.source
+package com.nkudrin713.kradnik.download.vk
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper

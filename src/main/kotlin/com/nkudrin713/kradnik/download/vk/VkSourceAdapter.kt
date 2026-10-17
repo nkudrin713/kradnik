@@ -1,33 +1,104 @@
-package com.nkudrin713.kradnik.download.source
+package com.nkudrin713.kradnik.download.vk
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
+import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaContentType
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
-import com.nkudrin713.kradnik.download.platform.PlatformResolver
-import com.nkudrin713.kradnik.download.platform.parseVkPostUrl
+import com.nkudrin713.kradnik.download.http.HttpMediaDownloader
+import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
+import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
 import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
+import com.nkudrin713.kradnik.download.source.MediaSelection
+import com.nkudrin713.kradnik.download.source.PostSourceAdapter
+import com.nkudrin713.kradnik.download.source.PreparedPostSource
+import com.nkudrin713.kradnik.download.source.PreparedSource
+import com.nkudrin713.kradnik.download.source.SourceMediaType
+import com.nkudrin713.kradnik.download.source.SourcePost
+import com.nkudrin713.kradnik.download.source.SourcePostItem
+import com.nkudrin713.kradnik.download.source.SourceRequest
+import com.nkudrin713.kradnik.download.vk.parseVkPostUrl
+import com.nkudrin713.kradnik.ytdlp.YtDlpPreparedSource
+import com.nkudrin713.kradnik.ytdlp.YtDlpPresets
+import com.nkudrin713.kradnik.ytdlp.YtDlpSelections
 import com.nkudrin713.kradnik.ytdlp.YtDlpService
+import com.nkudrin713.kradnik.ytdlp.toMediaMetadata
 import org.springframework.stereotype.Component
 import org.springframework.web.util.HtmlUtils
 import java.net.URI
 import java.nio.file.Path
 import java.time.Duration
 
+internal const val VK_VIDEO_PRESET = "vk_mobile_video"
+internal const val VK_AUDIO_PRESET = "vk_audio"
+
 @Component
-class VkSourceAdapter(private val posts: VkPostClient, private val media: HttpMediaDownloader, private val ytDlp: YtDlpService, private val singles: YtDlpSourceAdapter) : PostSourceAdapter {
+class VkSourceAdapter(private val posts: VkPostClient, private val media: HttpMediaDownloader, private val ytDlp: YtDlpService) : PostSourceAdapter {
+    override val platform = DownloadPlatform.VK
+    override fun supports(url: String): Boolean = isVkHost(url)
+    override fun select(spec: DownloadSpec, selection: MediaSelection): DownloadSpec = YtDlpSelections.select(spec, selection)
+
+    override fun resolve(url: String): PlatformDownloadSpecs {
+        val media = parseVkMediaUrl(url)
+        if (media.type == "wall") {
+            val spec = DownloadSpec(
+                originalUrl = media.original,
+                normalizedUrl = media.normalized,
+                cacheKey = ResultKeyFactory.source("vk:wall:${media.id}", OutputType.POST, "vk_post"),
+                outputType = OutputType.POST,
+                platform = DownloadPlatform.VK,
+                presetName = "vk_post",
+                formatSelector = "best",
+            )
+            return PlatformDownloadSpecs(spec, spec)
+        }
+
+        val cacheKeyPrefix = "vk:${media.type}:${media.id}"
+        return PlatformDownloadSpecs(
+            video = DownloadSpec(
+                originalUrl = media.original,
+                normalizedUrl = media.normalized,
+                cacheKey = ResultKeyFactory.source(cacheKeyPrefix, OutputType.VIDEO, VK_VIDEO_PRESET),
+                outputType = OutputType.VIDEO,
+                platform = DownloadPlatform.VK,
+                presetName = VK_VIDEO_PRESET,
+                formatSelector =
+                "bv[height<=1280][vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a]/" +
+                    "b[height<=1280][vcodec^=avc1][ext=mp4]/" +
+                    "b[height<=1280]/best",
+                extraArgs = YtDlpPresets.MERGE_MP4_ARGS,
+            ),
+            audio = DownloadSpec(
+                originalUrl = media.original,
+                normalizedUrl = media.normalized,
+                cacheKey = ResultKeyFactory.source(cacheKeyPrefix, OutputType.AUDIO, VK_AUDIO_PRESET),
+                outputType = OutputType.AUDIO,
+                platform = DownloadPlatform.VK,
+                presetName = VK_AUDIO_PRESET,
+                formatSelector = YtDlpPresets.AUDIO_FORMAT_WITH_VIDEO_FALLBACK,
+                extraArgs = YtDlpPresets.MP3_AUDIO_ARGS,
+            ),
+        )
+    }
+
     override suspend fun prepare(request: SourceRequest, catalog: Boolean): PreparedSource {
-        val url = parseVkPostUrl(request.normalizedUrl) ?: return singles.prepare(request, catalog)
+        val url = parseVkPostUrl(request.normalizedUrl)
+        if (url == null) {
+            val metadata = if (catalog) ytDlp.extractCatalogMetadata(request) else ytDlp.extractMetadata(request)
+            return YtDlpPreparedSource(metadata.toMediaMetadata())
+        }
         val item = posts.fetch(url.id)
         val items = mutableListOf<SourcePostItem>()
         val text = mutableListOf<String>()
         collect(item, items, text, 0)
         val postText = text.joinToString("\n\n").takeIf(String::isNotBlank)
         if (items.isEmpty() && postText == null) invalid("VK post contains no supported content")
-        val post = SourcePost(items, postText, singleVideoOptions = false)
+        val post = SourcePost(items, postText)
         return VkPreparedSource(
             MediaMetadata(title = "VK wall${url.id}", description = postText, contentType = if (items.all { it.kind == PostMediaKind.PHOTO }) MediaContentType.IMAGES else MediaContentType.CAROUSEL),
             url.normalized,
@@ -35,7 +106,10 @@ class VkSourceAdapter(private val posts: VkPostClient, private val media: HttpMe
         )
     }
 
-    override suspend fun download(request: SourceRequest, type: SourceMediaType, prepared: PreparedSource, directory: Path): DownloadedFile = singles.download(request, type, prepared, directory)
+    override suspend fun download(request: SourceRequest, type: SourceMediaType, prepared: PreparedSource, directory: Path): DownloadedFile {
+        require(prepared is YtDlpPreparedSource)
+        return ytDlp.download(request, directory)
+    }
 
     override suspend fun downloadPostItem(request: SourceRequest, prepared: PreparedPostSource, index: Int, directory: Path): DownloadedFile {
         require(prepared is VkPreparedSource)
@@ -44,7 +118,7 @@ class VkSourceAdapter(private val posts: VkPostClient, private val media: HttpMe
             PostMediaKind.PHOTO -> media.download(URI(item.reference), directory.resolve("photo.jpg"), "image/", 10_000_000L, Duration.ofMinutes(10))
 
             PostMediaKind.VIDEO -> {
-                val video = PlatformResolver().resolve(item.reference).video
+                val video = resolve(item.reference).video
                 ytDlp.download(DownloadRequestMapper.source(video), directory)
             }
         }

@@ -9,20 +9,22 @@ import com.nkudrin713.kradnik.download.domain.MediaArtifact
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
+import com.nkudrin713.kradnik.download.instagram.InstagramPreparedSource
+import com.nkudrin713.kradnik.download.instagram.InstagramSourceAdapter
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.processing.JobProgress
 import com.nkudrin713.kradnik.download.single.PostHandler
-import com.nkudrin713.kradnik.download.source.InstagramPreparedSource
-import com.nkudrin713.kradnik.download.source.InstagramSourceAdapter
 import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
@@ -33,10 +35,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class InstagramPostHandlerTest {
-    private val source: InstagramSourceAdapter = mockk()
+    private val source: InstagramSourceAdapter = mockk { every { platform } returns DownloadPlatform.INSTAGRAM }
     private val videos: TelegramVideoPreparer = mockk()
     private val limits = TelegramUploadLimits(1_000)
-    private val handler = PostHandler(DownloadEngine(mockk(), source, mockk(), mockk()), DownloadPreflightService(AudioUploadPlanner(limits), limits), videos)
+    private val handler = PostHandler(DownloadEngine(PlatformResolver(listOf(source))), DownloadPreflightService(AudioUploadPlanner(limits), limits), videos)
     private val sourceRequest = SourceRequest("https://www.instagram.com/p/TEST/", "https://www.instagram.com/p/TEST/", DownloadPlatform.INSTAGRAM, "best", presetName = "instagram")
     private val request = SingleMediaRequest(sourceRequest, OutputType.POST, "key")
     private val metadata = jacksonObjectMapper().readValue<YtDlpMetadataDto>("{}")

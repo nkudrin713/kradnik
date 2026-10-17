@@ -1,8 +1,10 @@
-package com.nkudrin713.kradnik.download.source
+package com.nkudrin713.kradnik.download.instagram
 
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.instagram.InstagramContentUnavailableException
 import com.nkudrin713.kradnik.download.instagram.InstagramEmbedDownloader
+import com.nkudrin713.kradnik.download.instagram.InstagramSourceAdapter
+import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.ytdlp.YtDlpException
 import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import io.mockk.coEvery
@@ -24,7 +26,7 @@ class InstagramSourceAdapterTest {
             val embed = InstagramContentUnavailableException()
             val fallback = YtDlpException("Detailed fallback error", reason)
             coEvery { instagram.prepare(request) } throws embed
-            coEvery { ytDlp.extractInstagramImageMetadata(request) } throws fallback
+            coEvery { ytDlp.extractImageMetadata(request) } throws fallback
 
             val actual = assertFailsWith<YtDlpException> { adapter.prepare(request, catalog = true) }
 
@@ -38,7 +40,7 @@ class InstagramSourceAdapterTest {
         val embed = InstagramContentUnavailableException()
         val fallback = YtDlpException("Unknown failure")
         coEvery { instagram.prepare(request) } throws embed
-        coEvery { ytDlp.extractInstagramImageMetadata(request) } throws fallback
+        coEvery { ytDlp.extractImageMetadata(request) } throws fallback
 
         val actual = assertFailsWith<InstagramContentUnavailableException> { adapter.prepare(request, catalog = true) }
 

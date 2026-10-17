@@ -1,11 +1,13 @@
 package com.nkudrin713.kradnik.download.playlist
 
+import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.domain.DownloadRejectedException
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.source.SourceRequest
+import com.nkudrin713.kradnik.download.testPlatformResolver
 import com.nkudrin713.kradnik.ytdlp.YtDlpPresets
 import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import io.mockk.coEvery
@@ -26,9 +28,9 @@ import kotlin.test.assertTrue
 class PlaylistEntryDownloaderTest {
     @TempDir lateinit var root: Path
     private val ytDlp = mockk<YtDlpService>()
-    private val downloader = PlaylistEntryDownloader(ytDlp, TelegramUploadLimits(100))
+    private val downloader = PlaylistEntryDownloader(DownloadEngine(testPlatformResolver(ytDlp)), TelegramUploadLimits(100))
     private val entry = PlaylistAudioEntry(1, "video", "https://youtu.be/video", "Recording", null)
-    private val source = SourceRequest("playlist", "playlist", DownloadPlatform.YOUTUBE, "bestaudio", YtDlpPresets.PLAYLIST_AUDIO_ARGS, "youtube_playlist_audio_320")
+    private val source = SourceRequest("playlist", "playlist", DownloadPlatform.YOUTUBE, "bestaudio", YtDlpPresets.playlistAudioArgs("320K"), "youtube_playlist_audio_320")
 
     @Test
     fun usesSavedSelectionAndSeparatesNewCacheFromLegacyAudio() = runTest {
@@ -62,7 +64,7 @@ class PlaylistEntryDownloaderTest {
         coEvery { ytDlp.download(any(), root) } answers {
             val actual = firstArg<SourceRequest>()
             assertEquals("ba/bestaudio/best", actual.formatSelector)
-            assertEquals(YtDlpPresets.LEGACY_PLAYLIST_AUDIO_ARGS, actual.extraArgs)
+            assertEquals(YtDlpPresets.playlistAudioArgs("96K"), actual.extraArgs)
             DownloadedFile(Files.write(root.resolve("track.mp3"), ByteArray(20)), 20)
         }
         downloader.download(entry, root)

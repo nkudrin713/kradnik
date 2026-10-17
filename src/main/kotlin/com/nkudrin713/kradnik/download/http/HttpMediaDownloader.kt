@@ -19,6 +19,7 @@ import java.net.http.HttpTimeoutException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /** Bounded media transfer shared by source adapters; callers own the workspace. */
 @Component
@@ -27,7 +28,7 @@ class HttpMediaDownloader {
 
     suspend fun download(uri: URI, file: Path, contentType: String, maxBytes: Long?, timeout: Duration): DownloadedFile = try {
         withContext(Dispatchers.IO) {
-            withTimeout(timeout.toMillis()) {
+            withTimeout(timeout.toMillis().milliseconds) {
                 runInterruptible {
                     val request = HttpRequest.newBuilder(uri).timeout(timeout).header("User-Agent", "Mozilla/5.0").header("Accept", "$contentType*").GET().build()
                     val response = client.send(request, HttpResponse.BodyHandlers.ofInputStream())

@@ -2,9 +2,9 @@ package com.nkudrin713.kradnik.download.choice
 
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.MediaContentType
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
+import com.nkudrin713.kradnik.download.source.MediaSelection
 import com.nkudrin713.kradnik.download.source.PreparedPostSource
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
@@ -29,11 +29,7 @@ class PostChoicePlanner(private val choices: MediaChoiceBuilder, private val mes
 
     private fun postOption(spec: DownloadSpec, postText: String?, language: BotLanguage): DownloadChoiceOptionSnapshot {
         return choices.option(
-            spec = spec.copy(
-                outputType = OutputType.POST,
-                presetName = "${spec.platform.dbValue}_post",
-                postText = postText?.takeIf(String::isNotBlank),
-            ),
+            spec = choices.select(spec, MediaSelection.Post(postText?.takeIf(String::isNotBlank))),
             key = POST_KEY,
             label = messages.text(language, TelegramMessage.CHOICE_POST),
             sizeBytes = null,

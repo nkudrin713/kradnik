@@ -25,9 +25,12 @@ interface PreparedSource {
 
 /** User-selected output parameters; source adapters translate these into their saved execution settings. */
 sealed interface MediaSelection {
+    data object OriginalVideo : MediaSelection
     data class Video(val videoId: String, val audioId: String?, val key: String) : MediaSelection
     data class Audio(val quality: String) : MediaSelection
     data object Cover : MediaSelection
+    data class Post(val text: String?) : MediaSelection
+    data object VideoCollection : MediaSelection
 }
 
 interface PostSourceAdapter : SourceAdapter {

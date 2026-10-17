@@ -18,6 +18,8 @@ import java.math.RoundingMode
 
 @Component
 class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, private val uploadLimits: TelegramUploadLimits, private val messages: TelegramMessages, private val sources: PlatformResolver) {
+    fun select(spec: DownloadSpec, selection: MediaSelection): DownloadSpec = sources.adapter(spec.platform).select(spec, selection)
+
     fun videoOptions(
         spec: DownloadSpec,
         metadata: MediaMetadata,
@@ -110,7 +112,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
         selected: SelectedMedia,
         language: BotLanguage,
     ): DownloadChoiceOptionSnapshot {
-        val selectedSpec = sources.adapter(spec.platform).select(spec, MediaSelection.Video(selected.videoId, selected.audioId, key))
+        val selectedSpec = select(spec, MediaSelection.Video(selected.videoId, selected.audioId, key))
         return option(
             spec = selectedSpec,
             key = key,
@@ -132,9 +134,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
             return null
         }
         return option(
-            spec = spec.copy(
-                presetName = "${presetPrefix(spec)}_video_original",
-            ),
+            spec = select(spec, MediaSelection.OriginalVideo),
             key = VIDEO_ORIGINAL_KEY,
             label = originalLabel(language, metadata.height),
             sizeBytes = size,
@@ -157,7 +157,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
         if (plan !is AudioUploadPlan.Allowed) {
             return null
         }
-        val selectedSpec = sources.adapter(spec.platform).select(spec, MediaSelection.Audio(plan.audioQuality))
+        val selectedSpec = select(spec, MediaSelection.Audio(plan.audioQuality))
         return option(
             spec = selectedSpec,
             key = AUDIO_KEY,
@@ -175,7 +175,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
         language: BotLanguage,
     ): DownloadChoiceOptionSnapshot? {
         metadata.thumbnail?.takeIf { it.isNotBlank() } ?: return null
-        val coverSpec = sources.adapter(spec.platform).select(spec, MediaSelection.Cover)
+        val coverSpec = select(spec, MediaSelection.Cover)
         return option(
             spec = coverSpec,
             key = COVER_KEY,
@@ -223,10 +223,6 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
             .divide(BigDecimal.valueOf(BITS_IN_BYTE), 0, RoundingMode.CEILING)
             .toLong()
         return FormatSize(bytes, approximate = true)
-    }
-
-    private fun presetPrefix(spec: DownloadSpec): String {
-        return spec.platform.dbValue
     }
 
     private companion object {

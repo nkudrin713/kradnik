@@ -16,14 +16,7 @@ object DownloadRequestMapper {
         return SingleMediaRequest(source(spec), spec.outputType, spec.cacheKey, spec.postText)
     }
 
-    fun source(spec: DownloadSpec): SourceRequest = SourceRequest(
-        spec.originalUrl,
-        spec.normalizedUrl,
-        spec.platform,
-        spec.formatSelector,
-        spec.extraArgs.toList(),
-        spec.presetName,
-    )
+    fun source(spec: DownloadSpec): SourceRequest = SourceRequest.fromSpec(spec)
 
     fun playlist(job: DownloadJob): PlaylistAudioRequest {
         require(job.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO)

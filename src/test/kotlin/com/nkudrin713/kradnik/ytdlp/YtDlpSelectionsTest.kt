@@ -9,6 +9,22 @@ import kotlin.test.assertEquals
 
 class YtDlpSelectionsTest {
     @Test
+    fun preservesSavedSettingsAndCacheIdentitiesForOriginalPostsAndCollections() {
+        for (platform in DownloadPlatform.entries) {
+            val base = spec(listOf("--saved-option", "value")).copy(platform = platform, outputType = OutputType.VIDEO)
+            val prefix = platform.dbValue
+            val examples = mapOf(
+                MediaSelection.OriginalVideo to base.copy(presetName = "${prefix}_video_original"),
+                MediaSelection.Post("Post text") to base.copy(outputType = OutputType.POST, presetName = "${prefix}_post", postText = "Post text"),
+                MediaSelection.VideoCollection to base.copy(outputType = OutputType.POST, presetName = "${prefix}_videos"),
+            )
+            for ((selection, expected) in examples) {
+                assertEquals(expected, YtDlpSelections.select(base, selection), "$platform: $selection")
+            }
+        }
+    }
+
+    @Test
     fun addsAudioQuality() {
         val actual = spec(
             extraArgs = listOf("-x", "--audio-format", "mp3"),

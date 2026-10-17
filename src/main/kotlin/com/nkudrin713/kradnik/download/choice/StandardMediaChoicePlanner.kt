@@ -3,8 +3,8 @@ package com.nkudrin713.kradnik.download.choice
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.MediaContentType
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
-import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
+import com.nkudrin713.kradnik.download.source.MediaSelection
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -20,7 +20,7 @@ class StandardMediaChoicePlanner(private val choices: MediaChoiceBuilder) {
         }
         return listOf(
             choices.option(
-                spec = spec.copy(outputType = OutputType.POST, presetName = "${spec.platform.dbValue}_videos"),
+                spec = choices.select(spec, MediaSelection.VideoCollection),
                 key = "videos",
                 label = messages.text(language, TelegramMessage.CHOICE_VIDEOS),
                 sizeBytes = null,

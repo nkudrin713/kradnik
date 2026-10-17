@@ -13,7 +13,6 @@ import com.nkudrin713.kradnik.download.http.HttpMediaDownloader
 import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
-import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.source.MediaSelection
 import com.nkudrin713.kradnik.download.source.PostSourceAdapter
 import com.nkudrin713.kradnik.download.source.PreparedPostSource
@@ -119,7 +118,7 @@ class VkSourceAdapter(private val posts: VkPostClient, private val media: HttpMe
 
             PostMediaKind.VIDEO -> {
                 val video = resolve(item.reference).video
-                ytDlp.download(DownloadRequestMapper.source(video), directory)
+                ytDlp.download(SourceRequest.fromSpec(video), directory)
             }
         }
     }

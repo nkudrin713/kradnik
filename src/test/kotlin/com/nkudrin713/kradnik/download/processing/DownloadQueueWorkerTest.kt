@@ -5,9 +5,11 @@ import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verifyOrder
+import kotlinx.coroutines.awaitCancellation
 import org.junit.jupiter.api.Test
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -16,6 +18,7 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DownloadQueueWorkerTest {
@@ -101,5 +104,50 @@ class DownloadQueueWorkerTest {
         }
         assertEquals(2L, runtime.snapshot().errors.first().counts["WORKER"])
         assertTrue(runtime.snapshot().workers.all { it.state == "STOPPED" })
+    }
+
+    @Test
+    fun cancellationAfterClaimPreventsProcessing() {
+        every { jobs.claimNextQueuedJob() } returns DownloadJob(id = 1) andThen null
+        val checked = CountDownLatch(1)
+        every { jobs.isProcessing(1) } answers {
+            checked.countDown()
+            false
+        }
+        val worker = DownloadQueueWorker(jobs, processor, activeDownloads, cleaner, workers = 1, pollDelayMs = 1)
+        try {
+            worker.start()
+            assertTrue(checked.await(10, TimeUnit.SECONDS))
+        } finally {
+            worker.shutdown()
+        }
+        coVerify(exactly = 0) { processor.process(any()) }
+        assertFalse(activeDownloads.cancel(1))
+    }
+
+    @Test
+    fun shutdownCancelsActiveCoroutineAndRemovesItsRegistration() {
+        every { jobs.claimNextQueuedJob() } returns DownloadJob(id = 1) andThen null
+        every { jobs.isProcessing(1) } returns true
+        val started = CountDownLatch(1)
+        val stopped = CountDownLatch(1)
+        coEvery { processor.process(any()) } coAnswers {
+            started.countDown()
+            try {
+                awaitCancellation()
+            } finally {
+                stopped.countDown()
+            }
+        }
+        val worker = DownloadQueueWorker(jobs, processor, activeDownloads, cleaner, workers = 1, pollDelayMs = 1, runtime = runtime)
+        try {
+            worker.start()
+            assertTrue(started.await(10, TimeUnit.SECONDS))
+        } finally {
+            worker.shutdown()
+        }
+        assertEquals(0, stopped.count)
+        assertFalse(activeDownloads.cancel(1))
+        assertTrue(runtime.snapshot().workers.all { it.state == "STOPPED" && it.jobId == null })
     }
 }

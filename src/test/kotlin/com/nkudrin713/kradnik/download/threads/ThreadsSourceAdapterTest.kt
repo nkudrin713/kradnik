@@ -4,6 +4,7 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.domain.DownloadRejectedException
+import com.nkudrin713.kradnik.download.domain.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
 import com.nkudrin713.kradnik.download.domain.OutputType
@@ -12,12 +13,10 @@ import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
-import com.nkudrin713.kradnik.download.processing.JobProgress
-import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
+import com.nkudrin713.kradnik.download.progress.JobProgress
 import com.nkudrin713.kradnik.download.single.PostHandler
 import com.nkudrin713.kradnik.download.source.SourceMediaType
 import com.nkudrin713.kradnik.download.testPlatformResolver
-import com.nkudrin713.kradnik.download.threads.ThreadsSourceAdapter
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import com.nkudrin713.kradnik.ytdlp.YtDlpService

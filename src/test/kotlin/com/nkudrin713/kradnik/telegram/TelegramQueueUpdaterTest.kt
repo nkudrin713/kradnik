@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.service.DownloadJobService
@@ -22,10 +23,10 @@ class TelegramQueueUpdaterTest {
 
         repeat(3) { updater.refresh() }
 
-        verify(exactly = 1) { sender.editQueuedJob(TelegramMessageAddress.Chat(10, 1), 1, first.language, first.workloadType, 1, any()) }
-        verify(exactly = 1) { sender.editQueuedJob(TelegramMessageAddress.Chat(10, 2), 2, playlist.language, playlist.workloadType, 1, any()) }
-        verify(exactly = 1) { sender.editQueuedJob(TelegramMessageAddress.Inline("inline"), 3, second.language, second.workloadType, 2, any()) }
-        verify(exactly = 1) { sender.editQueuedJob(TelegramMessageAddress.Inline("inline"), 3, second.language, second.workloadType, 1, any()) }
+        verify(exactly = 1) { sender.editQueuedJob(MessageAddress.Chat(10, 1), 1, first.language, first.workloadType, 1, any()) }
+        verify(exactly = 1) { sender.editQueuedJob(MessageAddress.Chat(10, 2), 2, playlist.language, playlist.workloadType, 1, any()) }
+        verify(exactly = 1) { sender.editQueuedJob(MessageAddress.Inline("inline"), 3, second.language, second.workloadType, 2, any()) }
+        verify(exactly = 1) { sender.editQueuedJob(MessageAddress.Inline("inline"), 3, second.language, second.workloadType, 1, any()) }
     }
 
     @Test

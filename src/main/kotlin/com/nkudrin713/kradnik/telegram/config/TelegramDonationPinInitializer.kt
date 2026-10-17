@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.telegram.config
 
+import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.TelegramDonationSender
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.ApplicationArguments

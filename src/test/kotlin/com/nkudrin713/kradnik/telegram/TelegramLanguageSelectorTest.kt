@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.config.TelegramCommandsInitializer
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.pengrad.telegrambot.model.CallbackQuery

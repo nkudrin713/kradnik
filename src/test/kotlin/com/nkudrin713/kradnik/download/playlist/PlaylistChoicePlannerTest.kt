@@ -3,7 +3,7 @@ package com.nkudrin713.kradnik.download.playlist
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.testPlatformResolver
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import com.nkudrin713.kradnik.ytdlp.YtDlpService

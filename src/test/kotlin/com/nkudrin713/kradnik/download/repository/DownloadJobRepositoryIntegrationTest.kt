@@ -7,8 +7,10 @@ import com.nkudrin713.kradnik.admin.ErrorMinute
 import com.nkudrin713.kradnik.admin.HistoryPoint
 import com.nkudrin713.kradnik.admin.MemoryPoint
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
-import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionRepository
+import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
+import com.nkudrin713.kradnik.download.choice.SelectDownloadChoiceCommand
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
@@ -17,14 +19,15 @@ import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
+import com.nkudrin713.kradnik.download.domain.PlaylistItemFailure
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.download.playlist.PlaylistItemFailure
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.observability.RuntimeError
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreference
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceRepository
+import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -44,6 +47,7 @@ import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
 import java.sql.Timestamp
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.Callable
@@ -59,7 +63,7 @@ import kotlin.test.assertTrue
 @TestPropertySource(properties = ["spring.jpa.hibernate.ddl-auto=validate"])
 class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     private val repository: DownloadJobRepository,
-    private val choiceSessionRepository: DownloadChoiceSessionRepository,
+    private val choiceSessionRepository: JpaDownloadChoiceSessionRepository,
     private val jdbcTemplate: JdbcTemplate,
     private val downloadJobService: DownloadJobService,
     private val preferenceRepository: TelegramUserPreferenceRepository,
@@ -77,7 +81,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun persistsThreadsVideoAlbumWithTheMigratedPlatformConstraint() {
-        val saved = repository.saveAndFlush(
+        val saved = persistJob(
             job("threads-album").apply {
                 platform = DownloadPlatform.THREADS
                 outputType = OutputType.POST
@@ -92,20 +96,72 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun persistsRetryLinkAndReadsOnlyQueuedJobsInStableOrder() {
-        val token = choiceSessionRepository.saveAndFlush(
+        val token = persistSession(
             DownloadChoiceSession(telegramUserId = 10, telegramChatId = 20, telegramMenuMessageId = 30, retryUrl = "https://youtu.be/original"),
         ).token
         assertEquals("https://youtu.be/original", choiceSessionRepository.findById(token).orElseThrow().retryUrl)
-        val first = repository.saveAndFlush(job("first-queued"))
-        val second = repository.saveAndFlush(job("second-queued"))
-        repository.saveAndFlush(job("finished").apply { status = DownloadJobStatus.FAILED })
+        val first = persistJob(job("first-queued"))
+        val second = persistJob(job("second-queued"))
+        persistJob(job("finished").apply { status = DownloadJobStatus.FAILED })
         assertEquals(listOf(first.requiredId(), second.requiredId()), downloadJobService.queuedJobs().map { it.requiredId() })
+    }
+
+    @Test
+    fun sessionSelectionAndReleasePersistAcrossTransactionsWithoutManagedEntities() {
+        val saved = persistSession(
+            DownloadChoiceSession(telegramUserId = 10, telegramChatId = 20, telegramMenuMessageId = 30, retryUrl = "https://youtu.be/original"),
+        )
+        val service = DownloadChoiceSessionService(JpaChoiceSessionStore(choiceSessionRepository), telegramMessages(), Clock.systemUTC())
+        val command = SelectDownloadChoiceCommand(saved.token, "repeat", 10, 20, 30)
+
+        transactionTemplate.executeWithoutResult { assertTrue(service.select(command) is DownloadChoiceSelection.Retry) }
+        assertNotNull(choiceSessionRepository.findById(saved.token).orElseThrow().selectedAt)
+        transactionTemplate.executeWithoutResult { assertEquals(DownloadChoiceSelection.AlreadySelected, service.select(command)) }
+        transactionTemplate.executeWithoutResult { service.release(saved.token) }
+        assertNull(choiceSessionRepository.findById(saved.token).orElseThrow().selectedAt)
+        transactionTemplate.executeWithoutResult { assertTrue(service.select(command) is DownloadChoiceSelection.Retry) }
+    }
+
+    @Test
+    fun mutatingAnApplicationSnapshotDoesNotChangeTheStoredJob() {
+        val saved = persistJob(job("snapshot"))
+        transactionTemplate.executeWithoutResult {
+            val snapshot = requireNotNull(downloadJobService.findJob(saved.requiredId()))
+            snapshot.selectedFormat = "unexpected replacement"
+            snapshot.status = DownloadJobStatus.COMPLETED
+        }
+        val stored = repository.findById(saved.requiredId()).orElseThrow()
+        assertEquals(saved.selectedFormat, stored.selectedFormat)
+        assertEquals(DownloadJobStatus.QUEUED, stored.status)
+    }
+
+    @Test
+    fun normalizesLegacyPlaylistReasonsOnReadWithoutRewritingTheSavedData() {
+        val source = persistJob(
+            job("legacy-reasons").apply {
+                workloadType = DownloadWorkloadType.PLAYLIST_AUDIO
+                status = DownloadJobStatus.COMPLETED
+                playlistEntries = (1..3).map { PlaylistAudioEntry(it, "id-$it", "https://youtu.be/id-$it", "Track $it", 60) }
+                playlistResults = listOf(
+                    PlaylistAudioResult(1, error = "Private video. Sign in", failure = PlaylistItemFailure.SOURCE),
+                    PlaylistAudioResult(2, error = "Connection reset by peer", failure = PlaylistItemFailure.SOURCE),
+                    PlaylistAudioResult(3, error = "Not available in your country", failure = PlaylistItemFailure.UNAVAILABLE),
+                )
+            },
+        )
+        val original = jdbcTemplate.queryForObject("SELECT playlist_results_json FROM download_jobs WHERE id = ?", String::class.java, source.requiredId())
+        val restored = requireNotNull(downloadJobService.findJob(source.requiredId()))
+        assertEquals(listOf(PlaylistItemFailure.PRIVATE, PlaylistItemFailure.NETWORK, PlaylistItemFailure.GEO_BLOCKED), restored.playlistResults.map { it.failure })
+        assertEquals(original, jdbcTemplate.queryForObject("SELECT playlist_results_json FROM download_jobs WHERE id = ?", String::class.java, source.requiredId()))
+
+        val retry = requireNotNull(downloadJobService.createRetryJob(source.requiredId(), source.telegramUserId, source.telegramChatId, 903, 50, PlaylistDeliveryMode.AUDIO_MESSAGES))
+        assertEquals(listOf(2), retry.playlistEntries.map { it.position })
     }
 
     @Test
     fun playlistCacheMatchesSavedEncodingAndOnlySuccessfulCompletedItems() {
         val entries = listOf(PlaylistAudioEntry(1, "video", "url", "Title", 60))
-        val saved = repository.saveAndFlush(
+        val saved = persistJob(
             job("playlist-cache").apply {
                 workloadType = DownloadWorkloadType.PLAYLIST_AUDIO
                 downloadPreset = "youtube_playlist_audio_320"
@@ -122,7 +178,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         assertNull(repository.findCachedPlaylistFile("video", saved.downloadPreset, saved.selectedFormat, "[\"--audio-quality\",\"96K\"]"))
         assertNull(repository.findCachedPlaylistFile("other-video", saved.downloadPreset, saved.selectedFormat, args))
         saved.status = DownloadJobStatus.FAILED
-        repository.saveAndFlush(saved)
+        persistJob(saved)
         assertNull(repository.findCachedPlaylistFile("video", saved.downloadPreset, saved.selectedFormat, args))
     }
 
@@ -131,10 +187,10 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
         BotLanguage.entries.forEachIndexed { index, language ->
             val userId = index.toLong() + 1
             preferenceRepository.saveAndFlush(TelegramUserPreference(telegramUserId = userId, language = language))
-            val session = choiceSessionRepository.saveAndFlush(
+            val session = persistSession(
                 DownloadChoiceSession(telegramUserId = userId, telegramMenuMessageId = index + 1, language = language),
             )
-            val savedJob = repository.saveAndFlush(job("language-${language.code}").apply { this.language = language })
+            val savedJob = persistJob(job("language-${language.code}").apply { this.language = language })
 
             assertEquals(language, preferenceRepository.findById(userId).orElseThrow().language)
             assertEquals(language, choiceSessionRepository.findById(session.token).orElseThrow().language)
@@ -293,7 +349,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 formatSelector = "best",
             ),
         )
-        val session = choiceSessionRepository.saveAndFlush(
+        val session = persistSession(
             DownloadChoiceSession(
                 telegramUserId = 1,
                 telegramChatId = 2,
@@ -305,14 +361,14 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 cleanupAfter = Instant.now().plusSeconds(60),
             ),
         )
-        val coverJob = repository.saveAndFlush(
+        val coverJob = persistJob(
             job("cover").apply {
                 outputType = OutputType.COVER
                 platform = DownloadPlatform.YOUTUBE
                 language = BotLanguage.RU
             },
         )
-        val imageJob = repository.saveAndFlush(
+        val imageJob = persistJob(
             job("images").apply {
                 outputType = OutputType.IMAGES
                 platform = DownloadPlatform.INSTAGRAM
@@ -320,7 +376,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 sourcePostText = "Post text"
             },
         )
-        val postJob = repository.saveAndFlush(job("post").apply { outputType = OutputType.POST })
+        val postJob = persistJob(job("post").apply { outputType = OutputType.POST })
         assertEquals(OutputType.POST, repository.findById(requireNotNull(postJob.id)).orElseThrow().outputType)
         val preference = preferenceRepository.saveAndFlush(
             TelegramUserPreference(
@@ -348,21 +404,21 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
     fun deletesExpiredChoiceSessionsBySelectionState() {
         val now = Instant.now()
         val expiredDeadline = now.minusSeconds(1)
-        val availableSession = choiceSessionRepository.saveAndFlush(
+        val availableSession = persistSession(
             DownloadChoiceSession(
                 telegramUpdateId = 10,
                 telegramMenuMessageId = 20,
                 cleanupAfter = expiredDeadline,
             ),
         )
-        val expiredUnselectedSession = choiceSessionRepository.saveAndFlush(
+        val expiredUnselectedSession = persistSession(
             DownloadChoiceSession(
                 telegramUpdateId = 11,
                 telegramMenuMessageId = 21,
                 cleanupAfter = now.plusSeconds(3600),
             ),
         )
-        val consumedSession = choiceSessionRepository.saveAndFlush(
+        val consumedSession = persistSession(
             DownloadChoiceSession(
                 telegramUpdateId = 12,
                 telegramMenuMessageId = 22,
@@ -370,7 +426,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
                 selectedAt = expiredDeadline,
             ),
         )
-        val activeConsumedSession = choiceSessionRepository.saveAndFlush(
+        val activeConsumedSession = persistSession(
             DownloadChoiceSession(
                 telegramUpdateId = 13,
                 telegramMenuMessageId = 23,
@@ -433,7 +489,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun claimsDifferentJobsConcurrently() {
-        repository.saveAllAndFlush(listOf(job("first"), job("second", 2)))
+        persistJobs(listOf(job("first"), job("second", 2)))
         val executor = Executors.newFixedThreadPool(2)
 
         val claimed = try {
@@ -455,8 +511,8 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun workerTypesClaimOnlyTheirOwnJobs() {
-        val single = repository.saveAndFlush(job("single"))
-        val playlist = repository.saveAndFlush(
+        val single = persistJob(job("single"))
+        val playlist = persistJob(
             job("playlist", 2).apply {
                 workloadType = DownloadWorkloadType.PLAYLIST_AUDIO
                 playlistDeliveryMode = PlaylistDeliveryMode.ZIP
@@ -478,7 +534,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun cancellationIsTerminalAndKeepsJob() {
-        val queued = repository.saveAndFlush(job("cancel"))
+        val queued = persistJob(job("cancel"))
 
         assertEquals(true, downloadJobService.cancelByUser(queued.requiredId(), queued.telegramUserId))
 
@@ -490,7 +546,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun persistsPlaylistResultWhileJobIsProcessing() {
-        val playlist = repository.saveAndFlush(
+        val playlist = persistJob(
             job("playlist-result").apply { workloadType = DownloadWorkloadType.PLAYLIST_AUDIO },
         )
         assertEquals(playlist.id, downloadJobService.claimNextQueuedPlaylistJob()?.id)
@@ -511,14 +567,14 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun returnsLatestCompletedCachedJob() {
-        val older = repository.saveAndFlush(
+        val older = persistJob(
             job("shared-cache").apply {
                 status = DownloadJobStatus.COMPLETED
                 telegramFileId = "older-file"
                 completedAt = Instant.parse("2026-01-01T00:00:00Z")
             },
         )
-        val newer = repository.saveAndFlush(
+        val newer = persistJob(
             job("shared-cache").apply {
                 status = DownloadJobStatus.COMPLETED
                 telegramFileId = "newer-file"
@@ -534,7 +590,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun oneJobCanOnlyBeClaimedOnceUnderContention() {
-        repository.saveAndFlush(job("one"))
+        persistJob(job("one"))
         val barrier = java.util.concurrent.CyclicBarrier(8)
         val pool = Executors.newFixedThreadPool(8)
         try {
@@ -554,7 +610,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun completesAndFailsInShortTransactionsAndRecoversOnlyProcessing() {
-        repository.saveAllAndFlush(listOf(job("complete"), job("fail", 2), job("interrupted", 3)))
+        persistJobs(listOf(job("complete"), job("fail", 2), job("interrupted", 3)))
         val completed = claimNextJob()
         val failed = claimNextJob()
         val interrupted = claimNextJob()
@@ -572,9 +628,9 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun skipsQueuedJobsForAUserAlreadyProcessingAcrossWorkerPools() {
-        val active = repository.saveAndFlush(job("active"))
-        val blockedPlaylist = repository.saveAndFlush(job("blocked-playlist").apply { workloadType = DownloadWorkloadType.PLAYLIST_AUDIO })
-        val otherPlaylist = repository.saveAndFlush(job("other-playlist", 2).apply { workloadType = DownloadWorkloadType.PLAYLIST_AUDIO })
+        val active = persistJob(job("active"))
+        val blockedPlaylist = persistJob(job("blocked-playlist").apply { workloadType = DownloadWorkloadType.PLAYLIST_AUDIO })
+        val otherPlaylist = persistJob(job("other-playlist", 2).apply { workloadType = DownloadWorkloadType.PLAYLIST_AUDIO })
 
         assertEquals(active.id, downloadJobService.claimNextQueuedJob()?.id)
         assertEquals(1L, downloadJobService.queuePosition(blockedPlaylist.requiredId()))
@@ -588,8 +644,8 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun concurrentPoolsCannotClaimTwoJobsForOneUser() {
-        repository.saveAndFlush(job("single"))
-        repository.saveAndFlush(job("playlist").apply { workloadType = DownloadWorkloadType.PLAYLIST_AUDIO })
+        persistJob(job("single"))
+        persistJob(job("playlist").apply { workloadType = DownloadWorkloadType.PLAYLIST_AUDIO })
         val barrier = java.util.concurrent.CyclicBarrier(2)
         val pool = Executors.newFixedThreadPool(2)
         try {
@@ -614,7 +670,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun createsOneRetryJobForRetryableZipFailuresOnly() {
-        val source = repository.saveAndFlush(
+        val source = persistJob(
             job("zip-retry").apply {
                 status = DownloadJobStatus.COMPLETED
                 workloadType = DownloadWorkloadType.PLAYLIST_AUDIO
@@ -643,7 +699,7 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
     @Test
     fun concurrentRetryCallbacksCreateOnlyOneChild() {
-        val source = repository.saveAndFlush(
+        val source = persistJob(
             job("concurrent-retry").apply {
                 status = DownloadJobStatus.FAILED
                 workloadType = DownloadWorkloadType.PLAYLIST_AUDIO
@@ -667,6 +723,12 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
             pool.shutdownNow()
         }
     }
+
+    private fun persistJobs(jobs: List<DownloadJob>): List<DownloadJob> = repository.saveAllAndFlush(jobs.map(DownloadJobEntity::from)).map(DownloadJobEntity::toJob)
+
+    private fun persistJob(job: DownloadJob): DownloadJob = repository.saveAndFlush(DownloadJobEntity.from(job)).toJob()
+
+    private fun persistSession(session: DownloadChoiceSession): DownloadChoiceSession = choiceSessionRepository.saveAndFlush(DownloadChoiceSessionEntity.from(session)).toSession()
 
     private fun job(cacheKey: String, userId: Long = 1): DownloadJob {
         return DownloadJob(
@@ -697,13 +759,13 @@ class DownloadJobRepositoryIntegrationTest @Autowired constructor(
 
 @TestConfiguration
 @EnableAutoConfiguration
-@EntityScan(basePackageClasses = [DownloadJob::class, DownloadChoiceSession::class, TelegramUserPreference::class])
+@EntityScan(basePackageClasses = [DownloadJobEntity::class, DownloadChoiceSessionEntity::class, TelegramUserPreference::class])
 @EnableJpaRepositories(
     basePackageClasses = [
         DownloadJobRepository::class,
-        DownloadChoiceSessionRepository::class,
+        JpaDownloadChoiceSessionRepository::class,
         TelegramUserPreferenceRepository::class,
     ],
 )
-@Import(DownloadJobService::class)
+@Import(DownloadJobService::class, JpaJobStore::class)
 class DownloadJobRepositoryTestApplication

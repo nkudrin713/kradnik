@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.download.choice.REPEAT_LAST_OPTION_KEY
+import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import java.util.UUID
 import kotlin.test.Test

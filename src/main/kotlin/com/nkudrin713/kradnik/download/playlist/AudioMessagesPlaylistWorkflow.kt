@@ -1,17 +1,18 @@
 package com.nkudrin713.kradnik.download.playlist
 
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
+import com.nkudrin713.kradnik.download.delivery.DeliveryContext
+import com.nkudrin713.kradnik.download.delivery.PlaylistDelivery
+import com.nkudrin713.kradnik.download.delivery.PlaylistDeliveryResult
+import com.nkudrin713.kradnik.download.delivery.ResultCache
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioRequest
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
-import com.nkudrin713.kradnik.download.processing.DownloadPhase
-import com.nkudrin713.kradnik.download.processing.JobProgress
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.JobProgress
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import com.nkudrin713.kradnik.download.telegram.DeliveryContext
-import com.nkudrin713.kradnik.download.telegram.TelegramPlaylistSender
-import com.nkudrin713.kradnik.download.telegram.TelegramResultCache
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.localization.MessageKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,8 +25,8 @@ import java.nio.file.Path
 class AudioMessagesPlaylistWorkflow(
     private val downloadJobService: DownloadJobService,
     private val entryDownloader: PlaylistEntryDownloader,
-    private val telegramFileSender: TelegramPlaylistSender,
-    private val cache: TelegramResultCache,
+    private val telegramFileSender: PlaylistDelivery,
+    private val cache: ResultCache,
     private val workDirCleaner: WorkDirCleaner,
     private val items: PlaylistItems = PlaylistItems(),
 ) {
@@ -44,7 +45,7 @@ class AudioMessagesPlaylistWorkflow(
         val pending = request.entries.filterNot { it.position in completedPositions }
         val cached = pending.associate { entry ->
             entry.position to (
-                cache.findAudio(entryDownloader.cacheKey(entry, request.source))
+                cache.find(entryDownloader.cacheKey(entry, request.source))
                     ?: request.source?.let { cache.findPlaylistAudio(entry.sourceId, it) }
                 )
         }
@@ -55,7 +56,7 @@ class AudioMessagesPlaylistWorkflow(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                throw PlaylistOperationException(TelegramMessage.PLAYLIST_STORAGE_UNAVAILABLE, error)
+                throw PlaylistOperationException(MessageKey.PLAYLIST_STORAGE_UNAVAILABLE, error)
             }
         }
         items.map(jobId, pending) { entry ->
@@ -73,14 +74,14 @@ class AudioMessagesPlaylistWorkflow(
             throw PlaylistEmptyException(current.playlistResults.filter { it.fileId == null })
         }
         progress.update(DownloadPhase.UPLOADING)
-        try {
+        val receipt = try {
             telegramFileSender.sendPlaylistAudios(context, request.entries, successful)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            throw PlaylistOperationException(TelegramMessage.PLAYLIST_UPLOAD_FAILED, error)
+            throw PlaylistOperationException(MessageKey.PLAYLIST_UPLOAD_FAILED, error)
         }
-        return PlaylistDeliveryResult(successful.size, current.playlistResults.count { it.fileId == null }, PlaylistCompletion.AudioMessages(successful.size), current.playlistResults.filter { it.fileId == null })
+        return PlaylistDeliveryResult(successful.size, current.playlistResults.count { it.fileId == null }, receipt, current.playlistResults.filter { it.fileId == null })
     }
 
     private suspend fun processEntry(jobId: Long, entry: PlaylistAudioEntry, root: Path, request: PlaylistAudioRequest, cached: String?): Boolean? {
@@ -99,7 +100,7 @@ class AudioMessagesPlaylistWorkflow(
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
-                    throw PlaylistOperationException(TelegramMessage.PLAYLIST_STORAGE_UNAVAILABLE, error)
+                    throw PlaylistOperationException(MessageKey.PLAYLIST_STORAGE_UNAVAILABLE, error)
                 }
             }
             downloadJobService.savePlaylistResult(
@@ -123,7 +124,7 @@ class AudioMessagesPlaylistWorkflow(
                 PlaylistAudioResult(
                     position = entry.position,
                     error = (error.message ?: error.javaClass.simpleName).take(1000),
-                    failure = PlaylistItemFailure.from(error.message, error.reason),
+                    failure = error.playlistFailure,
                 ),
             )
             return null

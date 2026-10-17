@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.download.youtube
 
-import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
+import com.nkudrin713.kradnik.download.domain.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.identity.extractQueryParameter
 import com.nkudrin713.kradnik.download.identity.parseHttpUrl
 import com.nkudrin713.kradnik.download.identity.parseUrlOrNull

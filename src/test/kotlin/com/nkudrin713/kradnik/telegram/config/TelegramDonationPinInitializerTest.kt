@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.telegram.config
 
+import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.TelegramDonationSender
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk

@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.download
 
-import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
+import com.nkudrin713.kradnik.download.domain.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.threads.ThreadsSourceAdapter
 import com.nkudrin713.kradnik.download.youtube.YouTubeSourceAdapter
 import com.nkudrin713.kradnik.process.Command

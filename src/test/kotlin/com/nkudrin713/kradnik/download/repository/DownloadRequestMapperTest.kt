@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.download.repository
 
-import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionsJsonConverter
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult

@@ -6,7 +6,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.source.SourceRequest
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.localization.MessageKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
@@ -46,7 +46,7 @@ class PlaylistEntryDownloader(
 
     private suspend fun checkWorkspace(directory: Path) = withContext(Dispatchers.IO) {
         if (Files.getFileStore(directory).usableSpace < 64L * 1024 * 1024) {
-            throw PlaylistOperationException(TelegramMessage.PLAYLIST_DISK_FULL)
+            throw PlaylistOperationException(MessageKey.PLAYLIST_DISK_FULL)
         }
         // Includes partial source files and temporary tag/thumbnail copies. Every individual file
         // is bounded even when yt-dlp cannot determine Content-Length before downloading.

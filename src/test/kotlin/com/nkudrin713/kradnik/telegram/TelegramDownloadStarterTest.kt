@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
@@ -9,7 +10,7 @@ import com.nkudrin713.kradnik.download.platform.PlatformAvailability
 import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.BotLanguage
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -69,7 +70,7 @@ class TelegramDownloadStarterTest {
 
         assertEquals(200, command.captured.telegramRequestMessageId)
         assertEquals(BotLanguage.EN, command.captured.language)
-        assertEquals("video:telegram-video-h264-v1", command.captured.spec.cacheKey)
+        assertEquals("video", command.captured.spec.cacheKey)
     }
 
     @Test
@@ -107,7 +108,7 @@ class TelegramDownloadStarterTest {
     @Test
     fun reusesInlineMessageAsJobStatus() {
         val command = slot<CreateDownloadJobCommand>()
-        val address = TelegramMessageAddress.Inline("inline-message")
+        val address = MessageAddress.Inline("inline-message")
         every { telegramSender.editStatus(address, TelegramDownloadStatus.QUEUED, BotLanguage.EN) } just runs
         every { downloadJobService.createJob(capture(command)) } answers { createdJob(command.captured) }
 
@@ -127,12 +128,12 @@ class TelegramDownloadStarterTest {
 
         assertEquals(retry, starter.retryPlaylist(source, 300, 400, PlaylistDeliveryMode.ZIP))
 
-        verify { telegramSender.editQueuedJob(TelegramMessageAddress.Chat(100, 500), 2, BotLanguage.RU, retry.workloadType, 1, any()) }
+        verify { telegramSender.editQueuedJob(MessageAddress.Chat(100, 500), 2, BotLanguage.RU, retry.workloadType, 1, any()) }
     }
 
     private fun start(
         outputType: OutputType,
-        messageAddress: TelegramMessageAddress = TelegramMessageAddress.Chat(100, 500),
+        messageAddress: MessageAddress = MessageAddress.Chat(100, 500),
     ) {
         starter.start(
             telegramUserId = 300,

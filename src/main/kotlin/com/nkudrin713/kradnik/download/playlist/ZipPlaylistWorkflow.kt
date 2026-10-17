@@ -1,17 +1,18 @@
 package com.nkudrin713.kradnik.download.playlist
 
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
+import com.nkudrin713.kradnik.download.delivery.DeliveryContext
+import com.nkudrin713.kradnik.download.delivery.PlaylistDelivery
+import com.nkudrin713.kradnik.download.delivery.PlaylistDeliveryResult
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioRequest
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.processing.DownloadPhase
-import com.nkudrin713.kradnik.download.processing.JobProgress
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.JobProgress
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import com.nkudrin713.kradnik.download.telegram.DeliveryContext
-import com.nkudrin713.kradnik.download.telegram.TelegramPlaylistSender
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.localization.MessageKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -38,7 +39,7 @@ class ZipPlaylistWorkflow(
     private val downloadJobService: DownloadJobService,
     private val entryDownloader: PlaylistEntryDownloader,
     private val zipBuilder: PlaylistZipBuilder,
-    private val telegramMediaSender: TelegramPlaylistSender,
+    private val telegramMediaSender: PlaylistDelivery,
     private val uploadLimits: TelegramUploadLimits,
     private val workDirCleaner: WorkDirCleaner,
     private val budget: PlaylistWorkspaceBudget,
@@ -100,7 +101,7 @@ class ZipPlaylistWorkflow(
                 if (!error.isPlaylistSourceFailure()) throw error
                 budget.check(root)
                 logger.warn("PLAYLIST_JOB[{}] item {} unavailable: {}", jobId, entry.position, error.message, error)
-                failures += PlaylistAudioResult(entry.position, error = error.message?.take(1000), failure = PlaylistItemFailure.from(error.message, error.reason))
+                failures += PlaylistAudioResult(entry.position, error = error.message?.take(1000), failure = error.playlistFailure)
                 tracker.finished(entry, false)
                 workDirCleaner.deleteRecursively(directory)
                 return@map null
@@ -121,7 +122,7 @@ class ZipPlaylistWorkflow(
         } catch (error: PlaylistSizeLimitException) {
             throw error
         } catch (error: Exception) {
-            throw PlaylistOperationException(TelegramMessage.PLAYLIST_ARCHIVE_FAILED, error)
+            throw PlaylistOperationException(MessageKey.PLAYLIST_ARCHIVE_FAILED, error)
         }
         if (!downloadJobService.isProcessing(jobId)) return null
         currentCoroutineContext().ensureActive()
@@ -131,8 +132,8 @@ class ZipPlaylistWorkflow(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            throw PlaylistOperationException(TelegramMessage.PLAYLIST_UPLOAD_FAILED, error)
+            throw PlaylistOperationException(MessageKey.PLAYLIST_UPLOAD_FAILED, error)
         }
-        return PlaylistDeliveryResult(files.size, request.entries.size - files.size, PlaylistCompletion.Archive(fileId), failures.toList())
+        return PlaylistDeliveryResult(files.size, request.entries.size - files.size, fileId, failures.toList())
     }
 }

@@ -3,7 +3,6 @@ package com.nkudrin713.kradnik.download.telegram
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.nkudrin713.kradnik.download.domain.OutputType
-import com.nkudrin713.kradnik.download.playlist.PlaylistCompletion
 
 /** Compatibility with existing download_jobs receipts; playlist completion markers are not media references. */
 object TelegramReceiptCodec {
@@ -34,8 +33,5 @@ object TelegramReceiptCodec {
     fun post(items: List<CachedPostItem>): String = POST_PREFIX + mapper.writeValueAsString(CachedMedia.Post(items).items)
     fun post(items: List<CachedPostItem>, text: String?): String = POST_CONTENT_PREFIX + mapper.writeValueAsString(CachedMedia.Post(items, text, usesLegacyText = false))
     fun photos(fileIds: List<String>): String = PHOTO_GROUP_PREFIX + mapper.writeValueAsString(fileIds)
-    fun playlist(completion: PlaylistCompletion): String = when (completion) {
-        is PlaylistCompletion.AudioMessages -> "playlist:${completion.count}"
-        is PlaylistCompletion.Archive -> completion.fileId
-    }
+    fun playlist(count: Int): String = "playlist:$count"
 }

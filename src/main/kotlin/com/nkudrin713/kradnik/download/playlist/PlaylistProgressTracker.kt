@@ -2,8 +2,8 @@ package com.nkudrin713.kradnik.download.playlist
 
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
-import com.nkudrin713.kradnik.download.processing.JobProgress
-import com.nkudrin713.kradnik.download.processing.PlaylistProgress
+import com.nkudrin713.kradnik.download.progress.JobProgress
+import com.nkudrin713.kradnik.download.progress.PlaylistProgress
 
 /** Owned by one attempt; serialized updates cannot publish an older count after a newer one. */
 class PlaylistProgressTracker(

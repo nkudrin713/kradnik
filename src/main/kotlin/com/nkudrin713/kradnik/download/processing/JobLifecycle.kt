@@ -2,13 +2,13 @@ package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.progress.JobNotifications
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import com.nkudrin713.kradnik.download.telegram.TelegramJobProgress
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
 @Component
-class JobLifecycle(private val jobs: DownloadJobService, private val progress: TelegramJobProgress) {
+class JobLifecycle(private val jobs: DownloadJobService, private val progress: JobNotifications) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     fun complete(job: DownloadJob, receipt: String): Boolean {

@@ -3,7 +3,7 @@ package com.nkudrin713.kradnik.download.single
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
-import com.nkudrin713.kradnik.download.processing.JobProgress
+import com.nkudrin713.kradnik.download.progress.JobProgress
 import org.springframework.stereotype.Component
 import java.nio.file.Path
 

@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.identity
 
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
 import com.nkudrin713.kradnik.download.testPlatformResolver
 import com.nkudrin713.kradnik.download.vk.VK_AUDIO_PRESET

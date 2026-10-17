@@ -5,8 +5,8 @@ import com.nkudrin713.kradnik.download.cover.CoverDownloader
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
 import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
-import com.nkudrin713.kradnik.download.processing.DownloadPhase
-import com.nkudrin713.kradnik.download.processing.JobProgress
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.JobProgress
 import org.springframework.stereotype.Component
 import java.nio.file.Path
 

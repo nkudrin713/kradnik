@@ -1,5 +1,7 @@
 package com.nkudrin713.kradnik.telegram.localization
 
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
 import java.util.Properties
@@ -14,7 +16,7 @@ class TelegramMessagesTest {
     @Test
     fun resolvesEveryMessageInEverySupportedLanguage() {
         BotLanguage.entries.forEach { language ->
-            TelegramMessage.entries.forEach { message ->
+            MessageKey.entries.forEach { message ->
                 assertTrue(messages.text(language, message, "value").isNotBlank())
             }
         }
@@ -25,7 +27,7 @@ class TelegramMessagesTest {
         val englishKeys = loadProperties("i18n/messages_en.properties").stringPropertyNames()
         val russianKeys = loadProperties("i18n/messages_ru.properties").stringPropertyNames()
 
-        assertEquals(TelegramMessage.entries.map { it.key }.toSet(), englishKeys)
+        assertEquals(MessageKey.entries.map { it.key }.toSet(), englishKeys)
         assertEquals(englishKeys, russianKeys)
     }
 
@@ -56,11 +58,11 @@ class TelegramMessagesTest {
 
     @Test
     fun resolvesInformalTextsWithoutChangingStandardRussian() {
-        assertEquals("Свойский", messages.text(BotLanguage.RU_INFORMAL, TelegramMessage.LANGUAGE_NAME))
-        assertEquals("✅ Наш человек. Кидай ссылку", messages.text(BotLanguage.RU_INFORMAL, TelegramMessage.LANGUAGE_SELECTED))
-        assertEquals("✅ Принял: MP3", messages.text(BotLanguage.RU_INFORMAL, TelegramMessage.CHOICE_SELECTED, "MP3"))
-        assertEquals("Русский", messages.text(BotLanguage.RU, TelegramMessage.LANGUAGE_NAME))
-        assertEquals("🔗 Пришли ссылку на медиа", messages.text(BotLanguage.RU, TelegramMessage.START_PROMPT))
+        assertEquals("Свойский", messages.text(BotLanguage.RU_INFORMAL, MessageKey.LANGUAGE_NAME))
+        assertEquals("✅ Наш человек. Кидай ссылку", messages.text(BotLanguage.RU_INFORMAL, MessageKey.LANGUAGE_SELECTED))
+        assertEquals("✅ Принял: MP3", messages.text(BotLanguage.RU_INFORMAL, MessageKey.CHOICE_SELECTED, "MP3"))
+        assertEquals("Русский", messages.text(BotLanguage.RU, MessageKey.LANGUAGE_NAME))
+        assertEquals("🔗 Пришли ссылку на медиа", messages.text(BotLanguage.RU, MessageKey.START_PROMPT))
     }
 
     private fun loadProperties(path: String): Properties {

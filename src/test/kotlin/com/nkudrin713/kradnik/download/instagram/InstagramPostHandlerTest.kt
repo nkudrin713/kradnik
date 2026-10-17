@@ -9,14 +9,12 @@ import com.nkudrin713.kradnik.download.domain.MediaArtifact
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
-import com.nkudrin713.kradnik.download.instagram.InstagramPreparedSource
-import com.nkudrin713.kradnik.download.instagram.InstagramSourceAdapter
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
-import com.nkudrin713.kradnik.download.processing.JobProgress
+import com.nkudrin713.kradnik.download.progress.JobProgress
 import com.nkudrin713.kradnik.download.single.PostHandler
 import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer

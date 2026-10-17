@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service
 /** Persistent admission switches. Accepted jobs keep running; reads never query the database. */
 @Service
 @DependsOnDatabaseInitialization
-class PlatformAvailability(private val jdbc: JdbcTemplate) {
+class PlatformAvailability(private val jdbc: JdbcTemplate) : SourceAdmission {
     @Volatile
     private var states: Map<String, Boolean> = emptyMap()
 
@@ -26,7 +26,7 @@ class PlatformAvailability(private val jdbc: JdbcTemplate) {
         }
     }
 
-    fun requireEnabled(platform: DownloadPlatform) {
+    override fun requireEnabled(platform: DownloadPlatform) {
         if (states[platform.dbValue] == false) throw PlatformDisabledException(platform)
     }
 

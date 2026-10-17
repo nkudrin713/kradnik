@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.processing
 import com.nkudrin713.kradnik.admin.AdminRuntime
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.service.ActiveDownloadRegistry
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import io.mockk.coEvery
 import io.mockk.coVerify

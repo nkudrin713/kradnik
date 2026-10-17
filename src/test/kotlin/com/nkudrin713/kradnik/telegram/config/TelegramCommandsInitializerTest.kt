@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik.telegram.config
 
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.BotCommand
@@ -37,8 +37,8 @@ class TelegramCommandsInitializerTest {
             parameters["language_code"] shouldBe null
             val commands = (parameters["commands"] as Array<*>).filterIsInstance<BotCommand>()
             commands.map { it.command() } shouldBe listOf("start", "help", "legal", "donate", "language")
-            commands.first().description() shouldBe messages.text(language, TelegramMessage.COMMAND_START)
-            commands.last().description() shouldBe messages.text(language, TelegramMessage.COMMAND_LANGUAGE)
+            commands.first().description() shouldBe messages.text(language, MessageKey.COMMAND_START)
+            commands.last().description() shouldBe messages.text(language, MessageKey.COMMAND_LANGUAGE)
         }
 
         initializer.setChatLanguage(200, BotLanguage.RU)

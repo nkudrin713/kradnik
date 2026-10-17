@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.admin
 
-import com.nkudrin713.kradnik.download.processing.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
 import com.nkudrin713.kradnik.observability.BotTelemetry
 import com.nkudrin713.kradnik.observability.RuntimeError
 import org.springframework.beans.factory.annotation.Value

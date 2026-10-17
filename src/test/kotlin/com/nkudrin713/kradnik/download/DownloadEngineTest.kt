@@ -18,7 +18,7 @@ import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
-import com.nkudrin713.kradnik.download.processing.JobProgress
+import com.nkudrin713.kradnik.download.progress.JobProgress
 import com.nkudrin713.kradnik.download.single.CoverHandler
 import com.nkudrin713.kradnik.download.source.SourceMediaType
 import com.nkudrin713.kradnik.download.source.SourceRequest

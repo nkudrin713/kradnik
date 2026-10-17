@@ -3,12 +3,12 @@ package com.nkudrin713.kradnik.telegram.handler
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import com.nkudrin713.kradnik.telegram.DownloadJobAction
 import com.nkudrin713.kradnik.telegram.DownloadJobCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramSender
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.pengrad.telegrambot.model.CallbackQuery
 import org.springframework.stereotype.Component
@@ -19,7 +19,7 @@ class PlaylistRetryHandler(
     private val starter: TelegramDownloadStarter,
     private val sender: TelegramSender,
     private val preferences: TelegramUserPreferenceService,
-    private val messages: TelegramMessages,
+    private val messages: Messages,
 ) {
     fun handle(callbackQuery: CallbackQuery, updateId: Int): Boolean {
         val callback = DownloadJobCallback.parse(callbackQuery.data().trim()) ?: return false
@@ -33,18 +33,18 @@ class PlaylistRetryHandler(
         val chatId = callbackQuery.maybeInaccessibleMessage()?.chat()?.id()
         val source = chatId?.let { jobs.retrySource(callback.jobId, userId, it) }
         if (source == null || (mode == PlaylistDeliveryMode.ZIP && source.playlistDeliveryMode != PlaylistDeliveryMode.ZIP)) {
-            sender.answerCallback(callbackQuery.id(), messages.text(language, TelegramMessage.RETRY_UNAVAILABLE), true)
+            sender.answerCallback(callbackQuery.id(), messages.text(language, MessageKey.RETRY_UNAVAILABLE), true)
             return true
         }
         val created = try {
             starter.retryPlaylist(source, userId, updateId, mode)
         } catch (error: PlatformDisabledException) {
-            sender.answerCallback(callbackQuery.id(), messages.text(language, TelegramMessage.ERROR_PLATFORM_DISABLED, error.platform.displayName), true)
+            sender.answerCallback(callbackQuery.id(), messages.text(language, MessageKey.ERROR_PLATFORM_DISABLED, error.platform.displayName), true)
             return true
         }
         sender.answerCallback(
             callbackQuery.id(),
-            if (created == null) messages.text(language, TelegramMessage.RETRY_ALREADY_STARTED) else null,
+            if (created == null) messages.text(language, MessageKey.RETRY_ALREADY_STARTED) else null,
         )
         return true
     }

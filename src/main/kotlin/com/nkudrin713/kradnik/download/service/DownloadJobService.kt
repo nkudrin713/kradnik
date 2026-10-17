@@ -6,17 +6,15 @@ import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
+import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.playlist.PlaylistRetrySelection
-import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
-import com.nkudrin713.kradnik.download.repository.StringListJsonConverter
-import com.nkudrin713.kradnik.download.source.SourceRequest
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.BotLanguage
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /** Short database transactions; external calls always happen after these methods return. */
 @Service
-class DownloadJobService(private val downloadJobRepository: DownloadJobRepository) {
+class DownloadJobService(private val downloadJobRepository: JobStore) {
     /** Locks a Telegram update identity and persists at most one [DownloadJob] for a non-null update ID. */
     @Transactional
     fun createJob(command: CreateDownloadJobCommand): DownloadJob? {
@@ -27,7 +25,7 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
             }
         }
 
-        val spec = command.spec
+        val spec = command.spec.copy(cacheKey = ResultKeyFactory.forNewJob(command.spec.cacheKey, command.spec.outputType))
         return downloadJobRepository.save(
             DownloadJob(
                 telegramUserId = command.telegramUserId,
@@ -117,17 +115,6 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
     @Transactional
     fun recoverInterruptedJobs(): Int = downloadJobRepository.requeueProcessingJobs()
 
-    @Transactional(readOnly = true)
-    fun findCachedFileId(cacheKey: String): String? = downloadJobRepository.findCachedCompletedJob(cacheKey)?.telegramFileId
-
-    @Transactional(readOnly = true)
-    fun findCachedPlaylistFile(videoId: String, source: SourceRequest): String? = downloadJobRepository.findCachedPlaylistFile(
-        videoId,
-        source.presetName,
-        source.formatSelector,
-        StringListJsonConverter().convertToDatabaseColumn(source.extraArgs),
-    )
-
     @Transactional
     fun markCompleted(job: DownloadJob, telegramFileId: String): Boolean = downloadJobRepository.complete(job.requiredId(), telegramFileId) == 1
 
@@ -150,21 +137,10 @@ class DownloadJobService(private val downloadJobRepository: DownloadJobRepositor
     fun isCancelledByUser(jobId: Long): Boolean = downloadJobRepository.findById(jobId).orElse(null)?.status == DownloadJobStatus.CANCELLED_BY_USER
 
     @Transactional
-    fun savePlaylistResult(jobId: Long, result: PlaylistAudioResult): Boolean {
-        val job = downloadJobRepository.findForUpdate(jobId) ?: return false
-        if (job.status != DownloadJobStatus.PROCESSING) return false
-        if (job.playlistResults.any { it.position == result.position }) return true
-        job.playlistResults = job.playlistResults + result
-        return true
-    }
+    fun savePlaylistResult(jobId: Long, result: PlaylistAudioResult): Boolean = downloadJobRepository.savePlaylistResult(jobId, result)
 
     @Transactional
-    fun savePlaylistFailures(jobId: Long, failures: List<PlaylistAudioResult>): Boolean {
-        val job = downloadJobRepository.findForUpdate(jobId) ?: return false
-        if (job.status != DownloadJobStatus.PROCESSING) return false
-        job.playlistResults = failures.filter { it.fileId == null }
-        return true
-    }
+    fun savePlaylistFailures(jobId: Long, failures: List<PlaylistAudioResult>): Boolean = downloadJobRepository.savePlaylistFailures(jobId, failures)
 
     private fun DownloadJob.canRetry(telegramUserId: Long, telegramChatId: Long): Boolean {
         return this.telegramUserId == telegramUserId &&

@@ -1,7 +1,7 @@
 package com.nkudrin713.kradnik
 
-import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionRepository
 import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
+import com.nkudrin713.kradnik.download.repository.JpaDownloadChoiceSessionRepository
 import com.nkudrin713.kradnik.process.ProcessRunner
 import com.nkudrin713.kradnik.telegram.TelegramPollingService
 import com.nkudrin713.kradnik.telegram.config.TelegramCommandsInitializer
@@ -39,7 +39,7 @@ class KradnikApplicationTests {
         fun downloadJobRepository(): DownloadJobRepository = mockk(relaxed = true)
 
         @Bean
-        fun downloadChoiceSessionRepository(): DownloadChoiceSessionRepository = mockk(relaxed = true)
+        fun downloadChoiceSessionRepository(): JpaDownloadChoiceSessionRepository = mockk(relaxed = true)
 
         @Bean
         fun telegramUserPreferenceRepository(): TelegramUserPreferenceRepository = mockk(relaxed = true)

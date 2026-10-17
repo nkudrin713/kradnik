@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download.telegram
+package com.nkudrin713.kradnik.download.delivery
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 

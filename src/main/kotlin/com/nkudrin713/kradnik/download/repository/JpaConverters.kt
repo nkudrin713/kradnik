@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.repository
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.nkudrin713.kradnik.download.diagnostics.PlaylistFailureDiagnostics
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.OutputType
@@ -50,7 +51,7 @@ class StringListJsonConverter : AttributeConverter<List<String>, String> {
 
 @Converter
 class PlaylistAudioEntriesJsonConverter : AttributeConverter<List<PlaylistAudioEntry>, String> {
-    private val objectMapper = jacksonObjectMapper()
+    private val objectMapper = SavedDownloadJson.mapper
 
     override fun convertToDatabaseColumn(attribute: List<PlaylistAudioEntry>?): String = objectMapper.writeValueAsString(attribute.orEmpty())
 
@@ -63,5 +64,5 @@ class PlaylistAudioResultsJsonConverter : AttributeConverter<List<PlaylistAudioR
 
     override fun convertToDatabaseColumn(attribute: List<PlaylistAudioResult>?): String = objectMapper.writeValueAsString(attribute.orEmpty())
 
-    override fun convertToEntityAttribute(dbData: String?): List<PlaylistAudioResult> = dbData?.takeIf { it.isNotBlank() }?.let { objectMapper.readValue(it) } ?: emptyList()
+    override fun convertToEntityAttribute(dbData: String?): List<PlaylistAudioResult> = dbData?.takeIf { it.isNotBlank() }?.let { objectMapper.readValue<List<PlaylistAudioResult>>(it).map(PlaylistFailureDiagnostics::normalizeSavedResult) } ?: emptyList()
 }

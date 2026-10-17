@@ -1,12 +1,12 @@
 package com.nkudrin713.kradnik.download.limit
 
+import com.nkudrin713.kradnik.download.domain.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.MediaFormat
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals

@@ -4,13 +4,14 @@ import com.nkudrin713.kradnik.admin.AdminRuntime
 import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import io.mockk.coEvery
 import io.mockk.every
@@ -35,13 +36,13 @@ class DownloadChoiceCoordinatorTest {
         val messages = telegramMessages()
         val coordinator = DownloadChoiceCoordinator(planner, sessions, sender, messages)
         val statuses = mapOf(
-            DownloadFailureReason.FORMAT_UNAVAILABLE to TelegramMessage.STATUS_FORMAT_UNAVAILABLE,
-            DownloadFailureReason.AUTHENTICATION_REQUIRED to TelegramMessage.STATUS_AUTHENTICATION_REQUIRED,
-            DownloadFailureReason.SOURCE_UNAVAILABLE to TelegramMessage.STATUS_SOURCE_UNAVAILABLE,
-            DownloadFailureReason.SOURCE_RATE_LIMITED to TelegramMessage.STATUS_SOURCE_RATE_LIMITED,
-            DownloadFailureReason.SOURCE_REQUEST_FAILED to TelegramMessage.STATUS_SOURCE_REQUEST_FAILED,
-            DownloadFailureReason.SOURCE_TIMEOUT to TelegramMessage.STATUS_SOURCE_TIMEOUT,
-            DownloadFailureReason.SOURCE_FAILED to TelegramMessage.STATUS_ERROR,
+            DownloadFailureReason.FORMAT_UNAVAILABLE to MessageKey.STATUS_FORMAT_UNAVAILABLE,
+            DownloadFailureReason.AUTHENTICATION_REQUIRED to MessageKey.STATUS_AUTHENTICATION_REQUIRED,
+            DownloadFailureReason.SOURCE_UNAVAILABLE to MessageKey.STATUS_SOURCE_UNAVAILABLE,
+            DownloadFailureReason.SOURCE_RATE_LIMITED to MessageKey.STATUS_SOURCE_RATE_LIMITED,
+            DownloadFailureReason.SOURCE_REQUEST_FAILED to MessageKey.STATUS_SOURCE_REQUEST_FAILED,
+            DownloadFailureReason.SOURCE_TIMEOUT to MessageKey.STATUS_SOURCE_TIMEOUT,
+            DownloadFailureReason.SOURCE_FAILED to MessageKey.STATUS_ERROR,
         )
         try {
             for (language in BotLanguage.entries) {
@@ -49,9 +50,9 @@ class DownloadChoiceCoordinatorTest {
                     coEvery { planner.plan(any(), any()) } throws DownloadFailure(reason, "Private diagnostic")
                     coordinator.prepareAsync(
                         PrepareDownloadChoiceCommand(1, 2, 3, 4, "https://youtu.be/id", language),
-                        TelegramMessageAddress.Inline("inline"),
+                        MessageAddress.Inline("inline"),
                     )
-                    verify { sender.editFailure(TelegramMessageAddress.Inline("inline"), messages.text(language, key), any(), language, null) }
+                    verify { sender.editFailure(MessageAddress.Inline("inline"), messages.text(language, key), any(), language, null) }
                 }
             }
             verify(exactly = 0) { sessions.create(any()) }
@@ -72,10 +73,10 @@ class DownloadChoiceCoordinatorTest {
         try {
             coordinator.prepareAsync(
                 PrepareDownloadChoiceCommand(1, 2, 3, 4, "https://vk.com/video1_2", BotLanguage.RU),
-                TelegramMessageAddress.Chat(2, 5),
+                MessageAddress.Chat(2, 5),
             )
 
-            verify { sender.editFailure(TelegramMessageAddress.Chat(2, 5), telegramMessages().text(BotLanguage.RU, TelegramMessage.ERROR_PLATFORM_DISABLED, "VK"), any(), BotLanguage.RU, null) }
+            verify { sender.editFailure(MessageAddress.Chat(2, 5), telegramMessages().text(BotLanguage.RU, MessageKey.ERROR_PLATFORM_DISABLED, "VK"), any(), BotLanguage.RU, null) }
             verify(exactly = 0) { sessions.create(any()) }
             assertEquals(0L, runtime.snapshot().errors.first().counts["METADATA"])
         } finally {
@@ -89,7 +90,7 @@ class DownloadChoiceCoordinatorTest {
         val sessions = mockk<DownloadChoiceSessionService>()
         every { sessions.createRetry(any()) } returns DownloadChoiceSession()
         val sender = mockk<TelegramSender>(relaxed = true)
-        val messages = mockk<TelegramMessages>(relaxed = true)
+        val messages = mockk<Messages>(relaxed = true)
         val started = CountDownLatch(2)
         val stopped = CountDownLatch(2)
         val active = AtomicInteger()
@@ -103,7 +104,7 @@ class DownloadChoiceCoordinatorTest {
                 stopped.countDown()
             }
         }
-        every { messages.text(BotLanguage.EN, TelegramMessage.ERROR_CHOICE_PREPARATION) } returns "Preparation failed"
+        every { messages.text(BotLanguage.EN, MessageKey.ERROR_CHOICE_PREPARATION) } returns "Preparation failed"
         val runtime = AdminRuntime(true)
         val coordinator = DownloadChoiceCoordinator(planner, sessions, sender, messages, runtime)
         fun request(id: Int) = PrepareDownloadChoiceCommand(

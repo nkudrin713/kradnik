@@ -9,32 +9,32 @@ import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.source.PlaylistSourceAdapter
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import org.springframework.stereotype.Component
 
 @Component
 class PlaylistChoicePlanner(
     private val sources: PlatformResolver,
-    private val messages: TelegramMessages,
+    private val messages: Messages,
 ) {
     suspend fun planOrNull(url: String, language: BotLanguage): DownloadChoicePlan? {
         val source = sources.adapter(sources.platformOf(url)) as? PlaylistSourceAdapter ?: return null
         val spec = source.playlist(url, "${AUDIO_BITRATE_KBPS}K") ?: return null
         val entries = spec.playlistEntries
         if (entries.isEmpty()) {
-            throw DownloadChoicePlanningException(messages.text(language, TelegramMessage.ERROR_NO_OPTIONS))
+            throw DownloadChoicePlanningException(messages.text(language, MessageKey.ERROR_NO_OPTIONS))
         }
 
         val durationSeconds = entries.mapNotNull(PlaylistAudioEntry::durationSeconds).sumOf(Int::toLong)
         val estimatedSize = durationSeconds.takeIf { it > 0 && entries.all { entry -> entry.durationSeconds != null } }?.let(::estimatedSize)
         val ranges = if (entries.size <= MAX_PLAYLIST_ITEMS) {
-            listOf(PlaylistRange("playlist_all", entries, TelegramMessage.CHOICE_PLAYLIST_ALL, TelegramMessage.CHOICE_PLAYLIST_ZIP_ALL))
+            listOf(PlaylistRange("playlist_all", entries, MessageKey.CHOICE_PLAYLIST_ALL, MessageKey.CHOICE_PLAYLIST_ZIP_ALL))
         } else {
             listOf(
-                PlaylistRange("playlist_first", entries.take(MAX_PLAYLIST_ITEMS), TelegramMessage.CHOICE_PLAYLIST_FIRST, TelegramMessage.CHOICE_PLAYLIST_ZIP_FIRST),
-                PlaylistRange("playlist_last", entries.takeLast(MAX_PLAYLIST_ITEMS), TelegramMessage.CHOICE_PLAYLIST_LAST, TelegramMessage.CHOICE_PLAYLIST_ZIP_LAST),
+                PlaylistRange("playlist_first", entries.take(MAX_PLAYLIST_ITEMS), MessageKey.CHOICE_PLAYLIST_FIRST, MessageKey.CHOICE_PLAYLIST_ZIP_FIRST),
+                PlaylistRange("playlist_last", entries.takeLast(MAX_PLAYLIST_ITEMS), MessageKey.CHOICE_PLAYLIST_LAST, MessageKey.CHOICE_PLAYLIST_ZIP_LAST),
             )
         }
         val options = ranges.flatMap { range ->
@@ -82,8 +82,8 @@ class PlaylistChoicePlanner(
     private data class PlaylistRange(
         val key: String,
         val entries: List<PlaylistAudioEntry>,
-        val label: TelegramMessage,
-        val zipLabel: TelegramMessage,
+        val label: MessageKey,
+        val zipLabel: MessageKey,
     )
 
     private companion object {

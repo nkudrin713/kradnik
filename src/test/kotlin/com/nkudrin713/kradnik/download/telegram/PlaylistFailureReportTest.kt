@@ -1,11 +1,12 @@
 package com.nkudrin713.kradnik.download.telegram
 
 import com.nkudrin713.kradnik.download.DownloadEngine
+import com.nkudrin713.kradnik.download.diagnostics.PlaylistFailureDiagnostics
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
-import com.nkudrin713.kradnik.download.playlist.PlaylistItemFailure
+import com.nkudrin713.kradnik.download.domain.PlaylistItemFailure
 import com.nkudrin713.kradnik.download.testPlatformResolver
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,7 +19,7 @@ class PlaylistFailureReportTest {
     @Test
     fun escapesTitlesUsesSafeLinksAndKeepsOriginalPositionsAndLegacyReasons() {
         val entries = listOf(PlaylistAudioEntry(9, "abc\"&", "javascript:bad", "<script> & title", null), PlaylistAudioEntry(3, "def", "url", "Other", null))
-        val failures = listOf(PlaylistAudioResult(9, error = "Video has been removed"), PlaylistAudioResult(3, failure = PlaylistItemFailure.UPLOAD))
+        val failures = listOf(PlaylistAudioResult(9, error = "Video has been removed"), PlaylistAudioResult(3, failure = PlaylistItemFailure.UPLOAD)).map(PlaylistFailureDiagnostics::normalizeSavedResult)
         val text = report.render("Failed", entries, failures, BotLanguage.EN).single()
         assertTrue(text.indexOf("3. <a") < text.indexOf("9. <a"))
         assertTrue("&lt;script&gt; &amp; title" in text)

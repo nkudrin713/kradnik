@@ -3,8 +3,7 @@ package com.nkudrin713.kradnik.download.choice
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.telegram.REPEAT_LAST_OPTION_KEY
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import io.mockk.every
 import io.mockk.mockk
@@ -36,6 +35,10 @@ class DownloadChoiceSessionServiceTest {
         consumedSessionTtl = Duration.ofMinutes(30),
         unselectedSessionMaxAge = Duration.ofDays(30),
     )
+
+    init {
+        every { repository.save(any()) } answers { firstArg() }
+    }
 
     @Test
     fun createsSessionWithPlanSnapshot() {

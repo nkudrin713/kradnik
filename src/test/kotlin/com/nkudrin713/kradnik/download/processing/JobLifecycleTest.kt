@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.DownloadEngine
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadJob
@@ -8,10 +9,9 @@ import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.telegram.TelegramJobProgress
 import com.nkudrin713.kradnik.download.testPlatformResolver
+import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
-import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import io.mockk.every
 import io.mockk.mockk
@@ -44,8 +44,8 @@ class JobLifecycleTest {
         val failure = DownloadFailure(DownloadFailureReason.AUTHENTICATION_REQUIRED, "login")
         lifecycle.fail(single, failure)
         lifecycle.fail(playlist, failure)
-        verify { sender.editFailure(TelegramMessageAddress.Chat(2, 3), telegramMessages().text(single.language, TelegramDownloadStatus.AUTHENTICATION_REQUIRED.message), any(), single.language, 1) }
-        verify { sender.editStatus(TelegramMessageAddress.Chat(2, 4), TelegramDownloadStatus.ERROR, playlist.language) }
+        verify { sender.editFailure(MessageAddress.Chat(2, 3), telegramMessages().text(single.language, TelegramDownloadStatus.AUTHENTICATION_REQUIRED.message), any(), single.language, 1) }
+        verify { sender.editStatus(MessageAddress.Chat(2, 4), TelegramDownloadStatus.ERROR, playlist.language) }
     }
 
     @Test
@@ -66,8 +66,8 @@ class JobLifecycleTest {
                 val inline = DownloadJob(id = 2, telegramInlineMessageId = "inline", language = language)
                 lifecycle.fail(chat, DownloadFailure(reason, "Private diagnostic"))
                 lifecycle.fail(inline, DownloadFailure(reason, "Private diagnostic"))
-                verify { sender.editFailure(TelegramMessageAddress.Chat(2, 3), telegramMessages().text(language, status.message), any(), language, 1) }
-                verify { sender.editFailure(TelegramMessageAddress.Inline("inline"), telegramMessages().text(language, status.message), any(), language, 2) }
+                verify { sender.editFailure(MessageAddress.Chat(2, 3), telegramMessages().text(language, status.message), any(), language, 1) }
+                verify { sender.editFailure(MessageAddress.Inline("inline"), telegramMessages().text(language, status.message), any(), language, 2) }
             }
         }
     }

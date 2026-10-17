@@ -1,6 +1,8 @@
 package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.JobProgress
 import com.nkudrin713.kradnik.download.telegram.TelegramJobProgress
 import com.nkudrin713.kradnik.observability.BotTelemetry
 import io.mockk.every

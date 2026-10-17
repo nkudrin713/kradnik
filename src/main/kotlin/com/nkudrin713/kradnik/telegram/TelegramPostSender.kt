@@ -1,9 +1,9 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.download.delivery.DeliveryContext
 import com.nkudrin713.kradnik.download.domain.PostMedia
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.telegram.CachedPostItem
-import com.nkudrin713.kradnik.download.telegram.DeliveryContext
 import com.nkudrin713.kradnik.download.video.VideoMetadata
 import com.nkudrin713.kradnik.download.video.VideoMetadataProbe
 import com.nkudrin713.kradnik.telegram.config.TelegramBotProperties

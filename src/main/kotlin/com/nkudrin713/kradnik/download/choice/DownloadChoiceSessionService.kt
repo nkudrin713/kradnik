@@ -1,9 +1,8 @@
 package com.nkudrin713.kradnik.download.choice
 
-import com.nkudrin713.kradnik.telegram.REPEAT_LAST_OPTION_KEY
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
@@ -21,7 +20,7 @@ import java.util.UUID
 @Service
 class DownloadChoiceSessionService(
     private val repository: DownloadChoiceSessionRepository,
-    private val messages: TelegramMessages,
+    private val messages: Messages,
     private val clock: Clock,
     @Value($$"${download.choice-session-ttl:30m}")
     private val consumedSessionTtl: Duration = Duration.ofMinutes(30),
@@ -99,7 +98,7 @@ class DownloadChoiceSessionService(
         if (!option.available) {
             return DownloadChoiceSelection.Unavailable(
                 reason = option.unavailableReason
-                    ?: messages.text(session.language, TelegramMessage.CHOICE_OPTION_UNAVAILABLE),
+                    ?: messages.text(session.language, MessageKey.CHOICE_OPTION_UNAVAILABLE),
             )
         }
 
@@ -145,6 +144,7 @@ class DownloadChoiceSessionService(
     private fun DownloadChoiceSession.consume(now: Instant) {
         selectedAt = now
         cleanupAfter = now.plus(consumedSessionTtl)
+        repository.save(this)
     }
 
     private enum class SessionRejection { NOT_OWNER, INVALID, ALREADY_SELECTED }
@@ -157,7 +157,9 @@ class DownloadChoiceSessionService(
      */
     @Transactional
     fun release(token: UUID) {
-        repository.findForUpdate(token)?.selectedAt = null
+        val session = repository.findForUpdate(token) ?: return
+        session.selectedAt = null
+        repository.save(session)
     }
 
     /**

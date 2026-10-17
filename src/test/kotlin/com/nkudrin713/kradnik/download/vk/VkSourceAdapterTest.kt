@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.vk
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
@@ -14,13 +15,9 @@ import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
-import com.nkudrin713.kradnik.download.processing.JobProgress
-import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
+import com.nkudrin713.kradnik.download.progress.JobProgress
 import com.nkudrin713.kradnik.download.single.PostHandler
 import com.nkudrin713.kradnik.download.testPlatformResolver
-import com.nkudrin713.kradnik.download.vk.VkPostClient
-import com.nkudrin713.kradnik.download.vk.VkPreparedSource
-import com.nkudrin713.kradnik.download.vk.VkSourceAdapter
 import com.nkudrin713.kradnik.ytdlp.YtDlpPreparedSource
 import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import io.mockk.coEvery

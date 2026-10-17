@@ -1,5 +1,7 @@
 package com.nkudrin713.kradnik.telegram.localization
 
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.persistence.BotLanguageConverter
 import jakarta.persistence.Column
 import jakarta.persistence.Convert
 import jakarta.persistence.Entity

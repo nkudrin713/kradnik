@@ -2,11 +2,13 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
+import com.nkudrin713.kradnik.download.choice.failureMessage
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.model.request.InlineQueryResultArticle
 import com.pengrad.telegrambot.model.request.ParseMode
@@ -24,11 +26,11 @@ class TelegramSender(
     private val apiClient: TelegramApiClient,
     private val downloadChoiceView: TelegramDownloadChoiceView,
     private val downloadJobView: TelegramDownloadJobView,
-    private val messages: TelegramMessages,
+    private val messages: Messages,
 ) {
     private val jobStatusLocks = Array(64) { Any() }
 
-    fun editPlaylistProgress(address: TelegramMessageAddress, text: String, jobId: Long, language: BotLanguage, isProcessing: () -> Boolean) {
+    fun editPlaylistProgress(address: MessageAddress, text: String, jobId: Long, language: BotLanguage, isProcessing: () -> Boolean) {
         synchronized(jobStatusLocks[Math.floorMod(jobId, jobStatusLocks.size.toLong()).toInt()]) {
             if (isProcessing()) editText(address, text, downloadJobView.cancelKeyboard(jobId, language))
         }
@@ -71,21 +73,21 @@ class TelegramSender(
         guestQueryId: String,
         text: String,
         language: BotLanguage = BotLanguage.EN,
-    ): TelegramMessageAddress.Inline {
+    ): MessageAddress.Inline {
         val result = InlineQueryResultArticle(
             "download",
-            messages.text(language, TelegramMessage.BOT_NAME),
+            messages.text(language, MessageKey.BOT_NAME),
             text,
         )
         val response = apiClient.execute(AnswerGuestQuery(guestQueryId, result))
         val inlineMessageId = response.result?.inlineMessageId
             ?.takeIf(String::isNotBlank)
             ?: throw TelegramSendException("Telegram response does not contain inline message ID")
-        return TelegramMessageAddress.Inline(inlineMessageId)
+        return MessageAddress.Inline(inlineMessageId)
     }
 
     fun editStatus(
-        address: TelegramMessageAddress,
+        address: MessageAddress,
         status: TelegramDownloadStatus,
         language: BotLanguage = BotLanguage.EN,
     ) {
@@ -103,7 +105,7 @@ class TelegramSender(
     }
 
     fun editJobStatus(
-        address: TelegramMessageAddress,
+        address: MessageAddress,
         status: TelegramDownloadStatus,
         jobId: Long,
         language: BotLanguage = BotLanguage.EN,
@@ -113,7 +115,7 @@ class TelegramSender(
         }
     }
 
-    fun editFailure(address: TelegramMessageAddress, text: String, retryToken: UUID?, language: BotLanguage, jobId: Long? = null) {
+    fun editFailure(address: MessageAddress, text: String, retryToken: UUID?, language: BotLanguage, jobId: Long? = null) {
         val publish = { editText(address, text, retryToken?.let { downloadJobView.repeatKeyboard(it, language) } ?: EMPTY_KEYBOARD) }
         if (jobId == null) {
             publish()
@@ -123,7 +125,7 @@ class TelegramSender(
     }
 
     fun editQueuedJob(
-        address: TelegramMessageAddress,
+        address: MessageAddress,
         jobId: Long,
         language: BotLanguage,
         workloadType: DownloadWorkloadType,
@@ -133,8 +135,8 @@ class TelegramSender(
         synchronized(jobStatusLocks[Math.floorMod(jobId, jobStatusLocks.size.toLong()).toInt()]) {
             if (!isQueued()) return
             val positionMessage = when (workloadType) {
-                DownloadWorkloadType.SINGLE -> TelegramMessage.STATUS_QUEUE_POSITION_SINGLE
-                DownloadWorkloadType.PLAYLIST_AUDIO -> TelegramMessage.STATUS_QUEUE_POSITION_PLAYLIST
+                DownloadWorkloadType.SINGLE -> MessageKey.STATUS_QUEUE_POSITION_SINGLE
+                DownloadWorkloadType.PLAYLIST_AUDIO -> MessageKey.STATUS_QUEUE_POSITION_PLAYLIST
             }
             val text = messages.text(language, positionMessage, position)
             try {
@@ -146,14 +148,14 @@ class TelegramSender(
     }
 
     fun editCancelledJob(
-        address: TelegramMessageAddress,
+        address: MessageAddress,
         jobId: Long,
         language: BotLanguage = BotLanguage.EN,
     ) {
         synchronized(jobStatusLocks[Math.floorMod(jobId, jobStatusLocks.size.toLong()).toInt()]) {
             editText(
                 address,
-                messages.text(language, TelegramMessage.STATUS_CANCELLED_BY_USER),
+                messages.text(language, MessageKey.STATUS_CANCELLED_BY_USER),
                 downloadJobView.backKeyboard(jobId, language),
             )
         }
@@ -177,7 +179,7 @@ class TelegramSender(
     }
 
     fun editDownloadChoice(
-        address: TelegramMessageAddress,
+        address: MessageAddress,
         sessionToken: UUID,
         mediaInfo: DownloadChoiceMediaInfo,
         options: List<DownloadChoiceOptionSnapshot>,
@@ -201,18 +203,18 @@ class TelegramSender(
     }
 
     fun editMessage(
-        address: TelegramMessageAddress,
+        address: MessageAddress,
         text: String,
         keyboard: InlineKeyboardMarkup? = null,
     ) {
         editText(address, text, keyboard)
     }
 
-    fun editFinalMessage(address: TelegramMessageAddress, text: String, html: Boolean = false) {
+    fun editFinalMessage(address: MessageAddress, text: String, html: Boolean = false) {
         editText(address, text, EMPTY_KEYBOARD, if (html) ParseMode.HTML else null)
     }
 
-    fun editPlaylistReport(address: TelegramMessageAddress, html: String, jobId: Long, language: BotLanguage, retryCount: Int, includeZip: Boolean, repeatToken: UUID? = null) {
+    fun editPlaylistReport(address: MessageAddress, html: String, jobId: Long, language: BotLanguage, retryCount: Int, includeZip: Boolean, repeatToken: UUID? = null) {
         editText(address, html, downloadJobView.retryKeyboard(jobId, language, retryCount, includeZip, repeatToken), ParseMode.HTML)
     }
 
@@ -261,14 +263,14 @@ class TelegramSender(
     }
 
     private fun editText(
-        address: TelegramMessageAddress,
+        address: MessageAddress,
         text: String,
         keyboard: InlineKeyboardMarkup? = null,
         parseMode: ParseMode? = null,
     ) {
         val request = when (address) {
-            is TelegramMessageAddress.Chat -> EditMessageText(address.chatId, address.messageId, text)
-            is TelegramMessageAddress.Inline -> EditMessageText(address.inlineMessageId, text)
+            is MessageAddress.Chat -> EditMessageText(address.chatId, address.messageId, text)
+            is MessageAddress.Inline -> EditMessageText(address.inlineMessageId, text)
         }
         keyboard?.let(request::replyMarkup)
         parseMode?.let(request::parseMode)
@@ -280,41 +282,25 @@ class TelegramSender(
     }
 }
 
-sealed interface TelegramMessageAddress {
-    data class Chat(val chatId: Long, val messageId: Int) : TelegramMessageAddress
-
-    data class Inline(val inlineMessageId: String) : TelegramMessageAddress
-}
-
-enum class TelegramDownloadStatus(val message: TelegramMessage) {
-    ANALYZING(TelegramMessage.STATUS_ANALYZING),
-    QUEUED(TelegramMessage.STATUS_QUEUED),
-    DOWNLOADING(TelegramMessage.STATUS_DOWNLOADING),
-    PACKING(TelegramMessage.STATUS_PACKING),
-    UPLOADING(TelegramMessage.STATUS_UPLOADING),
-    REJECTED_TOO_LARGE(TelegramMessage.STATUS_REJECTED_TOO_LARGE),
-    AUTHENTICATION_REQUIRED(TelegramMessage.STATUS_AUTHENTICATION_REQUIRED),
-    SOURCE_UNAVAILABLE(TelegramMessage.STATUS_SOURCE_UNAVAILABLE),
-    FORMAT_UNAVAILABLE(TelegramMessage.STATUS_FORMAT_UNAVAILABLE),
-    SOURCE_RATE_LIMITED(TelegramMessage.STATUS_SOURCE_RATE_LIMITED),
-    SOURCE_REQUEST_FAILED(TelegramMessage.STATUS_SOURCE_REQUEST_FAILED),
-    SOURCE_TIMEOUT(TelegramMessage.STATUS_SOURCE_TIMEOUT),
-    METADATA_UNAVAILABLE(TelegramMessage.ERROR_METADATA_UNAVAILABLE),
-    ERROR(TelegramMessage.STATUS_ERROR),
-    CANCELLED(TelegramMessage.STATUS_CANCELLED_BY_USER),
+enum class TelegramDownloadStatus(val message: MessageKey) {
+    ANALYZING(MessageKey.STATUS_ANALYZING),
+    QUEUED(MessageKey.STATUS_QUEUED),
+    DOWNLOADING(MessageKey.STATUS_DOWNLOADING),
+    PACKING(MessageKey.STATUS_PACKING),
+    UPLOADING(MessageKey.STATUS_UPLOADING),
+    REJECTED_TOO_LARGE(MessageKey.STATUS_REJECTED_TOO_LARGE),
+    AUTHENTICATION_REQUIRED(MessageKey.STATUS_AUTHENTICATION_REQUIRED),
+    SOURCE_UNAVAILABLE(MessageKey.STATUS_SOURCE_UNAVAILABLE),
+    FORMAT_UNAVAILABLE(MessageKey.STATUS_FORMAT_UNAVAILABLE),
+    SOURCE_RATE_LIMITED(MessageKey.STATUS_SOURCE_RATE_LIMITED),
+    SOURCE_REQUEST_FAILED(MessageKey.STATUS_SOURCE_REQUEST_FAILED),
+    SOURCE_TIMEOUT(MessageKey.STATUS_SOURCE_TIMEOUT),
+    METADATA_UNAVAILABLE(MessageKey.ERROR_METADATA_UNAVAILABLE),
+    ERROR(MessageKey.STATUS_ERROR),
+    CANCELLED(MessageKey.STATUS_CANCELLED_BY_USER),
     ;
 
     companion object {
-        fun forFailure(reason: DownloadFailureReason?): TelegramDownloadStatus = when (reason) {
-            DownloadFailureReason.TOO_LARGE -> REJECTED_TOO_LARGE
-            DownloadFailureReason.AUTHENTICATION_REQUIRED -> AUTHENTICATION_REQUIRED
-            DownloadFailureReason.SOURCE_UNAVAILABLE -> SOURCE_UNAVAILABLE
-            DownloadFailureReason.FORMAT_UNAVAILABLE -> FORMAT_UNAVAILABLE
-            DownloadFailureReason.SOURCE_RATE_LIMITED -> SOURCE_RATE_LIMITED
-            DownloadFailureReason.SOURCE_REQUEST_FAILED -> SOURCE_REQUEST_FAILED
-            DownloadFailureReason.SOURCE_TIMEOUT -> SOURCE_TIMEOUT
-            DownloadFailureReason.METADATA_UNAVAILABLE -> METADATA_UNAVAILABLE
-            else -> ERROR
-        }
+        fun forFailure(reason: DownloadFailureReason?): TelegramDownloadStatus = entries.first { it.message == failureMessage(reason) }
     }
 }

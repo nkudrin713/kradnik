@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.admin
 
-import com.nkudrin713.kradnik.download.processing.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
 import com.nkudrin713.kradnik.observability.RuntimeError
 import org.junit.jupiter.api.Test
 import java.time.Clock

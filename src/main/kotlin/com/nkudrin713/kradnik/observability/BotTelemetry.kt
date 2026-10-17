@@ -1,6 +1,6 @@
 package com.nkudrin713.kradnik.observability
 
-import com.nkudrin713.kradnik.download.processing.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
 
 /** Stable execution-boundary contract. Implementations must only update bounded memory, never perform I/O. */
 interface BotTelemetry {

@@ -1,29 +1,12 @@
 package com.nkudrin713.kradnik.download.choice
 
-import jakarta.persistence.LockModeType
-import org.springframework.data.jpa.repository.JpaRepository
-import org.springframework.data.jpa.repository.Lock
-import org.springframework.data.jpa.repository.Modifying
-import org.springframework.data.jpa.repository.Query
 import java.time.Instant
 import java.util.UUID
 
-interface DownloadChoiceSessionRepository : JpaRepository<DownloadChoiceSession, UUID> {
-    @Modifying
-    @Query(
-        "DELETE FROM DownloadChoiceSession session " +
-            "WHERE session.selectedAt IS NOT NULL AND session.cleanupAfter <= :cutoff",
-    )
-    fun deleteConsumed(cutoff: Instant): Int
-
-    @Modifying
-    @Query(
-        "DELETE FROM DownloadChoiceSession session " +
-            "WHERE session.selectedAt IS NULL AND session.createdAt <= :createdBefore",
-    )
-    fun deleteExpiredUnselected(createdBefore: Instant): Int
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT session FROM DownloadChoiceSession session WHERE session.token = :token")
+/** Menu snapshots and atomic row access; the caller owns the transaction. */
+interface DownloadChoiceSessionRepository {
+    fun save(session: DownloadChoiceSession): DownloadChoiceSession
     fun findForUpdate(token: UUID): DownloadChoiceSession?
+    fun deleteConsumed(cutoff: Instant): Int
+    fun deleteExpiredUnselected(createdBefore: Instant): Int
 }

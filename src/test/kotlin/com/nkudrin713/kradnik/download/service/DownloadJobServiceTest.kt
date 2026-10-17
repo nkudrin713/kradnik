@@ -5,7 +5,6 @@ import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.download.repository.DownloadJobRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -18,7 +17,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DownloadJobServiceTest {
-    private val repository: DownloadJobRepository = mockk()
+    private val repository: JobStore = mockk()
     private val service = DownloadJobService(repository)
 
     @Test
@@ -63,6 +62,25 @@ class DownloadJobServiceTest {
 
         assertNull(created)
         verify(exactly = 0) { repository.save(any()) }
+    }
+
+    @Test
+    fun finalizesCacheIdentityOnlyWhenCreatingANewJob() {
+        every { repository.lockTelegramUpdate(any()) } returns 1
+        every { repository.findByTelegramUpdateId(any()) } returns null
+        every { repository.save(any()) } answers { firstArg() }
+        for ((type, key) in listOf(
+            OutputType.VIDEO to "cache-key:telegram-video-h264-v1",
+            OutputType.POST to "cache-key:post:v2:telegram-video-h264-v1",
+            OutputType.AUDIO to "cache-key",
+        )) {
+            val command = command().let { it.copy(spec = it.spec.copy(outputType = type)) }
+            val created = requireNotNull(service.createJob(command))
+            assertEquals(key, created.cacheKey)
+            assertEquals("cache-key", command.spec.cacheKey)
+            assertEquals(command.spec.formatSelector, created.selectedFormat)
+            assertEquals(command.spec.extraArgs, created.downloadExtraArgs)
+        }
     }
 
     @Test

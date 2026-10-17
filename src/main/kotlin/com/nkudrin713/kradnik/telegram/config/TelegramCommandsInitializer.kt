@@ -1,8 +1,8 @@
 package com.nkudrin713.kradnik.telegram.config
 
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.BotCommand
 import com.pengrad.telegrambot.model.botcommandscope.BotCommandScope
@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component
 @Component
 class TelegramCommandsInitializer(
     private val bot: TelegramBot,
-    private val messages: TelegramMessages,
+    private val messages: Messages,
 ) : ApplicationRunner {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val commandScopes = listOf(null, BotCommandScopeAllPrivateChats())
@@ -57,11 +57,11 @@ class TelegramCommandsInitializer(
 
     private fun commands(language: BotLanguage): Array<BotCommand> {
         return arrayOf(
-            BotCommand("start", messages.text(language, TelegramMessage.COMMAND_START)),
-            BotCommand("help", messages.text(language, TelegramMessage.COMMAND_HELP)),
-            BotCommand("legal", messages.text(language, TelegramMessage.COMMAND_LEGAL)),
-            BotCommand("donate", messages.text(language, TelegramMessage.COMMAND_DONATE)),
-            BotCommand("language", messages.text(language, TelegramMessage.COMMAND_LANGUAGE)),
+            BotCommand("start", messages.text(language, MessageKey.COMMAND_START)),
+            BotCommand("help", messages.text(language, MessageKey.COMMAND_HELP)),
+            BotCommand("legal", messages.text(language, MessageKey.COMMAND_LEGAL)),
+            BotCommand("donate", messages.text(language, MessageKey.COMMAND_DONATE)),
+            BotCommand("language", messages.text(language, MessageKey.COMMAND_LANGUAGE)),
         )
     }
 

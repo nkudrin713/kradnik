@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download.processing
+package com.nkudrin713.kradnik.download.progress
 
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 

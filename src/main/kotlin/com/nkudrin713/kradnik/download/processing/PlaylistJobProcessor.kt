@@ -1,14 +1,14 @@
 package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
+import com.nkudrin713.kradnik.download.delivery.DeliveryContext
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.playlist.AudioMessagesPlaylistWorkflow
 import com.nkudrin713.kradnik.download.playlist.ZipPlaylistWorkflow
-import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
-import com.nkudrin713.kradnik.download.telegram.DeliveryContext
-import com.nkudrin713.kradnik.download.telegram.TelegramJobProgress
-import com.nkudrin713.kradnik.download.telegram.TelegramReceiptCodec
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.JobNotifications
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -19,7 +19,7 @@ class PlaylistJobProcessor(
     private val telegramDelivery: AudioMessagesPlaylistWorkflow,
     private val zipDelivery: ZipPlaylistWorkflow,
     private val lifecycle: JobLifecycle,
-    private val progress: TelegramJobProgress,
+    private val progress: JobNotifications,
     private val workDirCleaner: WorkDirCleaner,
     private val jobProgressFactory: JobProgressFactory = JobProgressFactory(progress),
 ) {
@@ -37,8 +37,7 @@ class PlaylistJobProcessor(
                 PlaylistDeliveryMode.AUDIO_MESSAGES -> telegramDelivery.run(job.requiredId(), request, context, outputDir, jobProgress)
                 PlaylistDeliveryMode.ZIP -> zipDelivery.run(job.requiredId(), request, context, outputDir, jobProgress)
             } ?: return
-            val receipt = TelegramReceiptCodec.playlist(result.completion)
-            if (!lifecycle.complete(job, receipt)) return
+            if (!lifecycle.complete(job, result.receipt)) return
             progress.playlistSummary(job, result)
         } catch (error: CancellationException) {
             if (lifecycle.isUserCancelled(job)) return

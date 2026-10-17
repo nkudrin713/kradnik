@@ -2,9 +2,10 @@ package com.nkudrin713.kradnik.download.playlist
 
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
-import com.nkudrin713.kradnik.download.processing.DownloadPhase
-import com.nkudrin713.kradnik.download.processing.JobProgress
-import com.nkudrin713.kradnik.download.processing.PlaylistProgress
+import com.nkudrin713.kradnik.download.domain.PlaylistItemFailure
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.JobProgress
+import com.nkudrin713.kradnik.download.progress.PlaylistProgress
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

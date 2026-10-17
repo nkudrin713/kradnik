@@ -1,14 +1,14 @@
 package com.nkudrin713.kradnik.telegram.handler
 
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCoordinator
 import com.nkudrin713.kradnik.telegram.PrepareDownloadChoiceCommand
 import com.nkudrin713.kradnik.telegram.TelegramDonationSender
 import com.nkudrin713.kradnik.telegram.TelegramLanguageSelector
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.UserActivity
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.pengrad.telegrambot.model.Message
 import com.pengrad.telegrambot.model.Update
@@ -33,7 +33,7 @@ class TelegramUpdateHandler(
     private val languageSelector: TelegramLanguageSelector,
     private val preferenceService: TelegramUserPreferenceService,
     private val userActivity: UserActivity,
-    private val messages: TelegramMessages,
+    private val messages: Messages,
     @Value($$"${telegram.donation.url:}")
     private val donationUrl: String,
 ) {
@@ -119,24 +119,24 @@ class TelegramUpdateHandler(
         val language = selectedLanguage ?: BotLanguage.EN
 
         when {
-            text == "/start" -> sendMessage(chatId, language, TelegramMessage.START_PROMPT)
+            text == "/start" -> sendMessage(chatId, language, MessageKey.START_PROMPT)
 
-            text == "/help" -> sendMessage(chatId, language, TelegramMessage.HELP)
+            text == "/help" -> sendMessage(chatId, language, MessageKey.HELP)
 
-            text == "/legal" -> sendMessage(chatId, language, TelegramMessage.LEGAL)
+            text == "/legal" -> sendMessage(chatId, language, MessageKey.LEGAL)
 
             text == "/donate" -> sendDonation(chatId, language)
 
             text.startsWith("http://") || text.startsWith("https://") ->
                 prepareDownload(update, message, text, language)
 
-            else -> sendMessage(chatId, language, TelegramMessage.LINK_REQUIRED)
+            else -> sendMessage(chatId, language, MessageKey.LINK_REQUIRED)
         }
     }
 
     private fun sendDonation(chatId: Long, language: BotLanguage) {
         if (donationUrl.isBlank()) {
-            sendMessage(chatId, language, TelegramMessage.DONATION_UNAVAILABLE)
+            sendMessage(chatId, language, MessageKey.DONATION_UNAVAILABLE)
         } else {
             telegramDonationSender.sendMessage(chatId, donationUrl, language)
         }
@@ -164,7 +164,7 @@ class TelegramUpdateHandler(
         return preferenceService.resolveLanguage(message.from().id())
     }
 
-    private fun sendMessage(chatId: Long, language: BotLanguage, message: TelegramMessage) {
+    private fun sendMessage(chatId: Long, language: BotLanguage, message: MessageKey) {
         telegramSender.sendMessage(chatId, messages.text(language, message))
     }
 

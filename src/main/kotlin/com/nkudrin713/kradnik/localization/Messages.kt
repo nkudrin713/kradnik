@@ -1,22 +1,22 @@
-package com.nkudrin713.kradnik.telegram.localization
+package com.nkudrin713.kradnik.localization
 
 import org.springframework.context.MessageSource
 import org.springframework.stereotype.Component
 
 @Component
-class TelegramMessages(
+class Messages(
     private val messageSource: MessageSource,
 ) {
     fun text(
         language: BotLanguage,
-        message: TelegramMessage,
+        message: MessageKey,
         vararg arguments: Any,
     ): String {
         return messageSource.getMessage(message.key, arguments, language.locale)
     }
 }
 
-enum class TelegramMessage(val key: String) {
+enum class MessageKey(val key: String) {
     PLAYLIST_LONG_WARNING("playlist.long-warning"),
     PLAYLIST_LONG_ITEM_WARNING("playlist.long-item-warning"),
     PLAYLIST_PROGRESS("playlist.progress"),

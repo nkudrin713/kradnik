@@ -1,24 +1,24 @@
 package com.nkudrin713.kradnik.telegram.handler
 
+import com.nkudrin713.kradnik.download.choice.CANCEL_OPTION_KEY
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceCancellation
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSession
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
+import com.nkudrin713.kradnik.download.choice.REPEAT_LAST_OPTION_KEY
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
-import com.nkudrin713.kradnik.telegram.CANCEL_OPTION_KEY
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCoordinator
 import com.nkudrin713.kradnik.telegram.PrepareDownloadChoiceCommand
-import com.nkudrin713.kradnik.telegram.REPEAT_LAST_OPTION_KEY
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
-import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.pengrad.telegrambot.model.CallbackQuery
@@ -56,7 +56,7 @@ class DownloadChoiceHandlerTest {
         every { sessionService.select(any()) } returns readySelection()
         every { starter.start(any(), any(), any(), any(), any(), any(), any()) } throws PlatformDisabledException(DownloadPlatform.YOUTUBE)
         every { sessionService.release(token) } just runs
-        every { telegramSender.answerCallback("callback-id", telegramMessages().text(BotLanguage.RU, TelegramMessage.ERROR_PLATFORM_DISABLED, "YouTube"), true) } just runs
+        every { telegramSender.answerCallback("callback-id", telegramMessages().text(BotLanguage.RU, MessageKey.ERROR_PLATFORM_DISABLED, "YouTube"), true) } just runs
 
         handler.handle(callbackQuery(userId = 300), 1000)
 
@@ -76,7 +76,7 @@ class DownloadChoiceHandlerTest {
         verify {
             coordinator.prepareAgain(
                 PrepareDownloadChoiceCommand(300, 100, 1000, 200, "https://youtu.be/last", BotLanguage.RU),
-                TelegramMessageAddress.Chat(100, 500),
+                MessageAddress.Chat(100, 500),
             )
         }
         verify(exactly = 0) { starter.start(any(), any(), any(), any(), any(), any(), any()) }
@@ -106,7 +106,7 @@ class DownloadChoiceHandlerTest {
                 telegramChatId = 100,
                 telegramUpdateId = 400,
                 telegramRequestMessageId = 200,
-                messageAddress = TelegramMessageAddress.Chat(100, 500),
+                messageAddress = MessageAddress.Chat(100, 500),
                 spec = selection.option.spec,
                 language = BotLanguage.RU,
             )
@@ -165,7 +165,7 @@ class DownloadChoiceHandlerTest {
                 telegramChatId = 100,
                 telegramUpdateId = 400,
                 telegramRequestMessageId = 200,
-                messageAddress = TelegramMessageAddress.Inline("inline-message"),
+                messageAddress = MessageAddress.Inline("inline-message"),
                 spec = selection.option.spec,
                 language = BotLanguage.RU,
             )
@@ -192,7 +192,7 @@ class DownloadChoiceHandlerTest {
         every {
             telegramSender.answerCallback(
                 "callback-id",
-                telegramMessages().text(BotLanguage.RU, TelegramMessage.ERROR_IMAGES_DIRECT_CHAT_ONLY),
+                telegramMessages().text(BotLanguage.RU, MessageKey.ERROR_IMAGES_DIRECT_CHAT_ONLY),
                 true,
             )
         } just runs
@@ -229,7 +229,7 @@ class DownloadChoiceHandlerTest {
         every {
             telegramSender.answerCallback(
                 "callback-id",
-                telegramMessages().text(BotLanguage.RU, TelegramMessage.ERROR_POST_DIRECT_CHAT_ONLY),
+                telegramMessages().text(BotLanguage.RU, MessageKey.ERROR_POST_DIRECT_CHAT_ONLY),
                 true,
             )
         } just runs

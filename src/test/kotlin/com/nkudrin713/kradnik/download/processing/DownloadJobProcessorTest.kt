@@ -2,7 +2,11 @@ package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
+import com.nkudrin713.kradnik.download.delivery.DeliveryContext
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
+import com.nkudrin713.kradnik.download.delivery.ResultCache
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
@@ -11,19 +15,14 @@ import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightDecision
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
-import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.download.single.AudioHandler
 import com.nkudrin713.kradnik.download.single.CoverHandler
 import com.nkudrin713.kradnik.download.single.ImagesHandler
 import com.nkudrin713.kradnik.download.single.SingleMediaHandlers
 import com.nkudrin713.kradnik.download.single.VideoHandler
-import com.nkudrin713.kradnik.download.telegram.CachedMedia
-import com.nkudrin713.kradnik.download.telegram.DeliveryContext
 import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
 import com.nkudrin713.kradnik.download.telegram.TelegramJobProgress
-import com.nkudrin713.kradnik.download.telegram.TelegramMediaKind
-import com.nkudrin713.kradnik.download.telegram.TelegramResultCache
 import com.nkudrin713.kradnik.download.testPlatformResolver
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
@@ -53,6 +52,7 @@ import kotlin.test.assertFalse
 
 class DownloadJobProcessorTest {
     @TempDir lateinit var root: Path
+    private val cache = mockk<ResultCache>()
     private val jobs = mockk<DownloadJobService>(relaxed = true)
     private val preflight = spyk(DownloadPreflightService(AudioUploadPlanner(TelegramUploadLimits(100)), TelegramUploadLimits(100)))
     private val video = mockk<TelegramVideoPreparer>()
@@ -67,7 +67,7 @@ class DownloadJobProcessorTest {
         val progress = TelegramJobProgress(telegram, telegramMessages(), jobs, mockk(relaxed = true), DownloadEngine(testPlatformResolver()))
         return DownloadJobProcessor(
             SingleMediaHandlers(VideoHandler(engine, preflightService, video), AudioHandler(engine, preflightService), CoverHandler(engine, preflightService, mockk()), ImagesHandler(engine, preflightService), mockk()),
-            TelegramResultCache(jobs),
+            cache,
             sender,
             JobLifecycle(jobs, progress),
             progress,
@@ -80,7 +80,7 @@ class DownloadJobProcessorTest {
         every { jobs.markCompleted(any(), any()) } returns true
         every { jobs.markFailed(any(), any()) } returns true
         every { jobs.isCancelledByUser(any()) } returns false
-        every { jobs.findCachedFileId(any()) } returns null
+        every { cache.find(any()) } returns null
         coEvery { engine.prepare(spec.source) } returns prepared
         every { preflight.check(spec, prepared.metadata) } returns DownloadPreflightDecision.Allowed(spec)
         coEvery { engine.download(spec.source, any(), prepared, any()) } answers {
@@ -122,7 +122,7 @@ class DownloadJobProcessorTest {
         coEvery { engine.download(any(), any(), any(), any()) } returns DownloadedFile(root.resolve("large"), 101)
         processor().process(job)
         verify { jobs.markFailed(job, any()) }
-        verify { telegram.editFailure(com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(2, 3), telegramMessages().text(job.language, TelegramDownloadStatus.REJECTED_TOO_LARGE.message), any(), job.language, 1) }
+        verify { telegram.editFailure(com.nkudrin713.kradnik.download.delivery.MessageAddress.Chat(2, 3), telegramMessages().text(job.language, TelegramDownloadStatus.REJECTED_TOO_LARGE.message), any(), job.language, 1) }
         coVerify(exactly = 0) { sender.send(any(), any()) }
         assertFalse(root.resolve("1").exists())
     }
@@ -146,8 +146,8 @@ class DownloadJobProcessorTest {
 
     @Test
     fun cacheHitSkipsDownload() = runTest {
-        every { jobs.findCachedFileId(any()) } returns "cached"
-        coEvery { sender.sendCached(DeliveryContext.fromJob(job), CachedMedia.Single(TelegramMediaKind.AUDIO, "cached")) } returns "cached"
+        every { cache.find(any()) } returns "cached"
+        coEvery { sender.sendCached(DeliveryContext.fromJob(job), OutputType.AUDIO, "cached") } returns "cached"
         processor().process(job)
         verify { jobs.markCompleted(job, "cached") }
         coVerify(exactly = 0) { engine.prepare(any(), any()) }
@@ -164,11 +164,8 @@ class DownloadJobProcessorTest {
 
     @Test
     fun invalidCachedFileFallsBackToFreshDownload() = runTest {
-        every { jobs.findCachedFileId(any()) } returns "stale"
-        coEvery { sender.sendCached(DeliveryContext.fromJob(job), CachedMedia.Single(TelegramMediaKind.AUDIO, "stale")) } throws TelegramSendException(
-            errorCode = 400,
-            description = "wrong file identifier",
-        )
+        every { cache.find(any()) } returns "stale"
+        coEvery { sender.sendCached(DeliveryContext.fromJob(job), OutputType.AUDIO, "stale") } returns null
         processor().process(job)
         coVerify(exactly = 1) { engine.download(any(), any(), any(), any()) }
         verify { jobs.markCompleted(job, "file") }
@@ -176,8 +173,8 @@ class DownloadJobProcessorTest {
 
     @Test
     fun cacheNetworkFailureDoesNotDownloadAndUploadAgain() = runTest {
-        every { jobs.findCachedFileId(any()) } returns "cached"
-        coEvery { sender.sendCached(DeliveryContext.fromJob(job), CachedMedia.Single(TelegramMediaKind.AUDIO, "cached")) } throws TelegramSendException(
+        every { cache.find(any()) } returns "cached"
+        coEvery { sender.sendCached(DeliveryContext.fromJob(job), OutputType.AUDIO, "cached") } throws TelegramSendException(
             errorCode = 500,
             description = "server unavailable",
         )
@@ -206,7 +203,7 @@ class DownloadJobProcessorTest {
         coEvery { engine.prepare(any(), any()) } throws
             com.nkudrin713.kradnik.ytdlp.YtDlpAuthenticationRequiredException("login needed")
         processor().process(job)
-        verify { telegram.editFailure(com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(2, 3), telegramMessages().text(job.language, TelegramDownloadStatus.AUTHENTICATION_REQUIRED.message), any(), job.language, 1) }
+        verify { telegram.editFailure(com.nkudrin713.kradnik.download.delivery.MessageAddress.Chat(2, 3), telegramMessages().text(job.language, TelegramDownloadStatus.AUTHENTICATION_REQUIRED.message), any(), job.language, 1) }
         verify { jobs.markFailed(job, "login needed") }
     }
 

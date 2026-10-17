@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
+import com.nkudrin713.kradnik.download.service.ActiveDownloadRegistry
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import com.nkudrin713.kradnik.observability.BotTelemetry
 import jakarta.annotation.PostConstruct

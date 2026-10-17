@@ -6,8 +6,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import java.util.UUID
 import kotlin.test.Test
@@ -62,7 +62,7 @@ class TelegramDownloadChoiceViewTest {
             BotLanguage.RU,
         )
 
-        assertEquals(telegramMessages().text(BotLanguage.RU, TelegramMessage.CHOICE_TITLE_UNAVAILABLE), actual)
+        assertEquals(telegramMessages().text(BotLanguage.RU, MessageKey.CHOICE_TITLE_UNAVAILABLE), actual)
     }
 
     @Test

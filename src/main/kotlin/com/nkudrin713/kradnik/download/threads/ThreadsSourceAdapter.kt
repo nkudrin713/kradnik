@@ -8,8 +8,8 @@ import com.nkudrin713.kradnik.download.domain.MediaContentType
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
+import com.nkudrin713.kradnik.download.domain.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
-import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
 import com.nkudrin713.kradnik.download.source.MediaSelection
@@ -20,7 +20,6 @@ import com.nkudrin713.kradnik.download.source.SourceMediaType
 import com.nkudrin713.kradnik.download.source.SourcePost
 import com.nkudrin713.kradnik.download.source.SourcePostItem
 import com.nkudrin713.kradnik.download.source.SourceRequest
-import com.nkudrin713.kradnik.download.threads.parseThreadsMediaUrl
 import com.nkudrin713.kradnik.ytdlp.YtDlpPresets
 import com.nkudrin713.kradnik.ytdlp.YtDlpSelections
 import com.nkudrin713.kradnik.ytdlp.YtDlpService

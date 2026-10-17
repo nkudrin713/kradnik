@@ -6,11 +6,8 @@ import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.MediaContentType
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
+import com.nkudrin713.kradnik.download.domain.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
-import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
-import com.nkudrin713.kradnik.download.instagram.InstagramEmbedDownloader
-import com.nkudrin713.kradnik.download.instagram.InstagramEmbedException
-import com.nkudrin713.kradnik.download.instagram.InstagramPreparedDownload
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
 import com.nkudrin713.kradnik.download.source.MediaSelection

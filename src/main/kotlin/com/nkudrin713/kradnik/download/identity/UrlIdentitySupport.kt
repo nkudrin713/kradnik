@@ -1,8 +1,7 @@
 package com.nkudrin713.kradnik.download.identity
 
+import com.nkudrin713.kradnik.download.domain.UnsupportedUrlException
 import java.net.URI
-
-class UnsupportedUrlException(message: String) : RuntimeException(message)
 
 internal fun parseHttpUrl(url: String): URI {
     val uri = parseUrlOrNull(url) ?: throw UnsupportedUrlException("Invalid URL")

@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.download.telegram
 
+import com.nkudrin713.kradnik.download.delivery.DeliveryContext
 import com.nkudrin713.kradnik.download.domain.AudioMetadata
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
@@ -22,6 +23,7 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class TelegramFileSenderTest {
     @Test
@@ -33,10 +35,10 @@ class TelegramFileSenderTest {
         assertEquals(TelegramReceiptCodec.post(cached, "Produced text"), sender.send(context, MediaArtifact.Post(items, "Produced text")))
         coEvery { postSender.sendCached(context, cached, "Cached text") } returns cached
         val receipt = TelegramReceiptCodec.post(cached, "Cached text")
-        assertEquals(receipt, sender.sendCached(context, TelegramReceiptCodec.decode(OutputType.POST, receipt)))
+        assertEquals(receipt, sender.sendCached(context, OutputType.POST, receipt))
         coEvery { postSender.sendCached(context, cached, null) } returns cached
         val withoutText = TelegramReceiptCodec.post(cached, null)
-        assertEquals(withoutText, sender.sendCached(context, TelegramReceiptCodec.decode(OutputType.POST, withoutText)))
+        assertEquals(withoutText, sender.sendCached(context, OutputType.POST, withoutText))
     }
     private val telegramMediaSender: TelegramMediaSender = mockk()
     private val postSender: TelegramPostSender = mockk()
@@ -135,7 +137,7 @@ class TelegramFileSenderTest {
             )
         } returns "video-id"
 
-        val actual = sender.sendCached(DeliveryContext(100, 200), TelegramReceiptCodec.decode(OutputType.VIDEO, "cached-id"))
+        val actual = sender.sendCached(DeliveryContext(100, 200), OutputType.VIDEO, "cached-id")
 
         assertEquals("video-id", actual)
         coVerify {
@@ -152,7 +154,7 @@ class TelegramFileSenderTest {
         val context = DeliveryContext(100, 200, postText = "Post <text>")
         val items = listOf(CachedPostItem(PostMediaKind.VIDEO, "cached-id"))
         coEvery { postSender.sendCached(context, items) } returns items
-        val actual = sender.sendCached(context, TelegramReceiptCodec.decode(OutputType.VIDEO, "cached-id"))
+        val actual = sender.sendCached(context, OutputType.VIDEO, "cached-id")
         assertEquals(TelegramReceiptCodec.post(items), actual)
         coVerify(exactly = 0) { telegramMediaSender.sendMonospaceText(any(), any(), any()) }
         coVerify(exactly = 0) { telegramMediaSender.sendCachedVideo(any(), any(), any()) }
@@ -168,7 +170,7 @@ class TelegramFileSenderTest {
             )
         } returns "audio-id"
 
-        val actual = sender.sendCached(DeliveryContext(100, 200), TelegramReceiptCodec.decode(OutputType.AUDIO, "cached-id"))
+        val actual = sender.sendCached(DeliveryContext(100, 200), OutputType.AUDIO, "cached-id")
 
         assertEquals("audio-id", actual)
         coVerify {
@@ -181,12 +183,24 @@ class TelegramFileSenderTest {
     }
 
     @Test
+    fun onlyAnInvalidCachedReferenceRequestsAFreshDownload() = runTest {
+        val context = DeliveryContext(100, 200)
+        coEvery { telegramMediaSender.sendCachedAudio(100, "stale", replyToMessageId = 200) } throws TelegramSendException(400, "wrong file identifier")
+        assertNull(sender.sendCached(context, OutputType.AUDIO, "stale"))
+
+        for (error in listOf(TelegramSendException(500, "server unavailable"), TelegramSendException(400, "chat not found"))) {
+            coEvery { telegramMediaSender.sendCachedAudio(100, "cached", replyToMessageId = 200) } throws error
+            assertEquals(error, assertFailsWith<TelegramSendException> { sender.sendCached(context, OutputType.AUDIO, "cached") })
+        }
+    }
+
+    @Test
     fun sendsCachedCoverDocument() = runTest {
         coEvery {
             telegramMediaSender.sendCachedDocument(100, "cached-id", replyToMessageId = 200)
         } returns "cover-id"
 
-        val actual = sender.sendCached(DeliveryContext(100, 200), TelegramReceiptCodec.decode(OutputType.COVER, "cached-id"))
+        val actual = sender.sendCached(DeliveryContext(100, 200), OutputType.COVER, "cached-id")
 
         assertEquals("cover-id", actual)
         coVerify { telegramMediaSender.sendCachedDocument(100, "cached-id", replyToMessageId = 200) }
@@ -204,7 +218,8 @@ class TelegramFileSenderTest {
 
         val actual = sender.sendCached(
             DeliveryContext(100, 200),
-            CachedMedia.Photos(listOf("cached-1", "cached-2")),
+            OutputType.IMAGES,
+            TelegramReceiptCodec.photos(listOf("cached-1", "cached-2")),
         )
 
         assertEquals("photo-group:[\"photo-1\",\"photo-2\"]", actual)
@@ -246,7 +261,7 @@ class TelegramFileSenderTest {
             )
         } returns "cached-id"
 
-        val actual = sender.sendCached(DeliveryContext.fromJob(job), TelegramReceiptCodec.decode(job.outputType, "cached-id"))
+        val actual = sender.sendCached(DeliveryContext.fromJob(job), job.outputType, "cached-id")
 
         assertEquals("cached-id", actual)
     }

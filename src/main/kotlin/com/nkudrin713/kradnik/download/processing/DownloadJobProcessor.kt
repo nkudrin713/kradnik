@@ -1,15 +1,15 @@
 package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
+import com.nkudrin713.kradnik.download.delivery.DeliveryContext
+import com.nkudrin713.kradnik.download.delivery.MediaDelivery
+import com.nkudrin713.kradnik.download.delivery.ResultCache
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadRejectedException
-import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
+import com.nkudrin713.kradnik.download.domain.DownloadRequestMapper
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.JobNotifications
 import com.nkudrin713.kradnik.download.single.SingleMediaHandlers
-import com.nkudrin713.kradnik.download.telegram.DeliveryContext
-import com.nkudrin713.kradnik.download.telegram.TelegramFileSender
-import com.nkudrin713.kradnik.download.telegram.TelegramJobProgress
-import com.nkudrin713.kradnik.download.telegram.TelegramResultCache
-import com.nkudrin713.kradnik.telegram.TelegramSendException
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -19,10 +19,10 @@ import java.nio.file.Path
 @Component
 class DownloadJobProcessor(
     private val handlers: SingleMediaHandlers,
-    private val cache: TelegramResultCache,
-    private val sender: TelegramFileSender,
+    private val cache: ResultCache,
+    private val sender: MediaDelivery,
     private val lifecycle: JobLifecycle,
-    private val progress: TelegramJobProgress,
+    private val progress: JobNotifications,
     private val workDirCleaner: WorkDirCleaner,
     private val jobProgressFactory: JobProgressFactory = JobProgressFactory(progress),
 ) {
@@ -33,14 +33,9 @@ class DownloadJobProcessor(
         try {
             val request = DownloadRequestMapper.single(job)
             val context = DeliveryContext.fromJob(job)
-            val cached = cache.find(request)
+            val cached = cache.find(request.cacheKey)
             if (cached != null) {
-                val sentId = try {
-                    sender.sendCached(context, cached)
-                } catch (error: TelegramSendException) {
-                    if (!error.isInvalidCachedFile()) throw error
-                    null
-                }
+                val sentId = sender.sendCached(context, request.outputType, cached)
                 if (sentId != null) {
                     lifecycle.complete(job, sentId)
                     return

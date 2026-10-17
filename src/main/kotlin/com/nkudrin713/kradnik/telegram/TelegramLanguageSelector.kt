@@ -1,9 +1,9 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import com.nkudrin713.kradnik.telegram.config.TelegramCommandsInitializer
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
@@ -15,7 +15,7 @@ private const val LANGUAGE_CALLBACK_PREFIX = "lang"
 @Component
 class TelegramLanguageSelector(
     private val preferenceService: TelegramUserPreferenceService,
-    private val messages: TelegramMessages,
+    private val messages: Messages,
     private val telegramSender: TelegramSender,
     private val commands: TelegramCommandsInitializer,
 ) {
@@ -23,7 +23,7 @@ class TelegramLanguageSelector(
         telegramSender.sendMessage(
             chatId = chatId,
             text = BotLanguage.entries.joinToString("\n") { language ->
-                messages.text(language, TelegramMessage.LANGUAGE_PROMPT)
+                messages.text(language, MessageKey.LANGUAGE_PROMPT)
             },
             keyboard = keyboard(),
         )
@@ -36,13 +36,13 @@ class TelegramLanguageSelector(
         commands.setChatLanguage(userId, language)
         telegramSender.answerCallback(
             callbackQueryId = callbackQuery.id(),
-            text = messages.text(language, TelegramMessage.LANGUAGE_NAME),
+            text = messages.text(language, MessageKey.LANGUAGE_NAME),
         )
         callbackQuery.maybeInaccessibleMessage()?.let { message ->
             telegramSender.editMessage(
                 chatId = message.chat().id(),
                 messageId = message.messageId(),
-                text = messages.text(language, TelegramMessage.LANGUAGE_SELECTED),
+                text = messages.text(language, MessageKey.LANGUAGE_SELECTED),
                 keyboard = InlineKeyboardMarkup(),
             )
         }
@@ -51,7 +51,7 @@ class TelegramLanguageSelector(
 
     private fun keyboard(): InlineKeyboardMarkup {
         val buttons = BotLanguage.entries.map { language ->
-            InlineKeyboardButton(messages.text(language, TelegramMessage.LANGUAGE_NAME))
+            InlineKeyboardButton(messages.text(language, MessageKey.LANGUAGE_NAME))
                 .callbackData("$LANGUAGE_CALLBACK_PREFIX:${language.code}")
                 .style("success")
         }.toTypedArray()

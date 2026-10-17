@@ -1,24 +1,24 @@
 package com.nkudrin713.kradnik.telegram.handler
 
+import com.nkudrin713.kradnik.download.choice.CANCEL_OPTION_KEY
 import com.nkudrin713.kradnik.download.choice.CancelDownloadChoiceCommand
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceCancellation
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSelection
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
 import com.nkudrin713.kradnik.download.choice.SelectDownloadChoiceCommand
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
-import com.nkudrin713.kradnik.telegram.CANCEL_OPTION_KEY
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCallback
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCoordinator
 import com.nkudrin713.kradnik.telegram.PrepareDownloadChoiceCommand
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
-import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.pengrad.telegrambot.model.CallbackQuery
 import org.slf4j.LoggerFactory
@@ -35,7 +35,7 @@ class DownloadChoiceHandler(
     private val telegramDownloadStarter: TelegramDownloadStarter,
     private val telegramSender: TelegramSender,
     private val preferenceService: TelegramUserPreferenceService,
-    private val messages: TelegramMessages,
+    private val messages: Messages,
     private val choiceCoordinator: DownloadChoiceCoordinator,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -44,14 +44,14 @@ class DownloadChoiceHandler(
         val callback = DownloadChoiceCallback.parse(callbackQuery.data().trim()) ?: return
         val fallbackLanguage = preferenceService.resolveLanguage(callbackQuery.from().id())
         val address = callbackQuery.inlineMessageId()
-            ?.let(TelegramMessageAddress::Inline)
+            ?.let(MessageAddress::Inline)
             ?: callbackQuery.maybeInaccessibleMessage()?.let {
-                TelegramMessageAddress.Chat(it.chat().id(), it.messageId())
+                MessageAddress.Chat(it.chat().id(), it.messageId())
             }
             ?: return answer(
                 callbackQuery.id(),
                 fallbackLanguage,
-                TelegramMessage.CHOICE_MENU_INVALID,
+                MessageKey.CHOICE_MENU_INVALID,
                 showAlert = true,
             )
         if (callback.optionKey == CANCEL_OPTION_KEY) {
@@ -63,9 +63,9 @@ class DownloadChoiceHandler(
                 token = callback.sessionToken,
                 optionKey = callback.optionKey,
                 telegramUserId = callbackQuery.from().id(),
-                telegramChatId = (address as? TelegramMessageAddress.Chat)?.chatId,
-                telegramMenuMessageId = (address as? TelegramMessageAddress.Chat)?.messageId,
-                telegramInlineMessageId = (address as? TelegramMessageAddress.Inline)?.inlineMessageId,
+                telegramChatId = (address as? MessageAddress.Chat)?.chatId,
+                telegramMenuMessageId = (address as? MessageAddress.Chat)?.messageId,
+                telegramInlineMessageId = (address as? MessageAddress.Inline)?.inlineMessageId,
             ),
         )
 
@@ -102,20 +102,20 @@ class DownloadChoiceHandler(
             DownloadChoiceSelection.NotOwner -> answer(
                 callbackQuery.id(),
                 fallbackLanguage,
-                TelegramMessage.CHOICE_NOT_OWNER,
+                MessageKey.CHOICE_NOT_OWNER,
                 showAlert = true,
             )
 
             DownloadChoiceSelection.AlreadySelected -> answer(
                 callbackQuery.id(),
                 fallbackLanguage,
-                TelegramMessage.CHOICE_ALREADY_SELECTED,
+                MessageKey.CHOICE_ALREADY_SELECTED,
             )
 
             DownloadChoiceSelection.Invalid -> answer(
                 callbackQuery.id(),
                 fallbackLanguage,
-                TelegramMessage.CHOICE_MENU_INVALID,
+                MessageKey.CHOICE_MENU_INVALID,
                 showAlert = true,
             )
         }
@@ -124,22 +124,22 @@ class DownloadChoiceHandler(
     private fun cancelMenu(
         callbackQuery: CallbackQuery,
         callback: DownloadChoiceCallback,
-        address: TelegramMessageAddress,
+        address: MessageAddress,
         fallbackLanguage: BotLanguage,
     ) {
         val result = sessionService.cancel(
             CancelDownloadChoiceCommand(
                 token = callback.sessionToken,
                 telegramUserId = callbackQuery.from().id(),
-                telegramChatId = (address as? TelegramMessageAddress.Chat)?.chatId,
-                telegramMenuMessageId = (address as? TelegramMessageAddress.Chat)?.messageId,
-                telegramInlineMessageId = (address as? TelegramMessageAddress.Inline)?.inlineMessageId,
+                telegramChatId = (address as? MessageAddress.Chat)?.chatId,
+                telegramMenuMessageId = (address as? MessageAddress.Chat)?.messageId,
+                telegramInlineMessageId = (address as? MessageAddress.Inline)?.inlineMessageId,
             ),
         )
         when (result) {
             is DownloadChoiceCancellation.Cancelled -> {
                 telegramSender.answerCallback(callbackQuery.id())
-                if (address is TelegramMessageAddress.Chat) {
+                if (address is MessageAddress.Chat) {
                     deleteMenuBestEffort(address.chatId, address.messageId)
                 } else {
                     telegramSender.editStatus(address, TelegramDownloadStatus.CANCELLED, result.language)
@@ -149,63 +149,63 @@ class DownloadChoiceHandler(
             DownloadChoiceCancellation.NotOwner -> answer(
                 callbackQuery.id(),
                 fallbackLanguage,
-                TelegramMessage.CHOICE_NOT_OWNER,
+                MessageKey.CHOICE_NOT_OWNER,
                 showAlert = true,
             )
 
             DownloadChoiceCancellation.AlreadySelected -> answer(
                 callbackQuery.id(),
                 fallbackLanguage,
-                TelegramMessage.CHOICE_ALREADY_SELECTED,
+                MessageKey.CHOICE_ALREADY_SELECTED,
             )
 
             DownloadChoiceCancellation.Invalid -> answer(
                 callbackQuery.id(),
                 fallbackLanguage,
-                TelegramMessage.CHOICE_MENU_INVALID,
+                MessageKey.CHOICE_MENU_INVALID,
                 showAlert = true,
             )
         }
     }
 
     private fun startDownload(
-        address: TelegramMessageAddress,
+        address: MessageAddress,
         callbackQueryId: String,
         callback: DownloadChoiceCallback,
         selection: DownloadChoiceSelection.Ready,
     ) {
-        if (address is TelegramMessageAddress.Inline &&
+        if (address is MessageAddress.Inline &&
             selection.option.spec.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO
         ) {
             sessionService.release(callback.sessionToken)
             answer(
                 callbackQueryId,
                 selection.session.language,
-                TelegramMessage.ERROR_PLAYLIST_DIRECT_CHAT_ONLY,
+                MessageKey.ERROR_PLAYLIST_DIRECT_CHAT_ONLY,
                 showAlert = true,
             )
             return
         }
-        if (address is TelegramMessageAddress.Inline && selection.option.spec.outputType in setOf(OutputType.IMAGES, OutputType.POST)) {
+        if (address is MessageAddress.Inline && selection.option.spec.outputType in setOf(OutputType.IMAGES, OutputType.POST)) {
             sessionService.release(callback.sessionToken)
             answer(
                 callbackQueryId = callbackQueryId,
                 language = selection.session.language,
                 message = if (selection.option.key == POST_OPTION_KEY) {
-                    TelegramMessage.ERROR_POST_DIRECT_CHAT_ONLY
+                    MessageKey.ERROR_POST_DIRECT_CHAT_ONLY
                 } else {
-                    TelegramMessage.ERROR_IMAGES_DIRECT_CHAT_ONLY
+                    MessageKey.ERROR_IMAGES_DIRECT_CHAT_ONLY
                 },
                 showAlert = true,
             )
             return
         }
-        if (address is TelegramMessageAddress.Inline && !selection.option.spec.postText.isNullOrBlank()) {
+        if (address is MessageAddress.Inline && !selection.option.spec.postText.isNullOrBlank()) {
             sessionService.release(callback.sessionToken)
             answer(
                 callbackQueryId = callbackQueryId,
                 language = selection.session.language,
-                message = TelegramMessage.ERROR_POST_DIRECT_CHAT_ONLY,
+                message = MessageKey.ERROR_POST_DIRECT_CHAT_ONLY,
                 showAlert = true,
             )
             return
@@ -222,7 +222,7 @@ class DownloadChoiceHandler(
             )
         } catch (error: PlatformDisabledException) {
             sessionService.release(callback.sessionToken)
-            answer(callbackQueryId, messages.text(selection.session.language, TelegramMessage.ERROR_PLATFORM_DISABLED, error.platform.displayName), showAlert = true)
+            answer(callbackQueryId, messages.text(selection.session.language, MessageKey.ERROR_PLATFORM_DISABLED, error.platform.displayName), showAlert = true)
             return
         } catch (error: Exception) {
             sessionService.release(callback.sessionToken)
@@ -233,11 +233,11 @@ class DownloadChoiceHandler(
             callbackQueryId = callbackQueryId,
             text = messages.text(
                 selection.session.language,
-                TelegramMessage.CHOICE_SELECTED,
+                MessageKey.CHOICE_SELECTED,
                 selection.option.label,
             ),
         )
-        if (address is TelegramMessageAddress.Chat) {
+        if (address is MessageAddress.Chat) {
             deleteMenuBestEffort(address.chatId, address.messageId)
         }
     }
@@ -249,7 +249,7 @@ class DownloadChoiceHandler(
     private fun answer(
         callbackQueryId: String,
         language: BotLanguage,
-        message: TelegramMessage,
+        message: MessageKey,
         showAlert: Boolean = false,
     ) {
         answer(callbackQueryId, messages.text(language, message), showAlert)

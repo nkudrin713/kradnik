@@ -5,6 +5,7 @@ open class DownloadFailure(
     val reason: DownloadFailureReason,
     message: String,
     cause: Throwable? = null,
+    val playlistFailure: PlaylistItemFailure = PlaylistItemFailure.forReason(reason),
 ) : RuntimeException(message, cause)
 
 enum class DownloadFailureReason {
@@ -21,3 +22,5 @@ enum class DownloadFailureReason {
 }
 
 class DownloadRejectedException(message: String) : DownloadFailure(DownloadFailureReason.TOO_LARGE, message)
+
+class UnsupportedUrlException(message: String) : RuntimeException(message)

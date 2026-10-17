@@ -1,16 +1,16 @@
 package com.nkudrin713.kradnik.telegram.handler
 
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.service.DownloadCancellation
 import com.nkudrin713.kradnik.download.service.DownloadCancellationService
+import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.DownloadChoiceCoordinator
 import com.nkudrin713.kradnik.telegram.DownloadJobAction
 import com.nkudrin713.kradnik.telegram.DownloadJobCallback
 import com.nkudrin713.kradnik.telegram.PrepareDownloadChoiceCommand
-import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.pengrad.telegrambot.model.CallbackQuery
@@ -45,14 +45,14 @@ class DownloadCancellationHandlerTest {
         val job = job()
         every { preferences.resolveLanguage(10) } returns BotLanguage.RU
         every {
-            cancellations.cancel(1, 10, TelegramMessageAddress.Chat(20, 30))
+            cancellations.cancel(1, 10, MessageAddress.Chat(20, 30))
         } returns DownloadCancellation.Cancelled(job)
         every { sender.answerCallback("callback", null, false) } just runs
-        every { sender.editCancelledJob(TelegramMessageAddress.Chat(20, 30), 1, BotLanguage.RU) } just runs
+        every { sender.editCancelledJob(MessageAddress.Chat(20, 30), 1, BotLanguage.RU) } just runs
 
         assertTrue(handler.handle(callback(DownloadJobAction.CANCEL), 100))
 
-        verify { sender.editCancelledJob(TelegramMessageAddress.Chat(20, 30), 1, BotLanguage.RU) }
+        verify { sender.editCancelledJob(MessageAddress.Chat(20, 30), 1, BotLanguage.RU) }
     }
 
     @Test
@@ -60,10 +60,10 @@ class DownloadCancellationHandlerTest {
         val job = job().apply { status = DownloadJobStatus.CANCELLED_BY_USER }
         every { preferences.resolveLanguage(10) } returns BotLanguage.RU
         every {
-            cancellations.cancelledJob(1, 10, TelegramMessageAddress.Chat(20, 30))
+            cancellations.cancelledJob(1, 10, MessageAddress.Chat(20, 30))
         } returns job
         every { sender.answerCallback("callback", null, false) } just runs
-        every { coordinator.prepareAgain(any(), TelegramMessageAddress.Chat(20, 30)) } just runs
+        every { coordinator.prepareAgain(any(), MessageAddress.Chat(20, 30)) } just runs
 
         assertTrue(handler.handle(callback(DownloadJobAction.BACK), 100))
 
@@ -77,7 +77,7 @@ class DownloadCancellationHandlerTest {
                     url = "https://youtu.be/video",
                     language = BotLanguage.RU,
                 ),
-                TelegramMessageAddress.Chat(20, 30),
+                MessageAddress.Chat(20, 30),
             )
         }
     }

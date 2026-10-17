@@ -4,8 +4,8 @@ import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
 import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
-import com.nkudrin713.kradnik.download.processing.DownloadPhase
-import com.nkudrin713.kradnik.download.processing.JobProgress
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.JobProgress
 import com.nkudrin713.kradnik.download.source.SourceMediaType
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import org.springframework.stereotype.Component

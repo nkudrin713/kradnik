@@ -27,6 +27,8 @@ Source adapters extract metadata and download media. `SourcePost` contains text,
 
 URL recognition, source settings, and download specifications live in the service packages: `download/youtube`, `download/instagram`, `download/vk`, and `download/threads`. `PlatformResolver` registers adapters through their common interface. Shared planning and media handlers use those contracts; yt-dlp command arguments are assembled outside the common workflows.
 
+Execution depends on contracts for storage, delivery, cache, and notifications. JPA entities, saved JSON formats, and Telegram SDK types stay in their adapters. Job creation owns cache-key finalization; execution and retries use saved selections and typed failures. Architecture tests enforce the boundaries and exercise fixture sources with independent delivery implementations.
+
 | Source | Supported actions |
 | --- | --- |
 | YouTube video; VK video or clip | Video quality options, audio, cover |

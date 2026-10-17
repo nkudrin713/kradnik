@@ -1,6 +1,9 @@
 package com.nkudrin713.kradnik.download.telegram
 
+import com.nkudrin713.kradnik.download.delivery.DeliveryContext
+import com.nkudrin713.kradnik.download.delivery.MediaDelivery
 import com.nkudrin713.kradnik.download.domain.MediaArtifact
+import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PostMedia
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.telegram.TelegramMediaSender
@@ -18,8 +21,8 @@ class TelegramFileSender(
     private val telegramMediaSender: TelegramMediaSender,
     private val properties: TelegramBotProperties,
     private val postSender: TelegramPostSender,
-) {
-    suspend fun send(context: DeliveryContext, artifact: MediaArtifact): String {
+) : MediaDelivery {
+    override suspend fun send(context: DeliveryContext, artifact: MediaArtifact): String {
         if (artifact is MediaArtifact.Post) return TelegramReceiptCodec.post(postSender.send(context, artifact.items, artifact.text), artifact.text)
         if (context.inlineMessageId == null && !context.postText.isNullOrBlank()) {
             val items = when (artifact) {
@@ -94,7 +97,14 @@ class TelegramFileSender(
         }
     }
 
-    suspend fun sendCached(context: DeliveryContext, media: CachedMedia): String {
+    override suspend fun sendCached(context: DeliveryContext, type: OutputType, receipt: String): String? = try {
+        sendCachedMedia(context, TelegramReceiptCodec.decode(type, receipt))
+    } catch (error: TelegramSendException) {
+        if (!error.isInvalidCachedFile()) throw error
+        null
+    }
+
+    private suspend fun sendCachedMedia(context: DeliveryContext, media: CachedMedia): String {
         if (media is CachedMedia.Post) {
             val text = if (media.usesLegacyText) context.postText else media.text
             return TelegramReceiptCodec.post(postSender.sendCached(context, media.items, text), text)

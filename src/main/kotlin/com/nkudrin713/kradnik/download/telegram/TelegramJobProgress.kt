@@ -3,35 +3,36 @@ package com.nkudrin713.kradnik.download.telegram
 import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.choice.CreateDownloadRetryCommand
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
+import com.nkudrin713.kradnik.download.delivery.PlaylistDeliveryResult
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
-import com.nkudrin713.kradnik.download.playlist.PlaylistDeliveryResult
 import com.nkudrin713.kradnik.download.playlist.PlaylistEmptyException
 import com.nkudrin713.kradnik.download.playlist.PlaylistOperationException
 import com.nkudrin713.kradnik.download.playlist.PlaylistRetrySelection
 import com.nkudrin713.kradnik.download.playlist.PlaylistSizeLimitException
-import com.nkudrin713.kradnik.download.processing.DownloadPhase
-import com.nkudrin713.kradnik.download.processing.JobProgress
-import com.nkudrin713.kradnik.download.processing.PlaylistProgress
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.JobNotifications
+import com.nkudrin713.kradnik.download.progress.JobProgress
+import com.nkudrin713.kradnik.download.progress.PlaylistProgress
 import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStatus
-import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.util.UUID
 
 @Component
-class TelegramJobProgress(private val sender: TelegramSender, private val messages: TelegramMessages, private val jobs: DownloadJobService, private val retrySessions: DownloadChoiceSessionService, private val engine: DownloadEngine) {
+class TelegramJobProgress(private val sender: TelegramSender, private val messages: Messages, private val jobs: DownloadJobService, private val retrySessions: DownloadChoiceSessionService, private val engine: DownloadEngine) : JobNotifications {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun forJob(job: DownloadJob): JobProgress = object : JobProgress {
+    override fun forJob(job: DownloadJob): JobProgress = object : JobProgress {
         private var lastUpdate = 0L
         private var longWaitWarning: String? = null
 
@@ -61,29 +62,29 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
                 if (!jobs.isProcessing(job.requiredId())) return@bestEffort
                 val newWarning = progress.longWait && longWaitWarning == null
                 if (newWarning) {
-                    val message = if (progress.total == 1) TelegramMessage.PLAYLIST_LONG_ITEM_WARNING else TelegramMessage.PLAYLIST_LONG_WARNING
+                    val message = if (progress.total == 1) MessageKey.PLAYLIST_LONG_ITEM_WARNING else MessageKey.PLAYLIST_LONG_WARNING
                     longWaitWarning = messages.text(job.language, message)
                 }
                 val now = System.nanoTime()
                 if (!newWarning && lastUpdate != 0L && now - lastUpdate < 5_000_000_000L) return@bestEffort
                 lastUpdate = now
-                val text = messages.text(job.language, TelegramMessage.PLAYLIST_PROGRESS, progress.successful + progress.failed, progress.total, progress.successful, progress.failed)
+                val text = messages.text(job.language, MessageKey.PLAYLIST_PROGRESS, progress.successful + progress.failed, progress.total, progress.successful, progress.failed)
                 val active = progress.active.take(2).joinToString("\n") { "${it.position}. ${it.title.take(160)}" }
-                val detail = if (active.isBlank()) "" else "\n\n" + messages.text(job.language, TelegramMessage.PLAYLIST_ACTIVE_ITEMS, active)
+                val detail = if (active.isBlank()) "" else "\n\n" + messages.text(job.language, MessageKey.PLAYLIST_ACTIVE_ITEMS, active)
                 val address = address(job) ?: return@bestEffort
                 sender.editPlaylistProgress(address, withWarning(text + detail), job.requiredId(), job.language) { jobs.isProcessing(job.requiredId()) }
             }
         }
     }
 
-    fun completed(job: DownloadJob) {
+    override fun completed(job: DownloadJob) {
         if (job.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO) return
         if (job.telegramInlineMessageId != null) return
         val id = job.telegramStatusMessageId ?: return
         bestEffort(job) { sender.deleteMessage(job.telegramChatId, id) }
     }
 
-    fun failed(job: DownloadJob, reason: DownloadFailureReason?) {
+    override fun failed(job: DownloadJob, reason: DownloadFailureReason?) {
         val status = when {
             reason == DownloadFailureReason.TOO_LARGE -> TelegramDownloadStatus.REJECTED_TOO_LARGE
             job.workloadType == DownloadWorkloadType.PLAYLIST_AUDIO -> TelegramDownloadStatus.ERROR
@@ -101,35 +102,35 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         }
     }
 
-    fun playlistSummary(job: DownloadJob, result: PlaylistDeliveryResult) {
+    override fun playlistSummary(job: DownloadJob, result: PlaylistDeliveryResult) {
         if (job.playlistDeliveryMode == PlaylistDeliveryMode.AUDIO_MESSAGES && result.successfulCount > 1) {
-            bestEffort(job) { sender.sendMessage(job.telegramChatId, messages.text(job.language, TelegramMessage.PLAYLIST_PLAYBACK_HINT)) }
+            bestEffort(job) { sender.sendMessage(job.telegramChatId, messages.text(job.language, MessageKey.PLAYLIST_PLAYBACK_HINT)) }
         }
         bestEffort(job) {
             val address = address(job)
             if (result.failedCount == 0) {
                 address?.let {
-                    sender.editFinalMessage(it, messages.text(job.language, TelegramMessage.PLAYLIST_COMPLETED, result.successfulCount, job.playlistEntries.size))
+                    sender.editFinalMessage(it, messages.text(job.language, MessageKey.PLAYLIST_COMPLETED, result.successfulCount, job.playlistEntries.size))
                 }
                 return@bestEffort
             }
-            val header = messages.text(job.language, TelegramMessage.PLAYLIST_PARTIAL_SUCCESS, result.successfulCount, job.playlistEntries.size)
+            val header = messages.text(job.language, MessageKey.PLAYLIST_PARTIAL_SUCCESS, result.successfulCount, job.playlistEntries.size)
             val report = PlaylistFailureReport(messages, engine).render(header, job.playlistEntries, result.failures, job.language)
             publishReport(job, report, result.failures)
         }
     }
 
-    fun playlistFailure(job: DownloadJob, error: Exception) {
+    override fun playlistFailure(job: DownloadJob, error: Exception) {
         bestEffort(job) {
             if (error is PlaylistEmptyException) {
-                val header = messages.text(job.language, TelegramMessage.PLAYLIST_ALL_FAILED)
+                val header = messages.text(job.language, MessageKey.PLAYLIST_ALL_FAILED)
                 val token = address(job)?.let { retryToken(job, it) }
                 publishReport(job, PlaylistFailureReport(messages, engine).render(header, job.playlistEntries, error.failures, job.language), error.failures, token)
                 return@bestEffort
             }
             val key = when {
                 error is PlaylistOperationException -> error.userMessage
-                error is PlaylistSizeLimitException && job.playlistDeliveryMode == PlaylistDeliveryMode.ZIP -> TelegramMessage.ERROR_PLAYLIST_ZIP_TOO_LARGE
+                error is PlaylistSizeLimitException && job.playlistDeliveryMode == PlaylistDeliveryMode.ZIP -> MessageKey.ERROR_PLAYLIST_ZIP_TOO_LARGE
                 else -> TelegramDownloadStatus.forFailure((error as? DownloadFailure)?.reason).message
             }
             val address = address(job) ?: return@bestEffort
@@ -137,15 +138,15 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         }
     }
 
-    private fun retryToken(job: DownloadJob, address: TelegramMessageAddress): UUID? = try {
+    private fun retryToken(job: DownloadJob, address: MessageAddress): UUID? = try {
         retrySessions.createRetry(
             CreateDownloadRetryCommand(
                 job.telegramUserId,
                 job.telegramChatId,
                 job.telegramUpdateId ?: 0,
                 job.telegramRequestMessageId ?: 0,
-                (address as? TelegramMessageAddress.Chat)?.messageId,
-                (address as? TelegramMessageAddress.Inline)?.inlineMessageId,
+                (address as? MessageAddress.Chat)?.messageId,
+                (address as? MessageAddress.Inline)?.inlineMessageId,
                 job.language,
                 job.originalUrl,
             ),
@@ -155,9 +156,9 @@ class TelegramJobProgress(private val sender: TelegramSender, private val messag
         null
     }
 
-    private fun address(job: DownloadJob): TelegramMessageAddress? {
-        job.telegramInlineMessageId?.let { return TelegramMessageAddress.Inline(it) }
-        return job.telegramStatusMessageId?.let { TelegramMessageAddress.Chat(job.telegramChatId, it) }
+    private fun address(job: DownloadJob): MessageAddress? {
+        job.telegramInlineMessageId?.let { return MessageAddress.Inline(it) }
+        return job.telegramStatusMessageId?.let { MessageAddress.Chat(job.telegramChatId, it) }
     }
 
     private fun publishReport(job: DownloadJob, report: List<String>, failures: List<PlaylistAudioResult>, repeatToken: UUID? = null) {

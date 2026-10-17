@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.service.ActiveDownloadRegistry
 import com.nkudrin713.kradnik.observability.BotTelemetry
 import com.nkudrin713.kradnik.observability.RuntimeError
 import kotlinx.coroutines.runBlocking

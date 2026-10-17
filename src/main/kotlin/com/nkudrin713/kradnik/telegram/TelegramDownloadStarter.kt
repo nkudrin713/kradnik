@@ -1,19 +1,18 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
-import com.nkudrin713.kradnik.download.identity.ResultKeyFactory
 import com.nkudrin713.kradnik.download.platform.PlatformAvailability
 import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
 import com.nkudrin713.kradnik.download.service.DownloadJobService
-import com.nkudrin713.kradnik.download.video.TelegramVideoPolicy
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.BotLanguage
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
 /**
- * Publishes a queued status, versions video cache identity with [TelegramVideoPolicy], and delegates persistence to
+ * Publishes a queued status and delegates job creation and cache identity to
  * [DownloadJobService]. Direct chats receive a new status message; guest downloads reuse their inline message.
  * Failed or duplicate direct-chat jobs remove the new status so no orphaned UI remains.
  */
@@ -30,34 +29,31 @@ class TelegramDownloadStarter(
         telegramChatId: Long,
         telegramUpdateId: Int,
         telegramRequestMessageId: Int,
-        messageAddress: TelegramMessageAddress,
+        messageAddress: MessageAddress,
         spec: DownloadSpec,
         language: BotLanguage = BotLanguage.EN,
     ) {
         availability.requireEnabled(spec.platform)
         val statusMessageId = when (messageAddress) {
-            is TelegramMessageAddress.Chat -> telegramSender.sendStatus(
+            is MessageAddress.Chat -> telegramSender.sendStatus(
                 telegramChatId,
                 TelegramDownloadStatus.QUEUED,
                 language,
             )
 
-            is TelegramMessageAddress.Inline -> {
+            is MessageAddress.Inline -> {
                 telegramSender.editStatus(messageAddress, TelegramDownloadStatus.QUEUED, language)
                 null
             }
         }
-        val jobSpec = spec.copy(
-            cacheKey = ResultKeyFactory.forNewJob(spec.cacheKey, spec.outputType),
-        )
         val command = CreateDownloadJobCommand(
             telegramUserId = telegramUserId,
             telegramChatId = telegramChatId,
             telegramUpdateId = telegramUpdateId,
             telegramRequestMessageId = telegramRequestMessageId,
-            spec = jobSpec,
+            spec = spec,
             telegramStatusMessageId = statusMessageId,
-            telegramInlineMessageId = (messageAddress as? TelegramMessageAddress.Inline)?.inlineMessageId,
+            telegramInlineMessageId = (messageAddress as? MessageAddress.Inline)?.inlineMessageId,
             language = language,
         )
         val created = try {
@@ -94,8 +90,8 @@ class TelegramDownloadStarter(
 
     private fun showQueuedStatus(created: DownloadJob) {
         val jobAddress = created.telegramInlineMessageId
-            ?.let(TelegramMessageAddress::Inline)
-            ?: TelegramMessageAddress.Chat(created.telegramChatId, requireNotNull(created.telegramStatusMessageId))
+            ?.let(MessageAddress::Inline)
+            ?: MessageAddress.Chat(created.telegramChatId, requireNotNull(created.telegramStatusMessageId))
         runCatching {
             downloadJobService.queuePosition(created.requiredId())?.let { position ->
                 telegramSender.editQueuedJob(jobAddress, created.requiredId(), created.language, created.workloadType, position) {

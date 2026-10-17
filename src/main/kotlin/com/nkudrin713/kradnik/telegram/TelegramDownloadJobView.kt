@@ -1,8 +1,9 @@
 package com.nkudrin713.kradnik.telegram
 
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.download.choice.REPEAT_LAST_OPTION_KEY
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import org.springframework.stereotype.Component
@@ -11,18 +12,18 @@ import java.util.UUID
 private const val JOB_CALLBACK_PREFIX = "job"
 
 @Component
-class TelegramDownloadJobView(private val messages: TelegramMessages) {
+class TelegramDownloadJobView(private val messages: Messages) {
     fun retryKeyboard(jobId: Long, language: BotLanguage, count: Int, includeZip: Boolean, repeatToken: UUID? = null): InlineKeyboardMarkup {
         val rows = mutableListOf<Array<InlineKeyboardButton>>()
         if (count > 0) {
             rows += arrayOf(
-                InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_RETRY_AUDIO, count))
+                InlineKeyboardButton(messages.text(language, MessageKey.ACTION_RETRY_AUDIO, count))
                     .callbackData(DownloadJobCallback.encode(DownloadJobAction.RETRY_AUDIO, jobId)),
             )
         }
         if (includeZip && count > 0) {
             rows += arrayOf(
-                InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_RETRY_ZIP, count))
+                InlineKeyboardButton(messages.text(language, MessageKey.ACTION_RETRY_ZIP, count))
                     .callbackData(DownloadJobCallback.encode(DownloadJobAction.RETRY_ZIP, jobId)),
             )
         }
@@ -32,7 +33,7 @@ class TelegramDownloadJobView(private val messages: TelegramMessages) {
 
     fun repeatKeyboard(token: UUID, language: BotLanguage): InlineKeyboardMarkup = InlineKeyboardMarkup(
         arrayOf(
-            InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_REPEAT_LAST))
+            InlineKeyboardButton(messages.text(language, MessageKey.ACTION_REPEAT_LAST))
                 .callbackData(DownloadChoiceCallback.encode(token, REPEAT_LAST_OPTION_KEY)),
         ),
     )
@@ -41,7 +42,7 @@ class TelegramDownloadJobView(private val messages: TelegramMessages) {
 
     fun cancelKeyboard(jobId: Long, language: BotLanguage): InlineKeyboardMarkup = InlineKeyboardMarkup(
         arrayOf(
-            InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_CANCEL))
+            InlineKeyboardButton(messages.text(language, MessageKey.ACTION_CANCEL))
                 .callbackData(DownloadJobCallback.encode(DownloadJobAction.CANCEL, jobId))
                 .style("danger"),
         ),
@@ -49,7 +50,7 @@ class TelegramDownloadJobView(private val messages: TelegramMessages) {
 
     fun backKeyboard(jobId: Long, language: BotLanguage): InlineKeyboardMarkup = InlineKeyboardMarkup(
         arrayOf(
-            InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_BACK_TO_OPTIONS))
+            InlineKeyboardButton(messages.text(language, MessageKey.ACTION_BACK_TO_OPTIONS))
                 .callbackData(DownloadJobCallback.encode(DownloadJobAction.BACK, jobId))
                 .style("success"),
         ),

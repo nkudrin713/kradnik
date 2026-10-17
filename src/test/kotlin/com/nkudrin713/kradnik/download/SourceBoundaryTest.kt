@@ -3,7 +3,17 @@ package com.nkudrin713.kradnik.download
 import com.nkudrin713.kradnik.download.choice.MediaChoiceBuilder
 import com.nkudrin713.kradnik.download.choice.PostChoicePlanner
 import com.nkudrin713.kradnik.download.choice.StandardMediaChoicePlanner
+import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
+import com.nkudrin713.kradnik.download.delivery.DeliveryContext
+import com.nkudrin713.kradnik.download.delivery.MediaDelivery
+import com.nkudrin713.kradnik.download.delivery.PlaylistDelivery
+import com.nkudrin713.kradnik.download.delivery.ResultCache
+import com.nkudrin713.kradnik.download.domain.DownloadFailure
+import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
+import com.nkudrin713.kradnik.download.domain.DownloadJob
+import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadRejectedException
+import com.nkudrin713.kradnik.download.domain.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
@@ -12,6 +22,9 @@ import com.nkudrin713.kradnik.download.domain.MediaContentType
 import com.nkudrin713.kradnik.download.domain.MediaMetadata
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
+import com.nkudrin713.kradnik.download.domain.PlaylistAudioResult
+import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
+import com.nkudrin713.kradnik.download.domain.PlaylistItemFailure
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
@@ -19,11 +32,23 @@ import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
+import com.nkudrin713.kradnik.download.playlist.AudioMessagesPlaylistWorkflow
 import com.nkudrin713.kradnik.download.playlist.PlaylistChoicePlanner
+import com.nkudrin713.kradnik.download.playlist.PlaylistEmptyException
 import com.nkudrin713.kradnik.download.playlist.PlaylistEntryDownloader
-import com.nkudrin713.kradnik.download.processing.JobProgress
-import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
+import com.nkudrin713.kradnik.download.playlist.PlaylistWorkspaceBudget
+import com.nkudrin713.kradnik.download.playlist.PlaylistZipBuilder
+import com.nkudrin713.kradnik.download.playlist.ZipPlaylistWorkflow
+import com.nkudrin713.kradnik.download.processing.DownloadJobProcessor
+import com.nkudrin713.kradnik.download.processing.JobLifecycle
+import com.nkudrin713.kradnik.download.processing.PlaylistJobProcessor
+import com.nkudrin713.kradnik.download.progress.JobNotifications
+import com.nkudrin713.kradnik.download.progress.JobProgress
+import com.nkudrin713.kradnik.download.service.CreateDownloadJobCommand
+import com.nkudrin713.kradnik.download.service.DownloadJobService
+import com.nkudrin713.kradnik.download.service.JobStore
 import com.nkudrin713.kradnik.download.single.PostHandler
+import com.nkudrin713.kradnik.download.single.SingleMediaHandlers
 import com.nkudrin713.kradnik.download.source.MediaSelection
 import com.nkudrin713.kradnik.download.source.PlaylistSourceAdapter
 import com.nkudrin713.kradnik.download.source.PostSourceAdapter
@@ -33,13 +58,21 @@ import com.nkudrin713.kradnik.download.source.SourceMediaType
 import com.nkudrin713.kradnik.download.source.SourcePost
 import com.nkudrin713.kradnik.download.source.SourcePostItem
 import com.nkudrin713.kradnik.download.source.SourceRequest
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Optional
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -47,6 +80,139 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SourceBoundaryTest {
+    @Test
+    fun customPostRunsThroughTheJobScenarioWithAnOpaqueDeliveryReceipt(@TempDir directory: Path) = runTest {
+        val source = FixturePostSource()
+        val engine = DownloadEngine(PlatformResolver(listOf(source)))
+        val limits = TelegramUploadLimits(100)
+        val handlers = SingleMediaHandlers(mockk(), mockk(), mockk(), mockk(), PostHandler(engine, DownloadPreflightService(AudioUploadPlanner(limits), limits), mockk()))
+        val store = mockk<JobStore>()
+        every { store.save(any()) } answers { firstArg<DownloadJob>().apply { id = 41 } }
+        every { store.complete(41, "custom-post-receipt") } returns 1
+        val jobs = DownloadJobService(store)
+        val selected = source.select(source.spec, MediaSelection.Post("Text"))
+        val job = requireNotNull(jobs.createJob(CreateDownloadJobCommand(1, 2, spec = selected)))
+        val notifications = mockk<JobNotifications>(relaxed = true)
+        every { notifications.forJob(job) } returns JobProgress {}
+        val cache = mockk<ResultCache> { every { find(any()) } returns null }
+        var content = emptyList<String>()
+        val delivery = object : MediaDelivery {
+            override suspend fun send(context: DeliveryContext, artifact: MediaArtifact): String {
+                require(artifact is MediaArtifact.Post)
+                assertEquals("Text", artifact.text)
+                content = artifact.items.map { Files.readString(it.file) }
+                return "custom-post-receipt"
+            }
+            override suspend fun sendCached(context: DeliveryContext, type: OutputType, receipt: String): String? = error("No cached result")
+        }
+
+        DownloadJobProcessor(handlers, cache, delivery, JobLifecycle(jobs, notifications), notifications, WorkDirCleaner(directory.toString())).process(job)
+
+        assertEquals(listOf("first", "second", "first"), content)
+        verify(exactly = 1) { store.complete(41, "custom-post-receipt") }
+        verify(exactly = 1) { notifications.completed(job) }
+        assertTrue(!Files.exists(directory.resolve("41")))
+    }
+
+    @ParameterizedTest
+    @EnumSource(PlaylistDeliveryMode::class)
+    fun customPlaylistRunsBothDeliveryModesWithoutTelegramOrJpa(mode: PlaylistDeliveryMode, @TempDir directory: Path) = runBlocking {
+        val source = FixtureSource()
+        val engine = DownloadEngine(PlatformResolver(listOf(source)))
+        val initial = source.playlist("https://fixture.test/list", "320K")
+        val selected = initial.copy(playlistDeliveryMode = mode, playlistEntries = initial.playlistEntries + initial.playlistEntries.single().copy(position = 2))
+        val store = mockk<JobStore>()
+        every { store.save(any()) } answers {
+            firstArg<DownloadJob>().apply {
+                id = 42
+                status = DownloadJobStatus.PROCESSING
+            }
+        }
+        val jobs = DownloadJobService(store)
+        val job = requireNotNull(jobs.createJob(CreateDownloadJobCommand(1, 2, spec = selected)))
+        every { store.findById(42) } returns Optional.of(job)
+        every { store.savePlaylistResult(42, any()) } answers {
+            synchronized(job) { job.playlistResults += secondArg<PlaylistAudioResult>() }
+            true
+        }
+        every { store.savePlaylistFailures(42, any()) } returns true
+        every { store.complete(42, "custom-playlist-receipt") } returns 1
+        val notifications = mockk<JobNotifications>(relaxed = true)
+        every { notifications.forJob(job) } returns JobProgress {}
+        val delivery = mockk<PlaylistDelivery>()
+        coEvery { delivery.checkStorage() } returns Unit
+        coEvery { delivery.stagePlaylistAudio(any(), any()) } answers { "staged-${secondArg<PlaylistAudioEntry>().position}" }
+        coEvery { delivery.sendPlaylistAudios(any(), any(), any()) } answers {
+            assertEquals(listOf(1, 2), thirdArg<List<PlaylistAudioResult>>().sortedBy { it.position }.map { it.position })
+            "custom-playlist-receipt"
+        }
+        coEvery { delivery.sendArchive(any(), any()) } answers {
+            assertTrue(Files.isRegularFile(secondArg<Path>()))
+            "custom-playlist-receipt"
+        }
+        val cache = mockk<ResultCache>(relaxed = true) {
+            every { find(any()) } returns null
+            every { findPlaylistAudio(any(), any()) } returns null
+        }
+        val limits = TelegramUploadLimits(10_000)
+        val cleaner = WorkDirCleaner(directory.toString())
+        val downloader = PlaylistEntryDownloader(engine, limits)
+        val processor = PlaylistJobProcessor(
+            AudioMessagesPlaylistWorkflow(jobs, downloader, delivery, cache, cleaner),
+            ZipPlaylistWorkflow(jobs, downloader, PlaylistZipBuilder(), delivery, limits, cleaner, PlaylistWorkspaceBudget(limits)),
+            JobLifecycle(jobs, notifications),
+            notifications,
+            cleaner,
+        )
+
+        processor.process(job)
+
+        assertTrue(source.downloaded)
+        verify(exactly = 1) { store.complete(42, "custom-playlist-receipt") }
+        coVerify(exactly = if (mode == PlaylistDeliveryMode.AUDIO_MESSAGES) 1 else 0) { delivery.sendPlaylistAudios(any(), any(), any()) }
+        coVerify(exactly = if (mode == PlaylistDeliveryMode.ZIP) 1 else 0) { delivery.sendArchive(any(), any()) }
+        assertTrue(!Files.exists(directory.resolve("42")))
+    }
+
+    @Test
+    fun customSourceSuppliesTypedItemFailureWithoutEnglishDiagnostics(@TempDir directory: Path) = runBlocking {
+        val source = FixtureSource().apply {
+            failure = DownloadFailure(DownloadFailureReason.SOURCE_UNAVAILABLE, "Произвольная диагностика", playlistFailure = PlaylistItemFailure.PRIVATE)
+        }
+        val store = mockk<JobStore>()
+        every { store.save(any()) } answers {
+            firstArg<DownloadJob>().apply {
+                id = 43
+                status = DownloadJobStatus.PROCESSING
+            }
+        }
+        val jobs = DownloadJobService(store)
+        val job = requireNotNull(jobs.createJob(CreateDownloadJobCommand(1, 2, spec = source.playlist("https://fixture.test/list", "320K"))))
+        every { store.findById(43) } returns Optional.of(job)
+        every { store.savePlaylistResult(43, any()) } answers {
+            job.playlistResults += secondArg<PlaylistAudioResult>()
+            true
+        }
+        val delivery = mockk<PlaylistDelivery> { coEvery { checkStorage() } returns Unit }
+        val cache = mockk<ResultCache> {
+            every { find(any()) } returns null
+            every { findPlaylistAudio(any(), any()) } returns null
+        }
+        val limits = TelegramUploadLimits(10_000)
+        val cleaner = WorkDirCleaner(directory.toString())
+        val root = cleaner.create(43)
+        val workflow = AudioMessagesPlaylistWorkflow(jobs, PlaylistEntryDownloader(DownloadEngine(PlatformResolver(listOf(source))), limits), delivery, cache, cleaner)
+
+        val failure = assertFailsWith<PlaylistEmptyException> {
+            workflow.run(43, DownloadRequestMapper.playlist(job), DeliveryContext.fromJob(job), root, JobProgress {})
+        }
+
+        assertEquals(PlaylistItemFailure.PRIVATE, failure.failures.single().failure)
+        assertEquals("Произвольная диагностика", failure.failures.single().error)
+        assertTrue(!Files.exists(root.resolve("1")))
+        coVerify(exactly = 0) { delivery.stagePlaylistAudio(any(), any()) }
+    }
+
     @Test
     fun adaptersOwnSettingsForOriginalPostsAndCollections() {
         val source = FixturePostSource()
@@ -172,6 +338,7 @@ class SourceBoundaryTest {
         override val platform = DownloadPlatform.VK
         var quality: String? = null
         var downloaded = false
+        var failure: DownloadFailure? = null
         override fun supports(url: String): Boolean = url.startsWith("https://fixture.test/")
         override fun resolve(url: String): PlatformDownloadSpecs = error("This fixture only supplies playlists")
         override fun select(spec: DownloadSpec, selection: MediaSelection): DownloadSpec = error("No single media choices")
@@ -184,6 +351,7 @@ class SourceBoundaryTest {
         override fun playlistItemUrl(entry: PlaylistAudioEntry): String = entry.url
         override fun playlistItemCacheKey(entry: PlaylistAudioEntry, source: SourceRequest?): String = "fixture:${entry.sourceId}"
         override suspend fun downloadPlaylistItem(entry: PlaylistAudioEntry, directory: Path, source: SourceRequest?): DownloadedFile {
+            failure?.let { throw it }
             downloaded = true
             val file = Files.write(directory.resolve("audio.bin"), byteArrayOf(1, 2, 3))
             return DownloadedFile(file, Files.size(file))

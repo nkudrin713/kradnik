@@ -1,12 +1,13 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.download.choice.CANCEL_OPTION_KEY
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import org.springframework.stereotype.Component
@@ -18,18 +19,18 @@ private const val MAX_CALLBACK_BYTES = 64
 
 @Component
 class TelegramDownloadChoiceView(
-    private val messages: TelegramMessages,
+    private val messages: Messages,
 ) {
     fun text(mediaInfo: DownloadChoiceMediaInfo, language: BotLanguage = BotLanguage.EN): String {
         if (mediaInfo.playlistCount != null) {
             val lines = buildList {
                 add(
                     mediaInfo.title?.takeIf(String::isNotBlank)
-                        ?: messages.text(language, TelegramMessage.CHOICE_TITLE_UNAVAILABLE),
+                        ?: messages.text(language, MessageKey.CHOICE_TITLE_UNAVAILABLE),
                 )
-                add(messages.text(language, TelegramMessage.PLAYLIST_TRACK_COUNT, mediaInfo.playlistCount))
+                add(messages.text(language, MessageKey.PLAYLIST_TRACK_COUNT, mediaInfo.playlistCount))
                 mediaInfo.durationSeconds?.let {
-                    add(messages.text(language, TelegramMessage.PLAYLIST_TOTAL_DURATION, formatDuration(it)))
+                    add(messages.text(language, MessageKey.PLAYLIST_TOTAL_DURATION, formatDuration(it)))
                 }
                 val bitrate = mediaInfo.audioBitrateKbps
                 val size = mediaInfo.estimatedSizeBytes
@@ -37,20 +38,20 @@ class TelegramDownloadChoiceView(
                     add(
                         messages.text(
                             language,
-                            TelegramMessage.PLAYLIST_AUDIO_FORMAT,
+                            MessageKey.PLAYLIST_AUDIO_FORMAT,
                             bitrate,
                             formatSize(size, language),
                         ),
                     )
                 }
-                if (bitrate != null && size == null) add(messages.text(language, TelegramMessage.PLAYLIST_SIZE_UNKNOWN, bitrate))
+                if (bitrate != null && size == null) add(messages.text(language, MessageKey.PLAYLIST_SIZE_UNKNOWN, bitrate))
             }
             return lines.joinToString("\n").escapeHtml()
         }
         val videoInfo = buildList {
             add(
                 mediaInfo.title?.takeIf { it.isNotBlank() }
-                    ?: messages.text(language, TelegramMessage.CHOICE_TITLE_UNAVAILABLE),
+                    ?: messages.text(language, MessageKey.CHOICE_TITLE_UNAVAILABLE),
             )
             val authorUsername = mediaInfo.authorUsername
                 ?.trim()
@@ -60,7 +61,7 @@ class TelegramDownloadChoiceView(
                 add("@$authorUsername")
             } else {
                 mediaInfo.durationSeconds?.let {
-                    add(messages.text(language, TelegramMessage.CHOICE_DURATION, formatDuration(it)))
+                    add(messages.text(language, MessageKey.CHOICE_DURATION, formatDuration(it)))
                 }
             }
         }
@@ -79,7 +80,7 @@ class TelegramDownloadChoiceView(
             )
         } + listOf(
             arrayOf(
-                InlineKeyboardButton(messages.text(language, TelegramMessage.ACTION_CANCEL))
+                InlineKeyboardButton(messages.text(language, MessageKey.ACTION_CANCEL))
                     .callbackData(DownloadChoiceCallback.encode(sessionToken, CANCEL_OPTION_KEY))
                     .style("danger"),
             ),
@@ -107,7 +108,7 @@ class TelegramDownloadChoiceView(
         }
         val unit = messages.text(
             language,
-            if (gigabytes) TelegramMessage.CHOICE_SIZE_GB else TelegramMessage.CHOICE_SIZE_MB,
+            if (gigabytes) MessageKey.CHOICE_SIZE_GB else MessageKey.CHOICE_SIZE_MB,
         )
         return "$pattern $unit".format(language.locale, value)
     }
@@ -143,9 +144,6 @@ class TelegramDownloadChoiceView(
             }
     }
 }
-
-const val CANCEL_OPTION_KEY = "cancel"
-const val REPEAT_LAST_OPTION_KEY = "repeat"
 
 data class DownloadChoiceCallback(
     val sessionToken: UUID,

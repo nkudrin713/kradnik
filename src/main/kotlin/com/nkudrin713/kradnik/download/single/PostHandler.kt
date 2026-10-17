@@ -6,8 +6,8 @@ import com.nkudrin713.kradnik.download.domain.PostMedia
 import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.domain.SingleMediaRequest
 import com.nkudrin713.kradnik.download.limit.DownloadPreflightService
-import com.nkudrin713.kradnik.download.processing.DownloadPhase
-import com.nkudrin713.kradnik.download.processing.JobProgress
+import com.nkudrin713.kradnik.download.progress.DownloadPhase
+import com.nkudrin713.kradnik.download.progress.JobProgress
 import com.nkudrin713.kradnik.download.video.TelegramVideoPreparer
 import org.springframework.stereotype.Component
 import java.nio.file.Files

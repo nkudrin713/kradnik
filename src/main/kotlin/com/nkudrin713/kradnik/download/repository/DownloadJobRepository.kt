@@ -1,6 +1,5 @@
 package com.nkudrin713.kradnik.download.repository
 
-import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
@@ -8,12 +7,12 @@ import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 
-interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
-    fun findAllByStatusOrderByCreatedAtAscIdAsc(status: DownloadJobStatus): List<DownloadJob>
+interface DownloadJobRepository : JpaRepository<DownloadJobEntity, Long> {
+    fun findAllByStatusOrderByCreatedAtAscIdAsc(status: DownloadJobStatus): List<DownloadJobEntity>
 
-    fun findByTelegramUpdateId(telegramUpdateId: Int): DownloadJob?
+    fun findByTelegramUpdateId(telegramUpdateId: Int): DownloadJobEntity?
 
-    fun findByRetryOfJobId(retryOfJobId: Long): DownloadJob?
+    fun findByRetryOfJobId(retryOfJobId: Long): DownloadJobEntity?
 
     /** Serializes short claims from both worker pools before checking a user's processing jobs. */
     @Query(value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(7262824436563968)) AS locked", nativeQuery = true)
@@ -43,7 +42,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
     """,
         nativeQuery = true,
     )
-    fun claimNextQueuedJob(): DownloadJob?
+    fun claimNextQueuedJob(): DownloadJobEntity?
 
     @Query(
         value = """
@@ -66,7 +65,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
     """,
         nativeQuery = true,
     )
-    fun claimNextQueuedPlaylistJob(): DownloadJob?
+    fun claimNextQueuedPlaylistJob(): DownloadJobEntity?
 
     @Query(
         value = """
@@ -84,7 +83,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT job FROM DownloadJob job WHERE job.id = :jobId")
-    fun findForUpdate(jobId: Long): DownloadJob?
+    fun findForUpdate(jobId: Long): DownloadJobEntity?
 
     @Modifying
     @Query(
@@ -142,7 +141,7 @@ interface DownloadJobRepository : JpaRepository<DownloadJob, Long> {
     """,
         nativeQuery = true,
     )
-    fun findCachedCompletedJob(cacheKey: String): DownloadJob?
+    fun findCachedCompletedJob(cacheKey: String): DownloadJobEntity?
 
     @Query(
         value = """

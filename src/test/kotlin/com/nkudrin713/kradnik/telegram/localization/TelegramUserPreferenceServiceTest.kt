@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram.localization
 
+import com.nkudrin713.kradnik.localization.BotLanguage
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot

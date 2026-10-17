@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.ytdlp
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.nkudrin713.kradnik.download.diagnostics.PlaylistFailureDiagnostics
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
@@ -11,7 +12,6 @@ import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
-import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.springframework.beans.factory.annotation.Value
@@ -358,7 +358,7 @@ class YtDlpService(
     }
 }
 
-open class YtDlpException(message: String, reason: DownloadFailureReason = DownloadFailureReason.SOURCE_FAILED) : DownloadFailure(reason, message)
+open class YtDlpException(message: String, reason: DownloadFailureReason = DownloadFailureReason.SOURCE_FAILED) : DownloadFailure(reason, message, playlistFailure = PlaylistFailureDiagnostics.classify(message, reason))
 
 class YtDlpAuthenticationRequiredException(message: String) : YtDlpException(message, DownloadFailureReason.AUTHENTICATION_REQUIRED)
 

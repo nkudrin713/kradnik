@@ -9,15 +9,15 @@ import com.nkudrin713.kradnik.download.limit.AudioUploadPlanner
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.source.MediaSelection
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.RoundingMode
 
 @Component
-class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, private val uploadLimits: TelegramUploadLimits, private val messages: TelegramMessages, private val sources: PlatformResolver) {
+class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, private val uploadLimits: TelegramUploadLimits, private val messages: Messages, private val sources: PlatformResolver) {
     fun select(spec: DownloadSpec, selection: MediaSelection): DownloadSpec = sources.adapter(spec.platform).select(spec, selection)
 
     fun videoOptions(
@@ -144,7 +144,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
     }
 
     private fun originalLabel(language: BotLanguage, height: Int?): String {
-        val label = messages.text(language, TelegramMessage.CHOICE_ORIGINAL)
+        val label = messages.text(language, MessageKey.CHOICE_ORIGINAL)
         return height?.let { "$label · ${it}p" } ?: label
     }
 
@@ -161,7 +161,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
         return option(
             spec = selectedSpec,
             key = AUDIO_KEY,
-            label = messages.text(language, TelegramMessage.CHOICE_AUDIO),
+            label = messages.text(language, MessageKey.CHOICE_AUDIO),
             sizeBytes = plan.estimatedSizeBytes,
             approximateSize = true,
             cacheKeySuffix = ResultKeyFactory.audioSuffix(plan.audioQuality),
@@ -179,7 +179,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
         return option(
             spec = coverSpec,
             key = COVER_KEY,
-            label = messages.text(language, TelegramMessage.CHOICE_COVER),
+            label = messages.text(language, MessageKey.CHOICE_COVER),
             sizeBytes = null,
             approximateSize = false,
             cacheKeySuffix = ResultKeyFactory.coverSuffix(),
@@ -204,7 +204,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
             approximateSize = approximateSize,
             available = !tooLarge,
             unavailableReason = if (tooLarge) {
-                messages.text(language, TelegramMessage.ERROR_TOO_LARGE)
+                messages.text(language, MessageKey.ERROR_TOO_LARGE)
             } else {
                 null
             },

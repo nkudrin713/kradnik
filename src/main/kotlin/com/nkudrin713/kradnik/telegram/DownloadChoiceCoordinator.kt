@@ -5,16 +5,17 @@ import com.nkudrin713.kradnik.download.choice.CreateDownloadRetryCommand
 import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanner
 import com.nkudrin713.kradnik.download.choice.DownloadChoicePlanningException
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceSessionService
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
-import com.nkudrin713.kradnik.download.identity.UnsupportedUrlException
+import com.nkudrin713.kradnik.download.domain.UnsupportedUrlException
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.download.platform.UnsupportedPlatformException
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.localization.Messages
 import com.nkudrin713.kradnik.observability.BotTelemetry
 import com.nkudrin713.kradnik.observability.RuntimeError
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
 import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
@@ -35,7 +36,7 @@ class DownloadChoiceCoordinator(
     private val planner: DownloadChoicePlanner,
     private val sessionService: DownloadChoiceSessionService,
     private val telegramSender: TelegramSender,
-    private val messages: TelegramMessages,
+    private val messages: Messages,
     private val runtime: BotTelemetry = BotTelemetry.NONE,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -76,7 +77,7 @@ class DownloadChoiceCoordinator(
                     language = command.language,
                 )
             }
-            ?: TelegramMessageAddress.Chat(
+            ?: MessageAddress.Chat(
                 chatId = command.telegramChatId,
                 messageId = telegramSender.sendStatus(
                     chatId = command.telegramChatId,
@@ -88,12 +89,12 @@ class DownloadChoiceCoordinator(
         submit(command, messageAddress)
     }
 
-    fun prepareAgain(command: PrepareDownloadChoiceCommand, messageAddress: TelegramMessageAddress) {
+    fun prepareAgain(command: PrepareDownloadChoiceCommand, messageAddress: MessageAddress) {
         telegramSender.editStatus(messageAddress, TelegramDownloadStatus.ANALYZING, command.language)
         submit(command, messageAddress)
     }
 
-    private fun submit(command: PrepareDownloadChoiceCommand, messageAddress: TelegramMessageAddress) {
+    private fun submit(command: PrepareDownloadChoiceCommand, messageAddress: MessageAddress) {
         runtime.metadataQueue(1)
         try {
             executor.execute {
@@ -107,13 +108,13 @@ class DownloadChoiceCoordinator(
         } catch (error: RejectedExecutionException) {
             runtime.metadataQueue(-1)
             runtime.error(RuntimeError.METADATA_REJECTED)
-            showFailure(command, messageAddress, messages.text(command.language, TelegramMessage.ERROR_CHOICE_PREPARATION))
+            showFailure(command, messageAddress, messages.text(command.language, MessageKey.ERROR_CHOICE_PREPARATION))
         }
     }
 
     internal suspend fun prepareAsync(
         command: PrepareDownloadChoiceCommand,
-        messageAddress: TelegramMessageAddress,
+        messageAddress: MessageAddress,
     ) {
         try {
             val plan = planner.plan(command.url, command.language)
@@ -123,8 +124,8 @@ class DownloadChoiceCoordinator(
                     telegramChatId = command.telegramChatId,
                     telegramUpdateId = command.telegramUpdateId,
                     telegramRequestMessageId = command.telegramRequestMessageId,
-                    telegramMenuMessageId = (messageAddress as? TelegramMessageAddress.Chat)?.messageId,
-                    telegramInlineMessageId = (messageAddress as? TelegramMessageAddress.Inline)?.inlineMessageId,
+                    telegramMenuMessageId = (messageAddress as? MessageAddress.Chat)?.messageId,
+                    telegramInlineMessageId = (messageAddress as? MessageAddress.Inline)?.inlineMessageId,
                     language = command.language,
                     plan = plan,
                 ),
@@ -152,7 +153,7 @@ class DownloadChoiceCoordinator(
         }
     }
 
-    private fun showFailure(command: PrepareDownloadChoiceCommand, address: TelegramMessageAddress, text: String) {
+    private fun showFailure(command: PrepareDownloadChoiceCommand, address: MessageAddress, text: String) {
         val session = try {
             sessionService.createRetry(
                 CreateDownloadRetryCommand(
@@ -160,8 +161,8 @@ class DownloadChoiceCoordinator(
                     command.telegramChatId,
                     command.telegramUpdateId,
                     command.telegramRequestMessageId,
-                    (address as? TelegramMessageAddress.Chat)?.messageId,
-                    (address as? TelegramMessageAddress.Inline)?.inlineMessageId,
+                    (address as? MessageAddress.Chat)?.messageId,
+                    (address as? MessageAddress.Inline)?.inlineMessageId,
                     command.language,
                     command.url,
                 ),
@@ -180,17 +181,17 @@ class DownloadChoiceCoordinator(
 
             is DownloadFailure -> messages.text(language, TelegramDownloadStatus.forFailure(reason).message)
 
-            is PlatformDisabledException -> messages.text(language, TelegramMessage.ERROR_PLATFORM_DISABLED, platform.displayName)
+            is PlatformDisabledException -> messages.text(language, MessageKey.ERROR_PLATFORM_DISABLED, platform.displayName)
 
             is UnsupportedPlatformException -> messages.text(
                 language,
-                TelegramMessage.ERROR_UNSUPPORTED_PLATFORM,
+                MessageKey.ERROR_UNSUPPORTED_PLATFORM,
                 DownloadPlatform.entries.joinToString(", ") { it.displayName },
             )
 
-            is UnsupportedUrlException -> messages.text(language, TelegramMessage.ERROR_UNSUPPORTED_URL)
+            is UnsupportedUrlException -> messages.text(language, MessageKey.ERROR_UNSUPPORTED_URL)
 
-            else -> messages.text(language, TelegramMessage.ERROR_CHOICE_PREPARATION)
+            else -> messages.text(language, MessageKey.ERROR_CHOICE_PREPARATION)
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.service.DownloadJobService
 import org.slf4j.LoggerFactory
@@ -36,8 +37,8 @@ class TelegramQueueUpdater(private val jobs: DownloadJobService, private val sen
             val (job, position) = updates[offset]
             val id = job.requiredId()
             nextOffset = (offset + 1) % updates.size
-            val address = job.telegramInlineMessageId?.let(TelegramMessageAddress::Inline)
-                ?: job.telegramStatusMessageId?.let { TelegramMessageAddress.Chat(job.telegramChatId, it) }
+            val address = job.telegramInlineMessageId?.let(MessageAddress::Inline)
+                ?: job.telegramStatusMessageId?.let { MessageAddress.Chat(job.telegramChatId, it) }
                 ?: continue
             try {
                 sender.editQueuedJob(address, id, job.language, job.workloadType, position) { jobs.isQueued(id) }

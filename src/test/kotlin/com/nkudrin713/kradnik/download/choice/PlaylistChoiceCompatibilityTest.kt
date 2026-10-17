@@ -6,6 +6,7 @@ import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.domain.PlaylistDeliveryMode
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
+import com.nkudrin713.kradnik.download.repository.DownloadChoiceOptionsJsonConverter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

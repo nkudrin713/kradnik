@@ -1,9 +1,8 @@
 package com.nkudrin713.kradnik.download.service
 
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
-import com.nkudrin713.kradnik.download.processing.ActiveDownloadRegistry
-import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -22,7 +21,7 @@ class DownloadCancellationServiceTest {
         every { jobs.cancelByUser(1, 10) } returns true
         every { activeDownloads.cancel(1) } returns true
 
-        val result = service.cancel(1, 10, TelegramMessageAddress.Chat(20, 30))
+        val result = service.cancel(1, 10, MessageAddress.Chat(20, 30))
 
         assertIs<DownloadCancellation.Cancelled>(result)
         verify { jobs.cancelByUser(1, 10) }
@@ -33,7 +32,7 @@ class DownloadCancellationServiceTest {
     fun doesNotCancelAnotherUsersJob() {
         every { jobs.findJob(1) } returns job()
 
-        val result = service.cancel(1, 99, TelegramMessageAddress.Chat(20, 30))
+        val result = service.cancel(1, 99, MessageAddress.Chat(20, 30))
 
         assertIs<DownloadCancellation.NotOwner>(result)
         verify(exactly = 0) { jobs.cancelByUser(any(), any()) }
@@ -45,7 +44,7 @@ class DownloadCancellationServiceTest {
         val job = job().apply { status = DownloadJobStatus.CANCELLED_BY_USER }
         every { jobs.findJob(1) } returns job
 
-        val result = service.cancelledJob(1, 10, TelegramMessageAddress.Chat(20, 30))
+        val result = service.cancelledJob(1, 10, MessageAddress.Chat(20, 30))
 
         assertIs<DownloadJob>(result)
     }

@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.choice
 import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.domain.DownloadFailure
 import com.nkudrin713.kradnik.download.domain.DownloadFailureReason
+import com.nkudrin713.kradnik.download.domain.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.MediaContentType
 import com.nkudrin713.kradnik.download.domain.MediaFormat
@@ -17,15 +18,14 @@ import com.nkudrin713.kradnik.download.platform.PlatformDisabledException
 import com.nkudrin713.kradnik.download.platform.PlatformDownloadSpecs
 import com.nkudrin713.kradnik.download.platform.PlatformResolver
 import com.nkudrin713.kradnik.download.playlist.PlaylistChoicePlanner
-import com.nkudrin713.kradnik.download.repository.DownloadRequestMapper
 import com.nkudrin713.kradnik.download.source.PreparedPostSource
 import com.nkudrin713.kradnik.download.source.SourcePost
 import com.nkudrin713.kradnik.download.source.SourcePostItem
 import com.nkudrin713.kradnik.download.testPlatformResolver
 import com.nkudrin713.kradnik.download.threads.ThreadsPreparedSource
 import com.nkudrin713.kradnik.download.vk.VkPreparedSource
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.nkudrin713.kradnik.ytdlp.YtDlpPreparedSource
 import io.mockk.coEvery
@@ -256,7 +256,7 @@ class DownloadChoicePlannerTest {
         assertEquals(listOf("video_original", "video_720", "audio", "cover"), actual.options.map { it.key })
         val original = actual.options.first()
         assertFalse(original.available)
-        assertEquals(telegramMessages().text(BotLanguage.RU, TelegramMessage.ERROR_TOO_LARGE), original.unavailableReason)
+        assertEquals(telegramMessages().text(BotLanguage.RU, MessageKey.ERROR_TOO_LARGE), original.unavailableReason)
     }
 
     @Test
@@ -407,14 +407,14 @@ class DownloadChoicePlannerTest {
         val video = resolved(OutputType.VIDEO).withInstagramPlatform()
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO).withInstagramPlatform())
         val categories = mapOf(
-            DownloadFailureReason.SOURCE_UNAVAILABLE to TelegramMessage.ERROR_SOURCE_UNAVAILABLE,
-            DownloadFailureReason.SOURCE_RATE_LIMITED to TelegramMessage.ERROR_INSTAGRAM_RATE_LIMITED,
-            DownloadFailureReason.SOURCE_REQUEST_FAILED to TelegramMessage.ERROR_INSTAGRAM_UNAVAILABLE,
-            DownloadFailureReason.METADATA_UNAVAILABLE to TelegramMessage.ERROR_METADATA_UNAVAILABLE,
-            DownloadFailureReason.FORMAT_UNAVAILABLE to TelegramMessage.STATUS_FORMAT_UNAVAILABLE,
-            DownloadFailureReason.AUTHENTICATION_REQUIRED to TelegramMessage.STATUS_AUTHENTICATION_REQUIRED,
-            DownloadFailureReason.SOURCE_TIMEOUT to TelegramMessage.STATUS_SOURCE_TIMEOUT,
-            DownloadFailureReason.SOURCE_FAILED to TelegramMessage.STATUS_ERROR,
+            DownloadFailureReason.SOURCE_UNAVAILABLE to MessageKey.ERROR_SOURCE_UNAVAILABLE,
+            DownloadFailureReason.SOURCE_RATE_LIMITED to MessageKey.ERROR_INSTAGRAM_RATE_LIMITED,
+            DownloadFailureReason.SOURCE_REQUEST_FAILED to MessageKey.ERROR_INSTAGRAM_UNAVAILABLE,
+            DownloadFailureReason.METADATA_UNAVAILABLE to MessageKey.ERROR_METADATA_UNAVAILABLE,
+            DownloadFailureReason.FORMAT_UNAVAILABLE to MessageKey.STATUS_FORMAT_UNAVAILABLE,
+            DownloadFailureReason.AUTHENTICATION_REQUIRED to MessageKey.STATUS_AUTHENTICATION_REQUIRED,
+            DownloadFailureReason.SOURCE_TIMEOUT to MessageKey.STATUS_SOURCE_TIMEOUT,
+            DownloadFailureReason.SOURCE_FAILED to MessageKey.STATUS_ERROR,
         )
         for ((reason, message) in categories) {
             val failure = DownloadFailure(reason, "Diagnostic details")
@@ -429,8 +429,8 @@ class DownloadChoicePlannerTest {
     fun youtubeRequestFailuresDoNotMentionInstagram() = runTest {
         every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(resolved(OutputType.VIDEO), resolved(OutputType.AUDIO))
         val cases = mapOf(
-            DownloadFailureReason.SOURCE_RATE_LIMITED to TelegramMessage.STATUS_SOURCE_RATE_LIMITED,
-            DownloadFailureReason.SOURCE_REQUEST_FAILED to TelegramMessage.STATUS_SOURCE_REQUEST_FAILED,
+            DownloadFailureReason.SOURCE_RATE_LIMITED to MessageKey.STATUS_SOURCE_RATE_LIMITED,
+            DownloadFailureReason.SOURCE_REQUEST_FAILED to MessageKey.STATUS_SOURCE_REQUEST_FAILED,
         )
         for ((reason, key) in cases) {
             coEvery { downloadEngine.prepare(any(), any()) } throws DownloadFailure(reason, "Private diagnostic")

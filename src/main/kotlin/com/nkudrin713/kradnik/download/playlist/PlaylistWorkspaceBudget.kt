@@ -1,6 +1,7 @@
 package com.nkudrin713.kradnik.download.playlist
 
 import com.nkudrin713.kradnik.download.limit.TelegramUploadLimits
+import com.nkudrin713.kradnik.localization.MessageKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -39,7 +40,7 @@ class PlaylistWorkspaceBudget(private val uploadLimits: TelegramUploadLimits) {
             },
         )
         if (Files.getFileStore(root).usableSpace < 64L * 1024 * 1024) {
-            throw PlaylistOperationException(com.nkudrin713.kradnik.telegram.localization.TelegramMessage.PLAYLIST_DISK_FULL)
+            throw PlaylistOperationException(com.nkudrin713.kradnik.localization.MessageKey.PLAYLIST_DISK_FULL)
         }
     }
 }

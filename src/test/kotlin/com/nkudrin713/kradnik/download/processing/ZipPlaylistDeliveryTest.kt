@@ -2,6 +2,7 @@ package com.nkudrin713.kradnik.download.processing
 
 import com.nkudrin713.kradnik.download.DownloadEngine
 import com.nkudrin713.kradnik.download.cleanup.WorkDirCleaner
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadJob
 import com.nkudrin713.kradnik.download.domain.DownloadJobStatus
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
@@ -86,7 +87,7 @@ class ZipPlaylistDeliveryTest {
         verify { telegram.editPlaylistProgress(any(), "📦 Creating ZIP archive", 1, job.language, any()) }
         verify {
             telegram.editPlaylistReport(
-                com.nkudrin713.kradnik.telegram.TelegramMessageAddress.Chat(20, 22),
+                com.nkudrin713.kradnik.download.delivery.MessageAddress.Chat(20, 22),
                 match { "2. <a href=" in it && "Track 2" in it && "Recording unavailable" in it },
                 1,
                 job.language,

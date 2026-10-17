@@ -2,12 +2,13 @@ package com.nkudrin713.kradnik.telegram
 
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceMediaInfo
 import com.nkudrin713.kradnik.download.choice.DownloadChoiceOptionSnapshot
+import com.nkudrin713.kradnik.download.delivery.MessageAddress
 import com.nkudrin713.kradnik.download.domain.DownloadSpec
 import com.nkudrin713.kradnik.download.domain.DownloadWorkloadType
 import com.nkudrin713.kradnik.download.domain.OutputType
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
-import com.nkudrin713.kradnik.telegram.localization.BotLanguage
-import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
+import com.nkudrin713.kradnik.localization.BotLanguage
+import com.nkudrin713.kradnik.localization.MessageKey
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.Message
@@ -64,7 +65,7 @@ class TelegramSenderTest {
         sender.sendStatus(100, TelegramDownloadStatus.QUEUED) shouldBe 10
 
         val actual = request.captured as SendMessage
-        actual.getParameters()["text"] shouldBe messages.text(BotLanguage.EN, TelegramMessage.STATUS_QUEUED)
+        actual.getParameters()["text"] shouldBe messages.text(BotLanguage.EN, MessageKey.STATUS_QUEUED)
     }
 
     @Test
@@ -77,7 +78,7 @@ class TelegramSenderTest {
         every { bot.execute(capture(request)) } returns response
 
         sender.answerGuestMessage("guest-query", "Analyzing") shouldBe
-            TelegramMessageAddress.Inline("inline-message")
+            MessageAddress.Inline("inline-message")
 
         val actual = request.captured.shouldBeInstanceOf<AnswerGuestQuery>()
         actual.getParameters()["guest_query_id"] shouldBe "guest-query"
@@ -99,7 +100,7 @@ class TelegramSenderTest {
 
         val actual = request.captured as EditMessageText
         actual.getParameters()["message_id"] shouldBe 10
-        actual.getParameters()["text"] shouldBe messages.text(BotLanguage.EN, TelegramMessage.STATUS_ERROR)
+        actual.getParameters()["text"] shouldBe messages.text(BotLanguage.EN, MessageKey.STATUS_ERROR)
     }
 
     @Test
@@ -110,8 +111,8 @@ class TelegramSenderTest {
         every { bot.execute(capture(request)) } returns okResponse()
         every { downloadJobView.repeatKeyboard(token, BotLanguage.EN) } returns keyboard
 
-        sender.editFailure(TelegramMessageAddress.Chat(100, 10), "Unavailable", token, BotLanguage.EN, 42)
-        sender.editQueuedJob(TelegramMessageAddress.Chat(100, 10), 42, BotLanguage.EN, DownloadWorkloadType.SINGLE, 1) { false }
+        sender.editFailure(MessageAddress.Chat(100, 10), "Unavailable", token, BotLanguage.EN, 42)
+        sender.editQueuedJob(MessageAddress.Chat(100, 10), 42, BotLanguage.EN, DownloadWorkloadType.SINGLE, 1) { false }
 
         verify(exactly = 1) { bot.execute(any<BaseRequest<*, *>>()) }
         request.captured.getParameters()["text"] shouldBe "Unavailable"
@@ -128,7 +129,7 @@ class TelegramSenderTest {
             every { description() } returns "Bad Request: message is not modified"
         }
 
-        sender.editQueuedJob(TelegramMessageAddress.Chat(100, 10), 42, BotLanguage.EN, DownloadWorkloadType.SINGLE, 1) { true }
+        sender.editQueuedJob(MessageAddress.Chat(100, 10), 42, BotLanguage.EN, DownloadWorkloadType.SINGLE, 1) { true }
     }
 
     @Test
@@ -136,7 +137,7 @@ class TelegramSenderTest {
         val request = slot<BaseRequest<*, *>>()
         every { bot.execute(capture(request)) } returns okResponse()
 
-        sender.editFinalMessage(TelegramMessageAddress.Chat(100, 10), "1. <a href=\"https://example.com\">Track</a>", html = true)
+        sender.editFinalMessage(MessageAddress.Chat(100, 10), "1. <a href=\"https://example.com\">Track</a>", html = true)
 
         val actual = request.captured as EditMessageText
         actual.getParameters()["message_id"] shouldBe 10
@@ -181,7 +182,7 @@ class TelegramSenderTest {
         every { bot.execute(capture(request)) } returns okResponse()
 
         sender.editDownloadChoice(
-            address = TelegramMessageAddress.Inline("inline-message"),
+            address = MessageAddress.Inline("inline-message"),
             sessionToken = token,
             mediaInfo = mediaInfo,
             options = options,

@@ -1,4 +1,4 @@
-package com.nkudrin713.kradnik.download.processing
+package com.nkudrin713.kradnik.download.service
 
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job

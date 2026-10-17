@@ -3,6 +3,7 @@ package com.nkudrin713.kradnik.download.instagram
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nkudrin713.kradnik.download.domain.DownloadedFile
 import com.nkudrin713.kradnik.download.domain.OutputType
+import com.nkudrin713.kradnik.download.domain.PostMediaKind
 import com.nkudrin713.kradnik.download.platform.DownloadPlatform
 import com.nkudrin713.kradnik.download.source.SourceRequest
 import com.nkudrin713.kradnik.ytdlp.YtDlpMetadataDto
@@ -177,8 +178,7 @@ class InstagramEmbedDownloaderTest {
         val secondFile = tempDir.resolve("instagram-ABC_123-02.jpg")
         val prepared = InstagramPreparedDownload(
             shortcode = "ABC_123",
-            mediaUri = null,
-            imageUris = listOf(firstUri, secondUri),
+            items = listOf(InstagramMedia(PostMediaKind.PHOTO, firstUri), InstagramMedia(PostMediaKind.PHOTO, secondUri)),
             metadata = imageMetadata(),
         )
         coEvery { httpClient.downloadImage(firstUri, firstFile) } returns DownloadedFile(firstFile, 10)

@@ -65,8 +65,6 @@ class InstagramEmbedDownloader(
 
         val preparedDownload = InstagramPreparedDownload(
             shortcode = shortcode,
-            mediaUri = mediaUri,
-            imageUris = items.filter { it.kind == PostMediaKind.PHOTO }.map { requireNotNull(it.uri) },
             items = items,
             metadata = YtDlpMetadataDto(
                 title = context.findFirstText(TITLE)
@@ -118,8 +116,6 @@ class InstagramEmbedDownloader(
         val shortcode = parseInstagramMediaUrl(spec.originalUrl)?.shortcode ?: return null
         return InstagramPreparedDownload(
             shortcode = shortcode,
-            mediaUri = null,
-            imageUris = imageUris,
             items = items,
             metadata = if (items.singleOrNull()?.kind == PostMediaKind.VIDEO) {
                 metadata
@@ -344,15 +340,12 @@ class InstagramEmbedDownloader(
 
 data class InstagramPreparedDownload(
     val shortcode: String,
-    val mediaUri: URI?,
-    val imageUris: List<URI> = emptyList(),
+    val items: List<InstagramMedia>,
     val metadata: YtDlpMetadataDto,
-    val items: List<InstagramMedia> = if (imageUris.isNotEmpty()) {
-        imageUris.map { InstagramMedia(PostMediaKind.PHOTO, it) }
-    } else {
-        listOf(InstagramMedia(PostMediaKind.VIDEO, mediaUri))
-    },
-)
+) {
+    val mediaUri: URI? get() = items.singleOrNull()?.takeIf { it.kind == PostMediaKind.VIDEO }?.uri
+    val imageUris: List<URI> get() = items.filter { it.kind == PostMediaKind.PHOTO }.map { requireNotNull(it.uri) }
+}
 
 data class InstagramMedia(val kind: PostMediaKind, val uri: URI?)
 

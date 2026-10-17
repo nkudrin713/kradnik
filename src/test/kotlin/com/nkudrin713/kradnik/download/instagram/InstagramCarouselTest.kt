@@ -31,6 +31,20 @@ class InstagramCarouselTest {
     }
 
     @Test
+    fun mediaUrlsFollowTheOrderedItemsWhenPreparedContentIsCopied() = runTest {
+        coEvery { http.getText(any()) } returns embed(listOf(photo(), video(), photo()))
+        val prepared = downloader.prepare(request)
+        assertEquals(listOf(prepared.items[0].uri, prepared.items[2].uri), prepared.imageUris)
+
+        val videoOnly = prepared.copy(items = listOf(prepared.items[1]))
+        assertEquals(prepared.items[1].uri, videoOnly.mediaUri)
+        assertEquals(emptyList(), videoOnly.imageUris)
+
+        val fallbackVideo = videoOnly.copy(items = listOf(InstagramMedia(PostMediaKind.VIDEO, null)))
+        assertEquals(null, fallbackVideo.mediaUri)
+    }
+
+    @Test
     fun supportsTwentyItemsAndRejectsLargerOrEmptyCarousels() = runTest {
         coEvery { http.getText(any()) } returns embed(List(20) { photo() })
         assertEquals(20, downloader.prepare(request).items.size)

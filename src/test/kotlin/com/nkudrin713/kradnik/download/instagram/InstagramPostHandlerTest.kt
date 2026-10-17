@@ -45,7 +45,6 @@ class InstagramPostHandlerTest {
     private val prepared = InstagramPreparedSource(
         InstagramPreparedDownload(
             "TEST",
-            null,
             metadata = metadata,
             items = listOf(InstagramMedia(PostMediaKind.VIDEO, null), InstagramMedia(PostMediaKind.PHOTO, null), InstagramMedia(PostMediaKind.VIDEO, null)),
         ),

@@ -10,6 +10,7 @@ import com.nkudrin713.kradnik.telegram.DownloadJobCallback
 import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.pengrad.telegrambot.model.CallbackQuery
@@ -37,7 +38,7 @@ class PlaylistRetryHandlerTest {
         every { preferences.resolveLanguage(10) } returns BotLanguage.RU
         every { jobs.retrySource(1, 10, 20) } returns source
         every { starter.retryPlaylist(source, 10, 100, PlaylistDeliveryMode.ZIP) } throws PlatformDisabledException(DownloadPlatform.YOUTUBE)
-        every { sender.answerCallback("callback", "⚠️ Скачивание из YouTube временно отключено. Попробуйте позже.", true) } just runs
+        every { sender.answerCallback("callback", telegramMessages().text(BotLanguage.RU, TelegramMessage.ERROR_PLATFORM_DISABLED, "YouTube"), true) } just runs
 
         assertTrue(handler.handle(callback(DownloadJobAction.RETRY_ZIP), 100))
     }
@@ -59,7 +60,7 @@ class PlaylistRetryHandlerTest {
     fun rejectsRetryForWrongUser() {
         every { preferences.resolveLanguage(10) } returns BotLanguage.RU
         every { jobs.retrySource(1, 10, 20) } returns null
-        every { sender.answerCallback("callback", "Для этой задачи нет дорожек, которые можно повторить", true) } just runs
+        every { sender.answerCallback("callback", telegramMessages().text(BotLanguage.RU, TelegramMessage.RETRY_UNAVAILABLE), true) } just runs
 
         assertTrue(handler.handle(callback(DownloadJobAction.RETRY_AUDIO), 100))
 

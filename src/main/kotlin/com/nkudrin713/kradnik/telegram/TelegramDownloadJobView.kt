@@ -59,7 +59,6 @@ class TelegramDownloadJobView(private val messages: TelegramMessages) {
 enum class DownloadJobAction(val value: String) {
     CANCEL("cancel"),
     BACK("back"),
-    REFRESH_QUEUE("queue"),
     RETRY_AUDIO("retry_audio"),
     RETRY_ZIP("retry_zip"),
 }

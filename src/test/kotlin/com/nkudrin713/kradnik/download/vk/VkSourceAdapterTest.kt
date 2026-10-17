@@ -80,6 +80,44 @@ class VkSourceAdapterTest {
     }
 
     @Test
+    fun convertsVkLinksToFullUrlsAndPreservesDescriptiveLabels() = runTest {
+        val url = "https://disk.yandex.ru/d/3S2lzjyhiRmT7Q"
+        val examples = mapOf(
+            "👉[#alias|disk.yandex.ru/d/3S2lzjyh...|$url]" to "👉$url",
+            "[#alias|https://disk.yandex.ru/d/3S2lzjyh…|$url]" to url,
+            "[#alias|$url|$url]" to url,
+            "[#alias|disk.yandex.ru/d/3S2lzjyhiRmT7Q|$url]" to url,
+            "[#alias||$url]" to url,
+            "[#alias|Скачать фотографии|$url]" to "Скачать фотографии: $url",
+            "[$url|Скачать фотографии]" to "Скачать фотографии: $url",
+            "[$url|disk.yandex.ru/d/3S2lzjyh...]" to url,
+            "[#alias|disk|$url]" to "disk: $url",
+            "[#alias|Другой адрес...|$url]" to "Другой адрес...: $url",
+        )
+        for ((text, expected) in examples) {
+            coEvery { client.fetch(any()) } returns mapper.createObjectNode().put("text", text)
+            assertEquals(expected, (adapter.prepare(source, true) as VkPreparedSource).post.text, text)
+        }
+    }
+
+    @Test
+    fun convertsMultipleLinksAlongsideHtmlAndPlainUrls() = runTest {
+        val text = "<b>Фотографии</b><br>[#alias|Альбом|https://example.org/photos?a=1&amp;b=2]\n[https://example.org/video|Видео]\nhttps://example.org/plain"
+        coEvery { client.fetch(any()) } returns mapper.createObjectNode().put("text", text)
+        assertEquals(
+            "Фотографии\nАльбом: https://example.org/photos?a=1&b=2\nВидео: https://example.org/video\nhttps://example.org/plain",
+            (adapter.prepare(source, true) as VkPreparedSource).post.text,
+        )
+    }
+
+    @Test
+    fun preservesUnrecognizedAndMalformedLinkMarkup() = runTest {
+        val text = "[id123|Автор] [#unknown|Подпись|https://example.org] [#alias|Нет адреса] [#alias|Адрес|https://] [#alias|Адрес|https://example.org|лишнее] [#alias|Файл|ftp://example.org/file]"
+        coEvery { client.fetch(any()) } returns mapper.createObjectNode().put("text", text)
+        assertEquals(text, (adapter.prepare(source, true) as VkPreparedSource).post.text)
+    }
+
+    @Test
     fun includesRepostedTextAndMediaWithoutFollowingLinks() = runTest {
         coEvery { client.fetch(any()) } returns mapper.readTree("""{"text":"Comment","attachments":[{"type":"link","link":{"url":"https://example.org"}}],"copy_history":[{"text":"Original<br>post","attachments":[$photo,$video]}]}""")
         val prepared = adapter.prepare(source, false) as VkPreparedSource

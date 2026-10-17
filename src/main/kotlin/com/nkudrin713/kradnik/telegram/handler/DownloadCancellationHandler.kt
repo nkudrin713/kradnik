@@ -98,19 +98,6 @@ class DownloadCancellationHandler(
                 }
             }
 
-            DownloadJobAction.REFRESH_QUEUE -> {
-                val queued = cancellationService.queuedPosition(callback.jobId, callbackQuery.from().id(), address)
-                if (queued == null) {
-                    telegramSender.answerCallback(callbackQuery.id(), messages.text(language, TelegramMessage.QUEUE_NOT_WAITING))
-                } else {
-                    val (job, position) = queued
-                    telegramSender.answerCallback(callbackQuery.id())
-                    telegramSender.editQueuedJob(address, callback.jobId, job.language, job.workloadType, position) {
-                        cancellationService.queuedPosition(callback.jobId, callbackQuery.from().id(), address) != null
-                    }
-                }
-            }
-
             DownloadJobAction.RETRY_AUDIO, DownloadJobAction.RETRY_ZIP -> return false
         }
         return true

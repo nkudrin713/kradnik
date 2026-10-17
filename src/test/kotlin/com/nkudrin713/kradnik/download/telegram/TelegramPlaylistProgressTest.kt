@@ -165,7 +165,7 @@ class TelegramPlaylistProgressTest {
         verify(exactly = 1) {
             sender.editPlaylistReport(
                 TelegramMessageAddress.Chat(10, 20),
-                match { it.contains("No recordings") && it.contains("1. <a") },
+                match { it.contains(messages.text(job.language, TelegramMessage.PLAYLIST_ALL_FAILED)) && it.contains("1. <a") },
                 1,
                 job.language,
                 1,

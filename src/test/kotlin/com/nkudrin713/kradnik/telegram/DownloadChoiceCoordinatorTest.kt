@@ -75,7 +75,7 @@ class DownloadChoiceCoordinatorTest {
                 TelegramMessageAddress.Chat(2, 5),
             )
 
-            verify { sender.editFailure(TelegramMessageAddress.Chat(2, 5), "⚠️ Скачивание из VK временно отключено. Попробуйте позже.", any(), BotLanguage.RU, null) }
+            verify { sender.editFailure(TelegramMessageAddress.Chat(2, 5), telegramMessages().text(BotLanguage.RU, TelegramMessage.ERROR_PLATFORM_DISABLED, "VK"), any(), BotLanguage.RU, null) }
             verify(exactly = 0) { sessions.create(any()) }
             assertEquals(0L, runtime.snapshot().errors.first().counts["METADATA"])
         } finally {

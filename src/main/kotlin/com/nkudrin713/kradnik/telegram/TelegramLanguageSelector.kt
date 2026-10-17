@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.telegram.config.TelegramCommandsInitializer
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramMessages
@@ -16,6 +17,7 @@ class TelegramLanguageSelector(
     private val preferenceService: TelegramUserPreferenceService,
     private val messages: TelegramMessages,
     private val telegramSender: TelegramSender,
+    private val commands: TelegramCommandsInitializer,
 ) {
     fun show(chatId: Long) {
         telegramSender.sendMessage(
@@ -29,7 +31,9 @@ class TelegramLanguageSelector(
 
     fun handle(callbackQuery: CallbackQuery): Boolean {
         val language = parseLanguageCallback(callbackQuery.data()) ?: return false
-        preferenceService.selectLanguage(callbackQuery.from().id(), language)
+        val userId = callbackQuery.from().id()
+        preferenceService.selectLanguage(userId, language)
+        commands.setChatLanguage(userId, language)
         telegramSender.answerCallback(
             callbackQueryId = callbackQuery.id(),
             text = messages.text(language, TelegramMessage.LANGUAGE_NAME),

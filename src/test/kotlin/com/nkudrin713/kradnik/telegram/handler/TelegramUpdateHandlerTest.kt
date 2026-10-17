@@ -7,6 +7,7 @@ import com.nkudrin713.kradnik.telegram.TelegramLanguageSelector
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.UserActivity
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.pengrad.telegrambot.model.CallbackQuery
@@ -67,7 +68,7 @@ class TelegramUpdateHandlerTest {
         handler().handle(textUpdate("unknown"))
 
         verify { telegramSender.sendMessage(100, "🔗 Пришли ссылку на медиа") }
-        verify { telegramSender.sendMessage(100, match { it.startsWith("🧭 Что умеет бот:") }) }
+        verify { telegramSender.sendMessage(100, telegramMessages().text(BotLanguage.RU, TelegramMessage.HELP)) }
         verify { telegramSender.sendMessage(100, match { it.startsWith("Дисклеймер:") }) }
         verify { telegramSender.sendMessage(100, "🔗 Нужна ссылка") }
         verify(exactly = 4) { userActivity.record(300) }

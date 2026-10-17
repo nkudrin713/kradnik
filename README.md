@@ -13,7 +13,13 @@ A Telegram bot for saving public videos, photos, and posts from social networks.
 
 Use the bot in a private chat or inline in other chats with `@your_bot <link>`. Full posts and playlists require a private chat. The interface supports English and Russian, including an informal Russian mode.
 
+Selecting a language with `/language` also updates command descriptions in the private chat's Menu, independently of the Telegram interface language.
+
+Queue positions update automatically and appear on one line. Download errors briefly explain the problem and suggest what to do next.
+
 Only public content available without signing in is supported.
+
+VK post links are converted to plain text with their full URLs. Descriptive link labels are retained; repeated or shortened URL labels are omitted. Unrecognized markup is preserved.
 
 ## Download architecture
 

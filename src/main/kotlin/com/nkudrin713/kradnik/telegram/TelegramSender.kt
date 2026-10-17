@@ -136,7 +136,7 @@ class TelegramSender(
                 DownloadWorkloadType.SINGLE -> TelegramMessage.STATUS_QUEUE_POSITION_SINGLE
                 DownloadWorkloadType.PLAYLIST_AUDIO -> TelegramMessage.STATUS_QUEUE_POSITION_PLAYLIST
             }
-            val text = messages.text(language, TelegramMessage.STATUS_QUEUED) + "\n" + messages.text(language, positionMessage, position)
+            val text = messages.text(language, positionMessage, position)
             try {
                 editText(address, text, downloadJobView.queueKeyboard(jobId, language))
             } catch (error: TelegramSendException) {

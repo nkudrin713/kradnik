@@ -17,6 +17,7 @@ import com.pengrad.telegrambot.model.CallbackQuery
 import com.pengrad.telegrambot.model.Chat
 import com.pengrad.telegrambot.model.User
 import com.pengrad.telegrambot.model.message.MaybeInaccessibleMessage
+import io.mockk.Called
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -89,17 +90,13 @@ class DownloadCancellationHandlerTest {
     }
 
     @Test
-    fun refreshesQueuePositionForOwner() {
-        val job = job()
-        val address = TelegramMessageAddress.Chat(20, 30)
-        every { preferences.resolveLanguage(10) } returns BotLanguage.RU
-        every { cancellations.queuedPosition(1, 10, address) } returns (job to 3L)
-        every { sender.answerCallback("callback", null, false) } just runs
-        every { sender.editQueuedJob(address, 1, BotLanguage.RU, job.workloadType, 3L, any()) } just runs
+    fun ignoresRemovedQueueRefreshCallback() {
+        val query = callback(DownloadJobAction.CANCEL, "job:queue:1")
 
-        assertTrue(handler.handle(callback(DownloadJobAction.REFRESH_QUEUE), 100))
+        assertFalse(handler.handle(query, 100))
 
-        verify { sender.editQueuedJob(address, 1, BotLanguage.RU, job.workloadType, 3L, any()) }
+        verify { cancellations wasNot Called }
+        verify { sender wasNot Called }
     }
 
     private fun callback(action: DownloadJobAction, data: String = DownloadJobCallback.encode(action, 1)): CallbackQuery {

@@ -18,6 +18,7 @@ import com.nkudrin713.kradnik.telegram.TelegramDownloadStarter
 import com.nkudrin713.kradnik.telegram.TelegramMessageAddress
 import com.nkudrin713.kradnik.telegram.TelegramSender
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
+import com.nkudrin713.kradnik.telegram.localization.TelegramMessage
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.pengrad.telegrambot.model.CallbackQuery
@@ -55,7 +56,7 @@ class DownloadChoiceHandlerTest {
         every { sessionService.select(any()) } returns readySelection()
         every { starter.start(any(), any(), any(), any(), any(), any(), any()) } throws PlatformDisabledException(DownloadPlatform.YOUTUBE)
         every { sessionService.release(token) } just runs
-        every { telegramSender.answerCallback("callback-id", "⚠️ Скачивание из YouTube временно отключено. Попробуйте позже.", true) } just runs
+        every { telegramSender.answerCallback("callback-id", telegramMessages().text(BotLanguage.RU, TelegramMessage.ERROR_PLATFORM_DISABLED, "YouTube"), true) } just runs
 
         handler.handle(callbackQuery(userId = 300), 1000)
 
@@ -191,7 +192,7 @@ class DownloadChoiceHandlerTest {
         every {
             telegramSender.answerCallback(
                 "callback-id",
-                "💬 Все изображения можно скачать только в личном чате с ботом",
+                telegramMessages().text(BotLanguage.RU, TelegramMessage.ERROR_IMAGES_DIRECT_CHAT_ONLY),
                 true,
             )
         } just runs
@@ -228,7 +229,7 @@ class DownloadChoiceHandlerTest {
         every {
             telegramSender.answerCallback(
                 "callback-id",
-                "💬 Пост целиком можно скачать только в личном чате с ботом",
+                telegramMessages().text(BotLanguage.RU, TelegramMessage.ERROR_POST_DIRECT_CHAT_ONLY),
                 true,
             )
         } just runs

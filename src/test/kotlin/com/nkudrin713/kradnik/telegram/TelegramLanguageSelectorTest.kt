@@ -1,5 +1,6 @@
 package com.nkudrin713.kradnik.telegram
 
+import com.nkudrin713.kradnik.telegram.config.TelegramCommandsInitializer
 import com.nkudrin713.kradnik.telegram.localization.BotLanguage
 import com.nkudrin713.kradnik.telegram.localization.TelegramUserPreferenceService
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
@@ -22,10 +23,12 @@ import kotlin.test.assertTrue
 class TelegramLanguageSelectorTest {
     private val preferenceService: TelegramUserPreferenceService = mockk()
     private val telegramSender: TelegramSender = mockk()
+    private val commands: TelegramCommandsInitializer = mockk(relaxUnitFun = true)
     private val selector = TelegramLanguageSelector(
         preferenceService = preferenceService,
         messages = telegramMessages(),
         telegramSender = telegramSender,
+        commands = commands,
     )
 
     @Test
@@ -56,6 +59,7 @@ class TelegramLanguageSelectorTest {
         assertTrue(selector.handle(callbackQuery("lang:ru-informal")))
 
         verify { preferenceService.selectLanguage(300, BotLanguage.RU_INFORMAL) }
+        verify { commands.setChatLanguage(300, BotLanguage.RU_INFORMAL) }
         verify { telegramSender.editMessage(100, 500, "✅ Наш человек. Кидай ссылку", any()) }
     }
 
@@ -69,6 +73,7 @@ class TelegramLanguageSelectorTest {
         assertTrue(selector.handle(callbackQuery))
 
         verify { preferenceService.selectLanguage(300, BotLanguage.RU) }
+        verify { commands.setChatLanguage(300, BotLanguage.RU) }
         verify { telegramSender.editMessage(100, 500, "✅ Выбран русский язык. Пришли ссылку на медиа.", any()) }
     }
 
@@ -77,6 +82,7 @@ class TelegramLanguageSelectorTest {
         assertFalse(selector.handle(callbackQuery("dl:token:option")))
 
         verify(exactly = 0) { preferenceService.selectLanguage(any(), any()) }
+        verify(exactly = 0) { commands.setChatLanguage(any(), any()) }
     }
 
     private fun callbackQuery(data: String): CallbackQuery {

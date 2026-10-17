@@ -154,9 +154,29 @@ class VkSourceAdapter(private val posts: VkPostClient, private val media: HttpMe
         for (original in item.path("copy_history")) collect(original, items, texts, depth + 1)
     }
 
-    private fun plainText(value: String): String = HtmlUtils.htmlUnescape(value.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n").replace(Regex("<[^>]+>"), "")).trim()
+    private fun plainText(value: String): String {
+        val text = HtmlUtils.htmlUnescape(value.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n").replace(Regex("<[^>]+>"), ""))
+        return text.replace(ALIAS_LINK) { linkText(it.groupValues[1], it.groupValues[2]) ?: it.value }
+            .replace(EXTERNAL_LINK) { linkText(it.groupValues[2], it.groupValues[1]) ?: it.value }
+            .trim()
+    }
+
+    private fun linkText(label: String, url: String): String? {
+        if (runCatching { URI(url).host }.getOrNull().isNullOrBlank()) return null
+        val title = label.trim()
+        val address = title.removePrefix("https://").removePrefix("http://").removeSuffix("...").removeSuffix("…")
+        val target = url.substringAfter("://")
+        val shortened = title.endsWith("...") || title.endsWith("…")
+        val urlLabel = address == target || (shortened && address.isNotEmpty() && target.startsWith(address))
+        return if (title.isEmpty() || urlLabel) url else "$title: $url"
+    }
 
     private fun invalid(message: String): Nothing = throw DownloadFailure(DownloadFailureReason.METADATA_UNAVAILABLE, message)
+
+    private companion object {
+        val ALIAS_LINK = Regex("\\[#alias\\|([^|\\]\\r\\n]*)\\|(https?://[^\\s|\\[\\]]+)\\]")
+        val EXTERNAL_LINK = Regex("\\[(https?://[^\\s|\\[\\]]+)\\|([^|\\]\\r\\n]*)\\]")
+    }
 }
 
 data class VkPreparedSource(override val metadata: MediaMetadata, override val canonicalUrl: String, override val post: SourcePost) : PreparedPostSource {

@@ -7,6 +7,7 @@ import com.pengrad.telegrambot.TelegramBot
 import com.pengrad.telegrambot.model.BotCommand
 import com.pengrad.telegrambot.model.botcommandscope.BotCommandScope
 import com.pengrad.telegrambot.model.botcommandscope.BotCommandScopeAllPrivateChats
+import com.pengrad.telegrambot.model.botcommandscope.BotCommandsScopeChat
 import com.pengrad.telegrambot.request.DeleteMyCommands
 import com.pengrad.telegrambot.request.SetMyCommands
 import org.slf4j.LoggerFactory
@@ -39,8 +40,11 @@ class TelegramCommandsInitializer(
         }
     }
 
-    private fun setCommands(scope: BotCommandScope?, language: BotLanguage?) {
-        val commandLanguage = language ?: BotLanguage.EN
+    fun setChatLanguage(chatId: Long, language: BotLanguage) {
+        setCommands(BotCommandsScopeChat(chatId), language = null, commandLanguage = language)
+    }
+
+    private fun setCommands(scope: BotCommandScope?, language: BotLanguage?, commandLanguage: BotLanguage = language ?: BotLanguage.EN) {
         val request = SetMyCommands(*commands(commandLanguage))
             .withScope(scope)
             .withLanguage(language)

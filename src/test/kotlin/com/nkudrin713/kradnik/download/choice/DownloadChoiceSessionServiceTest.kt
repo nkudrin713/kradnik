@@ -10,6 +10,8 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -118,6 +120,100 @@ class DownloadChoiceSessionServiceTest {
         assertIs<DownloadChoiceCancellation.Cancelled>(actual)
         assertEquals(now, session.selectedAt)
         assertEquals(now.plus(Duration.ofMinutes(30)), session.cleanupAfter)
+    }
+
+    @ParameterizedTest
+    @EnumSource(SessionAccessCase::class)
+    fun selectionAndCancellationRejectTheSameInvalidSessions(case: SessionAccessCase) {
+        val session = session()
+        var command = selectCommand(session.token)
+        when (case) {
+            SessionAccessCase.MISSING -> Unit
+
+            SessionAccessCase.FOREIGN -> session.telegramUserId = 301
+
+            SessionAccessCase.WRONG_CHAT -> command = command.copy(telegramChatId = 101)
+
+            SessionAccessCase.WRONG_MESSAGE -> command = command.copy(telegramMenuMessageId = 501)
+
+            SessionAccessCase.WRONG_INLINE -> {
+                session.telegramInlineMessageId = "original"
+                command = command.copy(telegramInlineMessageId = "other")
+            }
+
+            SessionAccessCase.INLINE_AS_CHAT -> session.telegramInlineMessageId = "original"
+
+            SessionAccessCase.SELECTED -> session.selectedAt = now
+
+            SessionAccessCase.EXPIRED -> session.createdAt = now.minus(Duration.ofDays(30))
+
+            SessionAccessCase.MISSING_CREATION_DATE -> session.createdAt = null
+
+            SessionAccessCase.FOREIGN_AND_SELECTED -> {
+                session.telegramUserId = 301
+                session.selectedAt = now
+            }
+
+            SessionAccessCase.WRONG_MESSAGE_AND_SELECTED -> {
+                command = command.copy(telegramMenuMessageId = 501)
+                session.selectedAt = now
+            }
+
+            SessionAccessCase.SELECTED_AND_EXPIRED -> {
+                session.selectedAt = now
+                session.createdAt = now.minus(Duration.ofDays(30))
+            }
+        }
+        every { repository.findForUpdate(session.token) } returns session.takeUnless { case == SessionAccessCase.MISSING }
+        val selectedAt = session.selectedAt
+        val cleanupAfter = session.cleanupAfter
+        val selection = service.select(command)
+        val cancellation = service.cancel(CancelDownloadChoiceCommand(command.token, command.telegramUserId, command.telegramChatId, command.telegramMenuMessageId, command.telegramInlineMessageId))
+        when (case) {
+            SessionAccessCase.FOREIGN, SessionAccessCase.FOREIGN_AND_SELECTED -> {
+                assertEquals(DownloadChoiceSelection.NotOwner, selection)
+                assertEquals(DownloadChoiceCancellation.NotOwner, cancellation)
+            }
+
+            SessionAccessCase.SELECTED, SessionAccessCase.SELECTED_AND_EXPIRED -> {
+                assertEquals(DownloadChoiceSelection.AlreadySelected, selection)
+                assertEquals(DownloadChoiceCancellation.AlreadySelected, cancellation)
+            }
+
+            else -> {
+                assertEquals(DownloadChoiceSelection.Invalid, selection)
+                assertEquals(DownloadChoiceCancellation.Invalid, cancellation)
+            }
+        }
+        assertEquals(selectedAt, session.selectedAt)
+        assertEquals(cleanupAfter, session.cleanupAfter)
+    }
+
+    @Test
+    fun cancelsInlineSessionAtItsOriginalMessageAndConsumesItOnce() {
+        val session = session().apply { telegramInlineMessageId = "original" }
+        every { repository.findForUpdate(session.token) } returns session
+        val command = CancelDownloadChoiceCommand(session.token, 300, null, null, "original")
+
+        assertIs<DownloadChoiceCancellation.Cancelled>(service.cancel(command))
+        assertEquals(now, session.selectedAt)
+        assertEquals(now.plus(Duration.ofMinutes(30)), session.cleanupAfter)
+        assertEquals(DownloadChoiceCancellation.AlreadySelected, service.cancel(command))
+    }
+
+    enum class SessionAccessCase {
+        MISSING,
+        FOREIGN,
+        WRONG_CHAT,
+        WRONG_MESSAGE,
+        WRONG_INLINE,
+        INLINE_AS_CHAT,
+        SELECTED,
+        EXPIRED,
+        MISSING_CREATION_DATE,
+        FOREIGN_AND_SELECTED,
+        WRONG_MESSAGE_AND_SELECTED,
+        SELECTED_AND_EXPIRED,
     }
 
     @Test

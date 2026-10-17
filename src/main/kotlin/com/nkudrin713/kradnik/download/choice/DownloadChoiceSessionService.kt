@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -81,30 +82,15 @@ class DownloadChoiceSessionService(
             ?: return DownloadChoiceSelection.Invalid
         val now = clock.instant()
 
-        if (session.telegramUserId != command.telegramUserId) {
-            return DownloadChoiceSelection.NotOwner
-        }
-        val sameMessage = if (command.telegramInlineMessageId != null) {
-            session.telegramInlineMessageId == command.telegramInlineMessageId
-        } else {
-            session.telegramInlineMessageId == null &&
-                session.telegramChatId == command.telegramChatId &&
-                session.telegramMenuMessageId == command.telegramMenuMessageId
-        }
-        if (!sameMessage) {
-            return DownloadChoiceSelection.Invalid
-        }
-        if (session.selectedAt != null) {
-            return DownloadChoiceSelection.AlreadySelected
-        }
-        val createdAt = session.createdAt ?: return DownloadChoiceSelection.Invalid
-        if (!createdAt.isAfter(now.minus(unselectedSessionMaxAge))) {
-            return DownloadChoiceSelection.Invalid
+        when (session.rejectionFor(command.telegramUserId, command.telegramChatId, command.telegramMenuMessageId, command.telegramInlineMessageId, now)) {
+            SessionRejection.NOT_OWNER -> return DownloadChoiceSelection.NotOwner
+            SessionRejection.INVALID -> return DownloadChoiceSelection.Invalid
+            SessionRejection.ALREADY_SELECTED -> return DownloadChoiceSelection.AlreadySelected
+            null -> Unit
         }
 
         if (command.optionKey == REPEAT_LAST_OPTION_KEY && session.retryUrl != null) {
-            session.selectedAt = now
-            session.cleanupAfter = now.plus(consumedSessionTtl)
+            session.consume(now)
             return DownloadChoiceSelection.Retry(session, requireNotNull(session.retryUrl))
         }
 
@@ -117,8 +103,7 @@ class DownloadChoiceSessionService(
             )
         }
 
-        session.selectedAt = now
-        session.cleanupAfter = now.plus(consumedSessionTtl)
+        session.consume(now)
         return DownloadChoiceSelection.Ready(
             session = session,
             option = option,
@@ -134,26 +119,35 @@ class DownloadChoiceSessionService(
         val session = repository.findForUpdate(command.token)
             ?: return DownloadChoiceCancellation.Invalid
         val now = clock.instant()
-        if (session.telegramUserId != command.telegramUserId) {
-            return DownloadChoiceCancellation.NotOwner
+        when (session.rejectionFor(command.telegramUserId, command.telegramChatId, command.telegramMenuMessageId, command.telegramInlineMessageId, now)) {
+            SessionRejection.NOT_OWNER -> return DownloadChoiceCancellation.NotOwner
+            SessionRejection.INVALID -> return DownloadChoiceCancellation.Invalid
+            SessionRejection.ALREADY_SELECTED -> return DownloadChoiceCancellation.AlreadySelected
+            null -> Unit
         }
-        val sameMessage = if (command.telegramInlineMessageId != null) {
-            session.telegramInlineMessageId == command.telegramInlineMessageId
-        } else {
-            session.telegramInlineMessageId == null &&
-                session.telegramChatId == command.telegramChatId &&
-                session.telegramMenuMessageId == command.telegramMenuMessageId
-        }
-        if (!sameMessage) return DownloadChoiceCancellation.Invalid
-        if (session.selectedAt != null) return DownloadChoiceCancellation.AlreadySelected
-        val createdAt = session.createdAt ?: return DownloadChoiceCancellation.Invalid
-        if (!createdAt.isAfter(now.minus(unselectedSessionMaxAge))) {
-            return DownloadChoiceCancellation.Invalid
-        }
-        session.selectedAt = now
-        session.cleanupAfter = now.plus(consumedSessionTtl)
+        session.consume(now)
         return DownloadChoiceCancellation.Cancelled(session.language)
     }
+
+    private fun DownloadChoiceSession.rejectionFor(userId: Long, chatId: Long?, messageId: Int?, inlineMessageId: String?, now: Instant): SessionRejection? {
+        if (telegramUserId != userId) return SessionRejection.NOT_OWNER
+        val sameMessage = if (inlineMessageId != null) {
+            telegramInlineMessageId == inlineMessageId
+        } else {
+            telegramInlineMessageId == null && telegramChatId == chatId && telegramMenuMessageId == messageId
+        }
+        if (!sameMessage) return SessionRejection.INVALID
+        if (selectedAt != null) return SessionRejection.ALREADY_SELECTED
+        if (createdAt?.isAfter(now.minus(unselectedSessionMaxAge)) != true) return SessionRejection.INVALID
+        return null
+    }
+
+    private fun DownloadChoiceSession.consume(now: Instant) {
+        selectedAt = now
+        cleanupAfter = now.plus(consumedSessionTtl)
+    }
+
+    private enum class SessionRejection { NOT_OWNER, INVALID, ALREADY_SELECTED }
 
     /**
      * Makes a selected option available after

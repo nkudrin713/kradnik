@@ -15,6 +15,24 @@ Use the bot in a private chat or inline in other chats with `@your_bot <link>`. 
 
 Only public content available without signing in is supported.
 
+## Download architecture
+
+Source adapters extract metadata and download media. `SourcePost` contains text, author, and ordered media references; it carries no menu policy. `PostChoicePlanner` decides which post actions the bot offers, while `StandardMediaChoicePlanner` and `MediaChoiceBuilder` build individual media options and apply quality and size rules. Shared handlers produce the files; job processing owns cache lookup, delivery, and cleanup.
+
+URL recognition, source settings, and download specifications live in the service packages: `download/youtube`, `download/instagram`, `download/vk`, and `download/threads`. `PlatformResolver` registers adapters through their common interface. Shared planning and media handlers use those contracts; yt-dlp command arguments are assembled outside the common workflows.
+
+| Source | Supported actions |
+| --- | --- |
+| YouTube video; VK video or clip | Video quality options, audio, cover |
+| YouTube playlist | Audio messages or ZIP; all tracks up to 100, otherwise the first or last 100 |
+| Instagram single video | Full post, video quality options, audio, cover |
+| Instagram photos or mixed carousel | Full post |
+| VK wall post, including text-only posts | Full post |
+| Threads single video | Video quality options |
+| Threads video collection | Ordered video album |
+
+Options depend on available metadata and upload limits. Audio requires a usable duration estimate; covers require a thumbnail. Posts and video albums retain up to 20 supported media items in source order, including duplicates. Full posts, video albums, and playlists require a private chat. Download selections are saved separately from temporary source preparation, so menu policy does not change an already saved selection.
+
 ## Stack
 
 Kotlin, Java 21, Spring Boot, PostgreSQL, yt-dlp, FFmpeg, and Docker Compose.

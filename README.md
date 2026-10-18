@@ -48,3 +48,5 @@ Kotlin, Java 21, Spring Boot, PostgreSQL, yt-dlp, FFmpeg, and Docker Compose.
 ## Self-hosting
 
 Run your own instance with a Telegram bot token. Deployment configuration is provided in [Docker Compose](docker-compose.yml) and the [environment example](.env.example).
+
+The responsive web dashboard opens with bot health and key activity metrics. Detailed worker, queue, memory, and GC diagnostics expand on demand; source switches and database backups are available in the system section.

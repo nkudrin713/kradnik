@@ -202,10 +202,10 @@ function renderUsers(data) {
     const newHeight = point.newUsers / max * 112;
     const old = document.createElementNS(ns, 'rect');
     old.setAttribute('x', x); old.setAttribute('y', 143 - activeHeight); old.setAttribute('width', 25);
-    old.setAttribute('height', Math.max(0, activeHeight - newHeight)); old.setAttribute('rx', 3); old.setAttribute('fill', '#546b83');
+    old.setAttribute('height', Math.max(0, activeHeight - newHeight)); old.setAttribute('rx', 3); old.setAttribute('fill', 'var(--returning)');
     const fresh = document.createElementNS(ns, 'rect');
     fresh.setAttribute('x', x); fresh.setAttribute('y', 143 - newHeight); fresh.setAttribute('width', 25);
-    fresh.setAttribute('height', newHeight); fresh.setAttribute('rx', 3); fresh.setAttribute('fill', '#8bc3ff');
+    fresh.setAttribute('height', newHeight); fresh.setAttribute('rx', 3); fresh.setAttribute('fill', 'var(--data)');
     svg.append(old, fresh);
     if ((i % 3 === 0 && i < points.length - 2) || i === points.length - 1) label(new Date(`${point.day}T00:00:00Z`).toLocaleDateString('ru-RU', {day: 'numeric', month: 'short', timeZone: 'UTC'}), x + 12, 169, 'middle');
   });
@@ -231,7 +231,7 @@ function renderJobTrend(data) {
   points.forEach((point, i) => {
     const x = 40 + i * 46;
     let y = 143;
-    for (const [field, color] of [['completed', '#75d9b3'], ['failed', '#f39ba2'], ['cancelled', '#8292a3']]) {
+    for (const [field, color] of [['completed', 'var(--success)'], ['failed', 'var(--danger)'], ['cancelled', 'var(--inactive)']]) {
       const height = point[field] / max * 112;
       y -= height;
       const bar = document.createElementNS(ns, 'rect');
@@ -312,7 +312,13 @@ function renderOutcomes() {
   });
 }
 function chart(points) {
-  if (!points.length) return;
+  if (!points.length) {
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('x', '12'); label.setAttribute('y', '70');
+    label.textContent = 'История недоступна';
+    $('chart').replaceChildren(label); delete $('chart').dataset.last;
+    return;
+  }
   const key = points[points.length - 1].at;
   if ($('chart').dataset.last === key) return;
   $('chart').dataset.last = key;
@@ -323,7 +329,7 @@ function chart(points) {
   ['queued', 'processing'].forEach((field, i) => {
     const line = document.createElementNS(ns, 'polyline');
     line.setAttribute('points', points.map(p => `${35 + (Date.parse(p.at) - start) / span * 555},${120 - p[field] / max * 100}`).join(' '));
-    line.setAttribute('fill', 'none'); line.setAttribute('stroke', i ? '#79bbff' : '#8196ac'); line.setAttribute('stroke-width', '2');
+    line.setAttribute('fill', 'none'); line.setAttribute('stroke', i ? 'var(--data)' : 'var(--inactive)'); line.setAttribute('stroke-width', '2');
     line.setAttribute('stroke-linecap', 'round'); line.setAttribute('stroke-linejoin', 'round');
     $('chart').append(line);
   });
@@ -440,12 +446,12 @@ function memoryChart(id, points, used) {
     last = [x, y];
   });
   const line = document.createElementNS(ns, 'path'); line.setAttribute('d', path);
-  line.setAttribute('fill', 'none'); line.setAttribute('stroke', '#79bbff'); line.setAttribute('stroke-width', '2');
+  line.setAttribute('fill', 'none'); line.setAttribute('stroke', 'var(--data)'); line.setAttribute('stroke-width', '2');
   line.setAttribute('stroke-linecap', 'round'); line.setAttribute('stroke-linejoin', 'round');
   svg.append(line);
   if (last) {
     const dot = document.createElementNS(ns, 'circle');
-    dot.setAttribute('cx', last[0]); dot.setAttribute('cy', last[1]); dot.setAttribute('r', '3'); dot.setAttribute('fill', '#79bbff'); svg.append(dot);
+    dot.setAttribute('cx', last[0]); dot.setAttribute('cy', last[1]); dot.setAttribute('r', '3'); dot.setAttribute('fill', 'var(--data)'); svg.append(dot);
   }
   label((max / 1024 ** 2).toFixed(0), 0, 24); label('0', 0, 124);
   label('1 ч назад', 60, 138); label('сейчас', 546, 138);

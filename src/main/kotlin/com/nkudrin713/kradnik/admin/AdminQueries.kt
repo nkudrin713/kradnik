@@ -23,6 +23,14 @@ class AdminQueries(private val jdbc: JdbcTemplate) {
         JobDay(rs.getObject("day", LocalDate::class.java), rs.getLong("completed"), rs.getLong("failed"), rs.getLong("cancelled"))
     }
 
+    fun allTimeJobTrend(): List<JobDay> = jdbc.query(ALL_TIME_JOB_TREND_SQL) { rs, _ ->
+        JobDay(rs.getObject("day", LocalDate::class.java), rs.getLong("completed"), rs.getLong("failed"), rs.getLong("cancelled"))
+    }
+
+    fun allTimeUserTrend(): List<UserDay> = jdbc.query(ALL_TIME_USER_TREND_SQL) { rs, _ ->
+        UserDay(rs.getObject("day", LocalDate::class.java), rs.getLong("active"), rs.getLong("new_users"))
+    }
+
     fun users(): UserSummary = requireNotNull(
         jdbc.queryForObject(USERS_SQL) { rs, _ ->
             UserSummary(
@@ -86,6 +94,48 @@ class AdminQueries(private val jdbc: JdbcTemplate) {
                coalesce(outcomes.cancelled, 0) AS cancelled
         FROM days LEFT JOIN outcomes USING (day)
         ORDER BY days.day
+        """.trimIndent()
+        val ALL_TIME_JOB_TREND_SQL = """
+        WITH outcomes AS (
+            SELECT date_trunc('month', completed_at AT TIME ZONE 'UTC')::date AS day,
+                   count(*) FILTER (WHERE status = 'completed') AS completed,
+                   count(*) FILTER (WHERE status = 'failed') AS failed,
+                   count(*) FILTER (WHERE status = 'cancelled_by_user') AS cancelled
+            FROM download_jobs
+            WHERE completed_at IS NOT NULL AND status IN ('completed', 'failed', 'cancelled_by_user')
+            GROUP BY day
+        ), months AS (
+            SELECT generate_series(
+                coalesce((SELECT min(day) FROM outcomes), date_trunc('month', now() AT TIME ZONE 'UTC')::date),
+                date_trunc('month', now() AT TIME ZONE 'UTC')::date,
+                interval '1 month'
+            )::date AS day
+        )
+        SELECT months.day, coalesce(outcomes.completed, 0) AS completed,
+               coalesce(outcomes.failed, 0) AS failed, coalesce(outcomes.cancelled, 0) AS cancelled
+        FROM months LEFT JOIN outcomes USING (day)
+        ORDER BY months.day
+        """.trimIndent()
+        val ALL_TIME_USER_TREND_SQL = """
+        WITH active AS (
+            SELECT date_trunc('month', day)::date AS day, count(DISTINCT telegram_user_id) AS users
+            FROM user_activity_days
+            GROUP BY date_trunc('month', day)::date
+        ), first_days AS (
+            SELECT min(day) AS day FROM user_activity_days GROUP BY telegram_user_id
+        ), newcomers AS (
+            SELECT date_trunc('month', day)::date AS day, count(*) AS users
+            FROM first_days GROUP BY date_trunc('month', day)::date
+        ), months AS (
+            SELECT generate_series(
+                coalesce((SELECT min(day) FROM active), date_trunc('month', now() AT TIME ZONE 'UTC')::date),
+                date_trunc('month', now() AT TIME ZONE 'UTC')::date,
+                interval '1 month'
+            )::date AS day
+        )
+        SELECT months.day, coalesce(active.users, 0) AS active, coalesce(newcomers.users, 0) AS new_users
+        FROM months LEFT JOIN active USING (day) LEFT JOIN newcomers USING (day)
+        ORDER BY months.day
         """.trimIndent()
         val USERS_SQL = """
         WITH users AS (

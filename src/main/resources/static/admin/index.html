@@ -10,80 +10,65 @@
 <body>
   <a class="skip-link" href="#main">К содержимому</a>
   <header class="site-header">
-    <div class="brand"><span class="brand-mark"><img src="/login/kradnik.jpg" alt="" width="42" height="42"></span><h1>Kradnik</h1></div>
-    <nav class="section-nav" aria-label="Разделы админки"><a href="#overview">Обзор</a><a href="#statistics">Статистика</a><a href="#system">Система</a></nav>
+    <div class="brand"><span class="brand-mark"><img src="/login/kradnik.jpg" alt="" width="38" height="38"></span><h1>Kradnik</h1></div>
+    <div class="health" aria-live="polite"><div class="health-line"><span class="health-symbol" aria-hidden="true"></span><p id="health-title">Проверяю состояние…</p><span id="connection" role="status">Подключение…</span></div><p id="health-details"></p></div>
     <div class="header-actions"><span id="version">Версия —</span><form id="logout" action="/logout" method="post"><button disabled>Выйти</button></form></div>
   </header>
   <main id="main">
-    <section class="dashboard-section overview-section" id="overview" aria-labelledby="overview-title">
-      <div class="section-heading"><div><p class="eyebrow">Пульт управления</p><h2 id="overview-title">Обзор</h2></div><span class="section-period" id="updated">Ожидание данных</span></div>
-      <div class="overview-layout">
-        <div class="health" aria-live="polite">
-          <div class="health-heading"><span class="health-symbol" aria-hidden="true"></span><span class="eyebrow">Состояние бота</span></div>
-          <div class="health-message"><h3 id="health-title">Проверяю состояние бота…</h3><p id="health-details"></p></div>
-          <div class="health-footer"><span id="connection" role="status">Подключение…</span><a href="#system">К системе <span aria-hidden="true">↗</span></a></div>
-        </div>
-        <div class="overview-grid" aria-label="Ключевые показатели">
-          <article class="overview-card overview-card-primary"><h3>Активны сегодня</h3><strong id="users-today">—</strong><span id="overview-users-status" class="overview-status" role="status"></span></article>
-          <article class="overview-card overview-card-primary"><h3>Завершено за 24 часа</h3><strong id="stat-completed">—</strong><span id="overview-completed-status" class="overview-status" role="status"></span></article>
-          <article class="overview-card"><h3>Успешность за 24 часа</h3><strong id="stat-success-rate">—</strong><span id="overview-success-status" class="overview-status" role="status"></span></article>
-          <article class="overview-card"><h3>В очереди сейчас</h3><strong id="overview-queued">—</strong><span id="overview-queue-status" class="overview-status" role="status"></span></article>
-        </div>
+    <section class="overview-section" id="overview" aria-label="Ключевые показатели">
+      <div class="overview-grid">
+        <article class="overview-card overview-card-primary"><h2>Активны сегодня</h2><strong id="users-today">—</strong><span id="overview-users-status" class="overview-status" role="status"></span></article>
+        <article class="overview-card overview-card-primary"><h2>Завершено · 24 ч</h2><strong id="stat-completed">—</strong><span id="overview-completed-status" class="overview-status" role="status"></span></article>
+        <article class="overview-card"><h2>Успешность задач · 24 ч</h2><strong id="stat-success-rate">—</strong><span id="overview-success-status" class="overview-status" role="status"></span></article>
+        <article class="overview-card"><h2>Очередь / в работе</h2><div class="metric-pair"><strong id="overview-queued">—</strong><span>/</span><strong id="processing">—</strong></div><span id="overview-queue-status" class="overview-status" role="status"></span></article>
       </div>
     </section>
-    <section class="dashboard-section" id="statistics" aria-labelledby="statistics-title">
-      <div class="section-heading"><h2 id="statistics-title">Статистика</h2><span id="statistics-status" class="muted" role="status"></span></div>
-      <div class="trend-grid">
-        <section class="panel user-trend-panel"><div class="panel-heading"><h3>Пользователи за 14 дней</h3><span class="inline-legend"><i class="legend-dot new-user"></i> Новые <i class="legend-dot returning"></i> Вернувшиеся</span></div><svg id="users-chart" viewBox="0 0 700 180" role="img" aria-label="Активные пользователи по дням"><text x="12" y="90">Ожидание данных</text></svg></section>
-        <section class="panel job-trend-panel"><div class="panel-heading"><h3>Задачи за 14 дней</h3><span class="inline-legend"><i class="legend-dot completed"></i> Завершено <i class="legend-dot failed"></i> Неуспешно <i class="legend-dot cancelled"></i> Отменено</span></div><p id="job-trend-status" class="muted" role="status"></p><svg id="jobs-chart" viewBox="0 0 700 180" role="img" aria-label="Результаты задач по дням"><text x="12" y="90">Ожидание данных</text></svg></section>
-      </div>
-      <section class="users-section panel" aria-labelledby="users-title">
-        <div class="panel-heading"><h3 id="users-title">Пользователи</h3><span id="users-status" class="muted" role="status"></span></div>
-        <div class="user-summary">
-          <div><span>Всего пользователей</span><strong id="users-total">—</strong></div>
-          <div><span>Активны за 7 дней</span><strong id="users-week">—</strong></div>
-          <div><span>Активны за 30 дней</span><strong id="users-month">—</strong></div>
+    <div class="dashboard-layout">
+      <section class="analytics" id="statistics" aria-labelledby="statistics-title">
+        <div class="section-heading"><h2 id="statistics-title">Статистика</h2><div class="chart-controls"><span class="muted" id="trend-unit">По дням · UTC</span><span class="select-control"><select id="trend-range" aria-label="Период графиков"><option value="14" selected>14 дней</option><option value="all">Всё время</option></select></span></div></div>
+        <p id="statistics-status" class="muted" role="status"></p>
+        <div class="trend-grid">
+          <section class="panel job-trend-panel"><div class="panel-heading"><h3>Задачи</h3><span class="inline-legend"><i class="legend-dot completed"></i> Завершено <i class="legend-dot failed"></i> Неуспешно <i class="legend-dot cancelled"></i> Отменено</span></div><p id="job-trend-status" class="muted" role="status"></p><svg id="jobs-chart" viewBox="0 0 700 180" role="img" aria-label="Результаты задач по дням"><text x="12" y="90">Ожидание данных</text></svg></section>
+          <section class="panel user-trend-panel"><div class="panel-heading"><h3>Пользователи</h3><span class="inline-legend"><i class="legend-dot new-user"></i> Новые <i class="legend-dot returning"></i> Вернувшиеся</span></div><p id="user-trend-status" class="muted" role="status"></p><svg id="users-chart" viewBox="0 0 700 180" role="img" aria-label="Активные пользователи по дням"><text x="12" y="90">Ожидание данных</text></svg></section>
         </div>
-        <section class="user-facts-panel" aria-label="Изменение аудитории"><div class="user-facts"><div><span>Новые сегодня</span><strong id="users-new-today">—</strong></div><div><span>Вернулись сегодня</span><strong id="users-returning">—</strong></div><div><span>Новые за 7 дней</span><strong id="users-new-week">—</strong></div></div><p id="users-range" class="muted"></p></section>
-        <details class="data-notes"><summary>Об учёте пользователей</summary><p class="muted">Сутки считаются по UTC. История до внедрения учёта восстановлена по задачам; пользователи, которые только писали команды, в ней отсутствуют.</p></details>
-      </section>
-      <div class="section-heading"><h3>Задачи</h3></div>
-      <section class="panel all-time-panel"><div class="panel-heading"><h3>Результаты за всё время</h3><span id="all-time-status" class="muted" role="status"></span></div><div class="all-time-values"><div><span>Завершено</span><strong id="all-time-completed">—</strong></div><div><span>Неуспешно</span><strong id="all-time-failed">—</strong></div><div><span>Отменено</span><strong id="all-time-cancelled">—</strong></div></div></section>
-      <div class="statistics-detail">
-        <section class="panel outcome-panel" aria-labelledby="outcome-title">
-          <div class="panel-heading"><h3 id="outcome-title">Результаты задач</h3><select id="window" aria-label="Период статистики"><option value="15">15 минут</option><option value="60">1 час</option><option value="1440" selected>24 часа</option></select></div>
-          <p id="outcome-status" class="muted" role="status"></p>
-          <div class="outcome-total"><strong id="outcome-total">—</strong><span>всего задач</span></div>
-          <div class="outcome-stack" id="outcome-stack" role="img" aria-label="Распределение результатов задач"><span class="completed"></span><span class="failed"></span><span class="cancelled"></span></div>
-          <div class="outcome-legend"><div><i class="legend-dot completed"></i><span>Завершено</span><strong id="outcome-completed">—</strong></div><div><i class="legend-dot failed"></i><span>Неуспешно</span><strong id="outcome-failed">—</strong></div><div><i class="legend-dot cancelled"></i><span>Отменено</span><strong id="outcome-cancelled">—</strong></div></div>
+        <section class="users-section panel" aria-labelledby="users-title">
+          <div class="panel-heading"><h3 id="users-title">Аудитория</h3><span id="users-status" class="muted" role="status"></span></div>
+          <div class="user-summary"><div><span>Всего</span><strong id="users-total">—</strong></div><div><span>Активны · 7 дней</span><strong id="users-week">—</strong></div><div><span>Активны · 30 дней</span><strong id="users-month">—</strong></div><div><span>Новые сегодня</span><strong id="users-new-today">—</strong></div></div>
+          <details class="user-facts-panel"><summary>Подробнее об аудитории</summary><div class="user-facts"><div><span>Вернулись сегодня</span><strong id="users-returning">—</strong></div><div><span>Новые за 7 дней</span><strong id="users-new-week">—</strong></div></div><p class="muted">История до внедрения учёта восстановлена по задачам; пользователи, которые только писали команды, в ней отсутствуют.</p></details>
         </section>
-        <section class="panel detail-panel" aria-labelledby="detail-title"><div class="panel-heading"><h3 id="detail-title">По типам задач</h3></div><div id="outcome-bars" class="outcome-bars" aria-label="Результаты по типам задач"></div><details class="detail-table"><summary>Точные значения</summary><div class="table-wrap" tabindex="0" role="region" aria-label="Результаты задач: таблица"><table><thead><tr><th>Категория</th><th>Завершено</th><th>Неуспешно</th><th>Отменено</th></tr></thead><tbody id="outcomes"></tbody></table></div></details></section>
-      </div>
-    </section>
-
-    <section class="dashboard-section technical-section" id="system" aria-labelledby="technical-title">
-      <div class="section-heading"><h2 id="technical-title">Система</h2><span class="section-caption">Ресурсы и управление</span></div>
-      <div class="technical-grid">
-        <article class="technical-card"><div class="technical-card-heading"><h3>Воркеры</h3></div><div class="technical-value"><strong id="worker-active">—</strong><span id="worker-total">из — заняты</span></div><div class="worker-slots" id="worker-slots" role="img" aria-label="Состояние воркеров"></div></article>
-        <article class="technical-card"><div class="technical-card-heading"><h3>Задачи</h3></div><div class="task-values"><div><strong id="processing">—</strong><span>в работе</span></div><div><strong id="queued">—</strong><span>ждут</span></div></div><svg class="sparkline" id="queue-sparkline" data-label="Очередь" viewBox="0 0 200 40" role="img" aria-label="Очередь за последний час"><text x="12" y="20">Ожидание данных</text></svg></article>
-        <article class="technical-card"><div class="technical-card-heading"><h3>Память JVM</h3><span id="heap-percent">—</span></div><div class="technical-value"><strong id="heap-used">—</strong></div><svg class="sparkline" id="heap-sparkline" data-label="Память JVM" viewBox="0 0 200 40" role="img" aria-label="Память JVM за последний час"><text x="12" y="20">Ожидание данных</text></svg><div class="metric-meter" id="heap-meter" role="meter" aria-label="Использование максимума памяти JVM" aria-valuemin="0" aria-valuemax="100" hidden><span></span></div><p id="heap-limit">—</p></article>
-        <article class="technical-card"><div class="technical-card-heading"><h3>Память контейнера</h3><span id="container-percent">—</span></div><div class="technical-value"><strong id="container-used">—</strong></div><svg class="sparkline" id="container-sparkline" data-label="Память контейнера" viewBox="0 0 200 40" role="img" aria-label="Память контейнера за последний час"><text x="12" y="20">Ожидание данных</text></svg><div class="metric-meter" id="container-meter" role="meter" aria-label="Использование лимита памяти контейнера" aria-valuemin="0" aria-valuemax="100" hidden><span></span></div><p id="container-limit">—</p></article>
-      </div>
-      <div class="management-grid">
-        <section class="services-panel panel" aria-labelledby="services-heading"><div class="panel-heading"><h3 id="services-heading">Сервисы</h3></div><ul id="services" class="service-list"></ul><p id="services-status" class="muted" role="status">Ожидание данных</p></section>
-        <section class="database-panel panel"><div><h3>База данных</h3><div class="database-value"><strong id="database-size">—</strong><span id="database-size-status" class="muted" role="status">Ожидание данных</span></div></div><div class="backup-actions"><div class="backup-buttons"><button id="backup" type="button" disabled>Создать дамп</button><button id="backup-cancel" type="button" hidden>Отмена</button></div><p id="backup-estimate" class="muted"></p><p id="backup-status" role="status" class="muted"></p></div></section>
-      </div>
-      <p id="telemetry-status" class="muted telemetry-status" role="status"></p>
-      <details class="diagnostics"><summary><span>Подробности системы<small>Воркеры, очереди, память и ошибки</small></span></summary>
+        <section class="panel outcome-panel" aria-labelledby="outcome-title">
+          <div class="panel-heading"><h3 id="outcome-title">Результаты задач</h3><span class="select-control"><select id="window" aria-label="Период результатов"><option value="15">15 минут</option><option value="60">1 час</option><option value="1440" selected>24 часа</option></select></span></div>
+          <p id="outcome-status" class="muted" role="status"></p>
+          <div class="outcome-summary"><span class="outcome-total">Всего <strong id="outcome-total">—</strong></span><div class="outcome-legend"><div><i class="legend-dot completed"></i><span>Завершено</span><strong id="outcome-completed">—</strong></div><div><i class="legend-dot failed"></i><span>Неуспешно</span><strong id="outcome-failed">—</strong></div><div><i class="legend-dot cancelled"></i><span>Отменено</span><strong id="outcome-cancelled">—</strong></div></div></div>
+          <div class="outcome-stack" id="outcome-stack" role="img" aria-label="Распределение результатов задач"><span class="completed"></span><span class="failed"></span><span class="cancelled"></span></div>
+          <p id="runtime-errors-status" class="muted warning" role="status"></p>
+          <details class="detail-table"><summary>По типам задач</summary><div id="outcome-bars" class="outcome-bars" aria-label="Результаты по типам задач"></div><div class="table-wrap" tabindex="0" role="region" aria-label="Результаты задач: таблица"><table><thead><tr><th>Категория</th><th>Завершено</th><th>Неуспешно</th><th>Отменено</th></tr></thead><tbody id="outcomes"></tbody></table></div></details>
+          <details class="all-time-panel"><summary><span>За всё время</span><span id="all-time-status" class="muted" role="status"></span></summary><div class="all-time-values"><div><span>Завершено</span><strong id="all-time-completed">—</strong></div><div><span>Неуспешно</span><strong id="all-time-failed">—</strong></div><div><span>Отменено</span><strong id="all-time-cancelled">—</strong></div></div></details>
+        </section>
+      </section>
+      <aside class="system-section" id="system" aria-labelledby="technical-title">
+        <section class="panel system-panel"><div class="panel-heading"><h2 id="technical-title">Система</h2><span class="section-period" id="updated">Ожидание данных</span></div>
+          <article class="technical-card workers-summary"><div class="resource-row"><h3>Воркеры</h3><div><strong id="worker-active">—</strong> <span id="worker-total">из — заняты</span></div></div><div class="worker-slots" id="worker-slots" role="img" aria-label="Состояние воркеров"></div></article>
+          <div class="resource-row"><span>Старейшая в очереди</span><strong id="oldest-queued">—</strong></div>
+          <article class="technical-card container-summary"><div class="technical-card-heading"><h3>Память контейнера</h3><span id="container-percent">—</span></div><div class="technical-value"><strong id="container-used">—</strong></div><div class="metric-meter" id="container-meter" role="meter" aria-label="Использование лимита памяти контейнера" aria-valuemin="0" aria-valuemax="100" hidden><span></span></div><p id="container-limit">—</p></article>
+          <a class="diagnostics-link" href="#diagnostics">Диагностика <span aria-hidden="true">↓</span></a>
+        </section>
+        <section class="panel management-panel"><h2>Управление</h2>
+          <details class="services-panel"><summary id="services-heading">Источники</summary><ul id="services" class="service-list"></ul></details><p id="services-status" class="muted" role="status">Ожидание данных</p>
+          <details class="database-panel"><summary><span>База данных</span><strong id="database-size">—</strong></summary><div class="backup-actions"><div class="backup-buttons"><button id="backup" type="button" disabled>Создать дамп</button><button id="backup-cancel" type="button" hidden>Отмена</button></div><p id="backup-estimate" class="muted"></p></div></details><p id="database-size-status" class="muted" role="status">Ожидание данных</p><p id="backup-status" role="status" class="muted"></p>
+        </section>
+        <p id="telemetry-status" class="muted" role="status"></p>
+      </aside>
+    </div>
+    <details class="diagnostics" id="diagnostics"><summary>Диагностика</summary>
       <div class="technical-details">
         <section class="panel workers-panel"><div class="panel-heading"><h3>Воркеры</h3></div><div class="table-wrap" tabindex="0" role="region" aria-label="Воркеры: таблица"><table><thead><tr><th>Слот</th><th>Состояние</th><th>Задача</th><th>Платформа</th><th>Этап</th><th>Длительность</th><th>Треки: активны / ждут</th></tr></thead><tbody id="workers"></tbody></table></div></section>
         <section class="panel queue-panel"><div class="panel-heading"><h3>Очереди</h3><span id="queue-status" class="muted"></span></div><div class="table-wrap" tabindex="0" role="region" aria-label="Очереди: таблица"><table><thead><tr><th>Категория</th><th>Ждут</th><th>В работе</th><th>Старейшая</th></tr></thead><tbody id="queues"></tbody></table></div><p class="queue-extra">Меню <span id="metadata">—</span> · треки <span id="items">—</span></p></section>
         <section class="panel load-panel"><div class="panel-heading"><h3>Нагрузка за час</h3><span class="inline-legend"><i class="legend-dot queued"></i> Очередь <i class="legend-dot processing"></i> Работа</span></div><svg id="chart" viewBox="0 0 600 140" role="img" aria-label="История количества задач в очереди и в работе"><text x="12" y="70">Ожидание данных</text></svg></section>
-        <section class="panel memory-panel"><div class="panel-heading"><h3>Память и GC</h3><span id="memory-status" class="muted"></span></div><div class="memory-charts"><div><span>Память JVM · MiB</span><svg id="heap-chart" viewBox="0 0 600 140" role="img" aria-label="Память JVM за последний час"><text x="12" y="70">Ожидание данных</text></svg></div><div><span>Контейнер · MiB</span><svg id="container-chart" viewBox="0 0 600 140" role="img" aria-label="Память контейнера за последний час"><text x="12" y="70">Ожидание данных</text></svg></div></div><div class="memory-details"><div><span>Вне Heap</span><strong id="nonheap-used">—</strong><p id="memory-pools"></p></div><div><span>GC</span><strong id="gc-value">—</strong><p id="gc-window"></p></div></div><p id="memory-history-status" class="muted"></p></section>
+        <section class="panel memory-panel"><div class="panel-heading"><h3>Память и GC</h3><span id="memory-status" class="muted"></span></div><article class="technical-card"><div class="technical-card-heading"><h3>Память JVM</h3><span id="heap-percent">—</span></div><div class="technical-value"><strong id="heap-used">—</strong></div><div class="metric-meter" id="heap-meter" role="meter" aria-label="Использование максимума памяти JVM" aria-valuemin="0" aria-valuemax="100" hidden><span></span></div><p id="heap-limit">—</p></article><div class="memory-charts"><div><span>Память JVM · MiB</span><svg id="heap-chart" viewBox="0 0 600 140" role="img" aria-label="Память JVM за последний час"><text x="12" y="70">Ожидание данных</text></svg></div><div><span>Контейнер · MiB</span><svg id="container-chart" viewBox="0 0 600 140" role="img" aria-label="Память контейнера за последний час"><text x="12" y="70">Ожидание данных</text></svg></div></div><div class="memory-details"><div><span>Вне Heap</span><strong id="nonheap-used">—</strong><p id="memory-pools"></p></div><div><span>GC</span><strong id="gc-value">—</strong><p id="gc-window"></p></div></div><p id="memory-history-status" class="muted"></p></section>
         <section class="panel errors-panel"><div class="panel-heading"><h3>Дополнительные ошибки</h3></div><div id="errors" class="error-grid"></div></section>
       </div>
-      </details>
-    </section>
+    </details>
   </main>
 </body>
 </html>

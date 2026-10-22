@@ -28,11 +28,13 @@ class AdminSnapshots(
     private var allTimeOutcomesFailed = false
     private var usersFailed = false
     private var jobTrendFailed = false
+    private var allTimeTrendsFailed = false
     private var historyFailed = false
     private var lastSlowCollection: Instant = Instant.MIN
     private var lastUserCollection: Instant = Instant.MIN
     private var lastJobTrendCollection: Instant = Instant.MIN
     private var lastAllTimeCollection: Instant = Instant.MIN
+    private var lastAllTimeTrendCollection: Instant = Instant.MIN
     private var lastPrune: Instant = Instant.MIN
 
     @Volatile
@@ -127,6 +129,19 @@ class AdminSnapshots(
                 next = next.copy(allTimeOutcomesAvailable = false)
             }
         }
+        if (lastAllTimeTrendCollection == Instant.MIN || !now.isBefore(lastAllTimeTrendCollection.plusSeconds(900))) {
+            lastAllTimeTrendCollection = now
+            try {
+                val users = queries.allTimeUserTrend()
+                val jobs = queries.allTimeJobTrend()
+                next = next.copy(allTimeUserTrend = users, allTimeJobTrend = jobs, allTimeTrendsUpdatedAt = clock.instant(), allTimeTrendsAvailable = true)
+                allTimeTrendsFailed = false
+            } catch (error: Exception) {
+                if (!allTimeTrendsFailed) logger.warn("Admin all-time trends unavailable", error)
+                allTimeTrendsFailed = true
+                next = next.copy(allTimeTrendsAvailable = false)
+            }
+        }
         history.entries.removeIf { it.value.at.isBefore(now.minusSeconds(3600)) }
         pendingHistory.entries.removeIf { it.value.at.isBefore(now.minusSeconds(3600)) }
         current = next.copy(history = history.values.toList(), statistics = statistics?.health() ?: StatisticsHealth(), memory = memory?.collect() ?: MemoryView())
@@ -166,6 +181,10 @@ data class DashboardSnapshot(
     val jobTrend: List<JobDay> = emptyList(),
     val jobTrendUpdatedAt: Instant? = null,
     val jobTrendAvailable: Boolean = false,
+    val allTimeUserTrend: List<UserDay> = emptyList(),
+    val allTimeJobTrend: List<JobDay> = emptyList(),
+    val allTimeTrendsUpdatedAt: Instant? = null,
+    val allTimeTrendsAvailable: Boolean = false,
     val usersUpdatedAt: Instant? = null,
     val usersAvailable: Boolean = false,
     val history: List<HistoryPoint> = emptyList(),

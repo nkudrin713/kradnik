@@ -21,6 +21,8 @@ class AdminSnapshotsTest {
         every { queries.jobTrend() } returns listOf(JobDay(java.time.LocalDate.parse("2026-09-26"), 1, 0, 0))
         every { queries.users() } returns UserSummary(1, 0, 0, 1, 1, 1, 1, clock.instant(), clock.instant())
         every { queries.userTrend() } returns emptyList()
+        every { queries.allTimeUserTrend() } returns listOf(UserDay(java.time.LocalDate.parse("2026-09-01"), 2, 1))
+        every { queries.allTimeJobTrend() } returns listOf(JobDay(java.time.LocalDate.parse("2026-09-01"), 4, 1, 0))
         val snapshots = AdminSnapshots(queries, AdminRuntime(true, clock), clock)
         snapshots.collect()
         repeat(1000) { snapshots.snapshot() }
@@ -28,6 +30,9 @@ class AdminSnapshotsTest {
         verify(exactly = 1) { queries.outcomes() }
         verify(exactly = 1) { queries.allTimeOutcomes() }
         val old = snapshots.snapshot()
+        assertTrue(old.allTimeTrendsAvailable)
+        verify(exactly = 1) { queries.allTimeUserTrend() }
+        verify(exactly = 1) { queries.allTimeJobTrend() }
         every { queries.queues() } throws IllegalStateException("database unavailable")
         clock.advance(2)
         snapshots.collect()
@@ -53,12 +58,19 @@ class AdminSnapshotsTest {
         assertEquals(lastUsers, snapshots.snapshot().users)
         verify(exactly = 1) { queries.allTimeOutcomes() }
         every { queries.allTimeOutcomes() } throws IllegalStateException("count timed out")
+        every { queries.allTimeUserTrend() } throws IllegalStateException("trend timed out")
         clock.advance(900)
         snapshots.collect()
         assertFalse(snapshots.snapshot().allTimeOutcomesAvailable)
         assertEquals(allTime, snapshots.snapshot().allTimeOutcomes)
         assertEquals(old.allTimeOutcomesUpdatedAt, snapshots.snapshot().allTimeOutcomesUpdatedAt)
         assertTrue(snapshots.snapshot().jobTrendAvailable)
+        assertFalse(snapshots.snapshot().allTimeTrendsAvailable)
+        assertEquals(old.allTimeUserTrend, snapshots.snapshot().allTimeUserTrend)
+        assertEquals(old.allTimeJobTrend, snapshots.snapshot().allTimeJobTrend)
+        assertEquals(old.allTimeTrendsUpdatedAt, snapshots.snapshot().allTimeTrendsUpdatedAt)
+        verify(exactly = 2) { queries.allTimeUserTrend() }
+        verify(exactly = 1) { queries.allTimeJobTrend() }
     }
 
     @Test
@@ -71,6 +83,8 @@ class AdminSnapshotsTest {
         every { queries.jobTrend() } returns emptyList()
         every { queries.users() } returns UserSummary(0, 0, 0, 0, 0, 0, 0, null, null)
         every { queries.userTrend() } returns emptyList()
+        every { queries.allTimeUserTrend() } returns listOf(UserDay(java.time.LocalDate.parse("2026-09-01"), 2, 1))
+        every { queries.allTimeJobTrend() } returns listOf(JobDay(java.time.LocalDate.parse("2026-09-01"), 4, 1, 0))
         val snapshots = AdminSnapshots(queries, AdminRuntime(true, clock), clock)
         repeat(2000) {
             snapshots.collect()

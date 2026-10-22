@@ -49,4 +49,4 @@ Kotlin, Java 21, Spring Boot, PostgreSQL, yt-dlp, FFmpeg, and Docker Compose.
 
 Run your own instance with a Telegram bot token. Deployment configuration is provided in [Docker Compose](docker-compose.yml) and the [environment example](.env.example).
 
-The responsive web dashboard opens with bot health and key activity metrics. Detailed worker, queue, memory, and GC diagnostics expand on demand; source switches and database backups are available in the system section.
+The responsive web dashboard combines activity charts with a compact system sidebar. Charts switch between the last 14 days and all recorded history, grouped by UTC month; monthly active users are counted uniquely within each month. Audience details, all-time totals, diagnostics, source switches, and database backup controls expand on demand.

@@ -69,46 +69,6 @@ function meter(id, value, total) {
   element.setAttribute('aria-valuenow', percent.toFixed(1));
   element.setAttribute('aria-valuetext', `${bytes(value)} из ${bytes(total)}`);
 }
-function sparkline(id, points, field) {
-  const svg = $(id);
-  const key = JSON.stringify(points.map(point => [point.at, point[field]]));
-  if (svg.dataset.points === key) return;
-  svg.dataset.points = key;
-  svg.replaceChildren();
-  const available = points.filter(point => point[field] != null && Number.isFinite(point[field]));
-  if (available.length < 2) {
-    svg.setAttribute('aria-label', `${svg.dataset.label}: история недоступна`);
-    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    label.setAttribute('x', '2'); label.setAttribute('y', '26');
-    label.textContent = 'История недоступна'; svg.append(label);
-    return;
-  }
-  const ns = 'http://www.w3.org/2000/svg';
-  const start = Date.parse(points[0].at), end = Date.parse(points[points.length - 1].at);
-  const span = Math.max(60000, end - start);
-  const values = available.map(point => point[field]);
-  const min = Math.min(...values), max = Math.max(...values);
-  const range = Math.max(1, max - min);
-  let path = '', previous = null;
-  points.forEach(point => {
-    const value = point[field], at = Date.parse(point.at);
-    if (value == null || !Number.isFinite(value)) { previous = null; return; }
-    const x = 2 + (at - start) / span * 196;
-    const y = 35 - (value - min) / range * 29;
-    path += `${previous == null || at - previous > 90000 ? 'M' : 'L'}${x},${y} `;
-    previous = at;
-  });
-  const line = document.createElementNS(ns, 'path');
-  line.setAttribute('d', path);
-  line.setAttribute('fill', 'none');
-  line.setAttribute('stroke', 'currentColor');
-  line.setAttribute('stroke-width', '2');
-  line.setAttribute('stroke-linecap', 'round');
-  line.setAttribute('stroke-linejoin', 'round');
-  svg.append(line);
-  const format = value => field === 'queued' ? value : bytes(value);
-  svg.setAttribute('aria-label', `${svg.dataset.label}: минимум ${format(min)}, максимум ${format(max)} за последний час`);
-}
 function render(data) {
   text('version', `Версия ${data.version || 'неизвестна'}`);
   renderStatisticsStatus(data);
@@ -117,11 +77,11 @@ function render(data) {
   renderAllTime(data);
   const sum = status => data.queues.filter(q => q.status === status).reduce((n, q) => n + q.count, 0);
   const queued = sum('queued'), processing = sum('processing');
-  text('queued', data.queuesUpdatedAt ? queued : '—');
   text('overview-queued', data.queuesUpdatedAt ? queued.toLocaleString('ru-RU') : '—');
   overviewStatus('overview-queue-status', data.queuesAvailable, data.queuesUpdatedAt);
   text('processing', data.queuesUpdatedAt ? processing : '—');
-  sparkline('queue-sparkline', data.history || [], 'queued');
+  const oldest = data.queues.filter(q => q.status === 'queued' && q.count > 0 && q.oldest).map(q => q.oldest).sort();
+  text('oldest-queued', data.queuesUpdatedAt ? duration(oldest[0]) : '—');
   text('metadata', data.runtime.metadataQueued);
   const workers = data.runtime.workers;
   const busyWorkers = workers.filter(w => w.state === 'BUSY').length;
@@ -181,41 +141,22 @@ function renderUsers(data) {
     ['users-new-today', users?.newToday], ['users-returning', users?.returningToday],
     ['users-new-week', users?.newWeek]
   ]) text(id, value == null ? '—' : value.toLocaleString('ru-RU'));
-  text('users-range', users?.firstSeen ? `Первое обращение ${date(users.firstSeen)} · последнее ${date(users.lastSeen)}` : '');
-  const points = data.userTrend || [];
-  const svg = $('users-chart');
-  const key = JSON.stringify(points);
-  if (svg.dataset.points === key) return;
-  svg.dataset.points = key;
-  svg.replaceChildren();
-  const ns = 'http://www.w3.org/2000/svg';
-  const label = (value, x, y, anchor = 'start') => {
-    const node = document.createElementNS(ns, 'text');
-    node.textContent = value; node.setAttribute('x', x); node.setAttribute('y', y); node.setAttribute('text-anchor', anchor);
-    svg.append(node);
-  };
-  if (!points.length) { label('История недоступна', 12, 90); return; }
-  const max = Math.max(1, ...points.map(p => p.active));
-  label(String(max), 4, 27); label('0', 4, 148);
-  points.forEach((point, i) => {
-    const x = 40 + i * 46, activeHeight = point.active / max * 112;
-    const newHeight = point.newUsers / max * 112;
-    const old = document.createElementNS(ns, 'rect');
-    old.setAttribute('x', x); old.setAttribute('y', 143 - activeHeight); old.setAttribute('width', 25);
-    old.setAttribute('height', Math.max(0, activeHeight - newHeight)); old.setAttribute('rx', 3); old.setAttribute('fill', 'var(--returning)');
-    const fresh = document.createElementNS(ns, 'rect');
-    fresh.setAttribute('x', x); fresh.setAttribute('y', 143 - newHeight); fresh.setAttribute('width', 25);
-    fresh.setAttribute('height', newHeight); fresh.setAttribute('rx', 3); fresh.setAttribute('fill', 'var(--data)');
-    svg.append(old, fresh);
-    if ((i % 3 === 0 && i < points.length - 2) || i === points.length - 1) label(new Date(`${point.day}T00:00:00Z`).toLocaleDateString('ru-RU', {day: 'numeric', month: 'short', timeZone: 'UTC'}), x + 12, 169, 'middle');
-  });
-  svg.setAttribute('aria-label', `Активные пользователи за последние ${points.length} дней; сегодня ${points[points.length - 1].active}, из них новых ${points[points.length - 1].newUsers}`);
+  const allTime = $('trend-range').value === 'all';
+  sourceStatus('user-trend-status', allTime ? data.allTimeTrendsAvailable : data.usersAvailable,
+    allTime ? data.allTimeTrendsUpdatedAt : data.usersUpdatedAt);
+  const points = (allTime ? data.allTimeUserTrend : data.userTrend) || [];
+  trendChart('users-chart', points.map(p => ({...p, returning: Math.max(0, p.active - p.newUsers)})),
+    [['newUsers', 'Новые', 'var(--data)'], ['returning', 'Вернувшиеся', 'var(--returning)']], 'Активные пользователи', allTime);
 }
 function renderJobTrend(data) {
-  sourceStatus('job-trend-status', data.jobTrendAvailable, data.jobTrendUpdatedAt);
-  const points = data.jobTrend || [];
-  const svg = $('jobs-chart');
-  const key = JSON.stringify(points);
+  const allTime = $('trend-range').value === 'all';
+  sourceStatus('job-trend-status', allTime ? data.allTimeTrendsAvailable : data.jobTrendAvailable,
+    allTime ? data.allTimeTrendsUpdatedAt : data.jobTrendUpdatedAt);
+  trendChart('jobs-chart', (allTime ? data.allTimeJobTrend : data.jobTrend) || [],
+    [['completed', 'Завершено', 'var(--success)'], ['failed', 'Неуспешно', 'var(--danger)'], ['cancelled', 'Отменено', 'var(--inactive)']], 'Результаты задач', allTime);
+}
+function trendChart(id, points, series, description, monthly) {
+  const svg = $(id), key = JSON.stringify([monthly, points]);
   if (svg.dataset.points === key) return;
   svg.dataset.points = key;
   svg.replaceChildren();
@@ -225,24 +166,40 @@ function renderJobTrend(data) {
     node.textContent = value; node.setAttribute('x', x); node.setAttribute('y', y); node.setAttribute('text-anchor', anchor);
     svg.append(node);
   };
-  if (!points.length) { label('История недоступна', 12, 90); return; }
-  const max = Math.max(1, ...points.map(point => point.completed + point.failed + point.cancelled));
-  label(String(max), 4, 27); label('0', 4, 148);
+  if (!points.length) {
+    label('История недоступна', 12, 90);
+    svg.setAttribute('aria-label', `${description}: история недоступна`);
+    return;
+  }
+  const max = Math.max(1, ...points.map(p => series.reduce((sum, [field]) => sum + p[field], 0)));
+  label(new Intl.NumberFormat('ru-RU', {notation: 'compact', maximumFractionDigits: 1}).format(max), 2, 27);
+  label('0', 2, 146);
+  const step = 622 / points.length, width = Math.min(32, step * .65);
+  const tickStep = Math.max(1, Math.ceil((points.length - 1) / 4));
   points.forEach((point, i) => {
-    const x = 40 + i * 46;
+    const center = 62 + (i + .5) * step;
+    const day = new Date(`${point.day}T00:00:00Z`);
+    const fullDate = day.toLocaleDateString('ru-RU', monthly ? {month: 'long', year: 'numeric', timeZone: 'UTC'} : {day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'});
+    const group = document.createElementNS(ns, 'g'), title = document.createElementNS(ns, 'title');
+    title.textContent = `${fullDate}: ${series.map(([field, name]) => `${name.toLowerCase()} ${point[field]}`).join(', ')}`;
+    group.append(title);
     let y = 143;
-    for (const [field, color] of [['completed', 'var(--success)'], ['failed', 'var(--danger)'], ['cancelled', 'var(--inactive)']]) {
+    series.forEach(([field, , color]) => {
       const height = point[field] / max * 112;
       y -= height;
       const bar = document.createElementNS(ns, 'rect');
-      bar.setAttribute('x', x); bar.setAttribute('y', y); bar.setAttribute('width', 25);
-      bar.setAttribute('height', height); bar.setAttribute('rx', 3); bar.setAttribute('fill', color);
-      svg.append(bar);
+      bar.setAttribute('x', center - width / 2); bar.setAttribute('y', y); bar.setAttribute('width', width);
+      bar.setAttribute('height', height); bar.setAttribute('rx', 2); bar.setAttribute('fill', color);
+      group.append(bar);
+    });
+    svg.append(group);
+    if (i === points.length - 1 || i % tickStep === 0 && i < points.length - Math.max(1, tickStep / 2)) {
+      const tick = day.toLocaleDateString('ru-RU', monthly ? {month: 'short', year: '2-digit', timeZone: 'UTC'} : {day: 'numeric', month: 'short', timeZone: 'UTC'});
+      label(tick, center, 172, i === points.length - 1 ? 'end' : i === 0 ? 'start' : 'middle');
     }
-    if ((i % 3 === 0 && i < points.length - 2) || i === points.length - 1) label(new Date(`${point.day}T00:00:00Z`).toLocaleDateString('ru-RU', {day: 'numeric', month: 'short', timeZone: 'UTC'}), x + 12, 169, 'middle');
   });
-  const today = points[points.length - 1];
-  svg.setAttribute('aria-label', `Результаты задач за последние ${points.length} дней; сегодня завершено ${today.completed}, неуспешно ${today.failed}, отменено ${today.cancelled}`);
+  const last = points[points.length - 1];
+  svg.setAttribute('aria-label', `${description}, ${monthly ? 'за всё время по месяцам' : 'за 14 дней'}; последний период: ${series.map(([field, name]) => `${name.toLowerCase()} ${last[field]}`).join(', ')}`);
 }
 function renderAllTime(data) {
   sourceStatus('all-time-status', data.allTimeOutcomesAvailable, data.allTimeOutcomesUpdatedAt);
@@ -299,6 +256,8 @@ function renderOutcomes() {
   });
   $('outcome-bars').replaceChildren(...bars);
   const counts = latest.runtime.errors.find(e => e.minutes === minutes)?.counts || {};
+  const activeErrors = Object.entries(errors).filter(([key]) => counts[key] > 0).map(([key, label]) => `${label}: ${counts[key]}`);
+  text('runtime-errors-status', activeErrors.length ? `Ошибки · ${$('window').selectedOptions[0].textContent}: ${activeErrors.join(' · ')}` : '');
   Object.entries(errors).forEach(([key, label]) => {
     let box = document.getElementById(`error-${key}`);
     if (!box) {
@@ -366,8 +325,6 @@ function renderMemory(memory) {
   text('memory-history-status', memory.historyAvailable ? '' : 'История памяти недоступна');
   $('memory-history-status').classList.toggle('warning', !memory.historyAvailable);
   const points = memory.history || [];
-  sparkline('heap-sparkline', points, 'heapUsed');
-  sparkline('container-sparkline', points, 'containerUsed');
   memoryChart('heap-chart', points, 'heapUsed');
   memoryChart('container-chart', points, 'containerUsed');
 }
@@ -387,7 +344,7 @@ function renderHealth(data) {
   if (data.runtime.workers.some(w => w.state === 'STOPPED')) critical.push('есть остановленные воркеры');
   if (data.runtime.workers.some(w => w.state === 'BACKOFF')) warning.push('воркер ждёт после ошибки');
   $('health-title').className = critical.length ? 'critical' : warning.length ? 'warning' : 'healthy';
-  text('health-title', critical.length ? 'Требуется внимание' : warning.length ? 'Нужна проверка' : 'Работает нормально');
+  text('health-title', critical.length ? 'Требуется внимание' : warning.length ? 'Нужна проверка' : 'Система в норме');
   text('health-details', [...critical, ...warning].join(' · '));
   text('connection', stale ? 'Снимок устарел' : '');
 }
@@ -563,6 +520,11 @@ async function poll() {
   });
 });
 $('window').addEventListener('change', renderOutcomes);
+$('trend-range').addEventListener('change', () => {
+  text('trend-unit', $('trend-range').value === 'all' ? 'По месяцам · UTC' : 'По дням · UTC');
+  if (latest) { renderUsers(latest); renderJobTrend(latest); }
+});
+document.querySelector('.diagnostics-link').addEventListener('click', () => { $('diagnostics').open = true; });
 $('backup-cancel').addEventListener('click', () => { resetBackupEstimate(); backupError = ''; text('backup-status', ''); });
 $('backup').addEventListener('click', async () => {
   if (backupPendingRequest || backupRunning) return;

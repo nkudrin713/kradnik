@@ -41,6 +41,8 @@ Execution depends on contracts for storage, delivery, cache, and notifications. 
 
 Options depend on available metadata and upload limits. Audio requires a usable duration estimate; covers require a thumbnail. Posts and video albums retain up to 20 supported media items in source order, including duplicates. Full posts, video albums, and playlists require a private chat. Download selections are saved separately from temporary source preparation, so menu policy does not change an already saved selection.
 
+For YouTube audio and playlist tracks, yt-dlp selects its default player clients. A configured PO Token provider is available to those clients. YouTube video downloads and format menus use `mweb` when a provider is configured.
+
 ## Stack
 
 Kotlin, Java 21, Spring Boot, PostgreSQL, yt-dlp, FFmpeg, and Docker Compose.
@@ -50,3 +52,5 @@ Kotlin, Java 21, Spring Boot, PostgreSQL, yt-dlp, FFmpeg, and Docker Compose.
 Run your own instance with a Telegram bot token. Deployment configuration is provided in [Docker Compose](docker-compose.yml) and the [environment example](.env.example).
 
 The responsive web dashboard combines activity charts with a compact system sidebar. Charts switch between the last 14 days and all recorded history, grouped by UTC month; monthly active users are counted uniquely within each month. Audience details, all-time totals, diagnostics, source switches, and database backup controls expand on demand.
+
+When yt-dlp exits with an error or times out, the bot saves the stage, available version and format details, exit code, and diagnostic signals such as HTTP 403, a missing YouTube PO token, or a signature challenge failure. It summarizes stderr and removes URLs from the terminal error before saving it.

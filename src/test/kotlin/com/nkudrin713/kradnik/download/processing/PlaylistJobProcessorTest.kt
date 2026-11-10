@@ -45,6 +45,7 @@ class PlaylistJobProcessorTest {
     }
     private val jobs = mockk<DownloadJobService>()
     private val ytDlp = mockk<YtDlpService>()
+    private val audioOptions = listOf("--extractor-args", "youtube:player_client=default")
     private val fileSender = mockk<TelegramPlaylistSender> { coEvery { checkStorage() } returns Unit }
     private val telegram = mockk<TelegramSender>(relaxed = true)
 
@@ -84,7 +85,7 @@ class PlaylistJobProcessorTest {
                 match { it.sortedBy(PlaylistAudioResult::position).map(PlaylistAudioResult::fileId) == listOf("file-one", "file-two") },
             )
         }
-        coVerify(exactly = 0) { ytDlp.download(any(), any()) }
+        coVerify(exactly = 0) { ytDlp.download(any(), any(), any()) }
         verify { jobs.markCompleted(job, "playlist:2") }
         verify { telegram.editFinalMessage(com.nkudrin713.kradnik.download.delivery.MessageAddress.Chat(20, 22), "✅ Sent 2 of 2") }
         assertFalse(root.resolve("1").exists())
@@ -105,7 +106,7 @@ class PlaylistJobProcessorTest {
 
         processor().process(job)
 
-        coVerify(exactly = 0) { ytDlp.download(any(), any()) }
+        coVerify(exactly = 0) { ytDlp.download(any(), any(), any()) }
         verify(exactly = 0) { jobs.savePlaylistResult(any(), any()) }
         verify { telegram.editFailure(any(), match { it.contains("storage", ignoreCase = true) }, any(), any(), any()) }
         assertFalse(root.resolve("1").exists())
@@ -133,7 +134,7 @@ class PlaylistJobProcessorTest {
             synchronized(job) { job.playlistResults += secondArg<PlaylistAudioResult>() }
             true
         }
-        coEvery { ytDlp.download(any(), any()) } answers {
+        coEvery { ytDlp.download(any(), any(), audioOptions) } answers {
             val spec = firstArg<com.nkudrin713.kradnik.download.source.SourceRequest>()
             if (!hasSuccess || spec.originalUrl.endsWith("two")) {
                 throw com.nkudrin713.kradnik.download.domain.DownloadFailure(com.nkudrin713.kradnik.download.domain.DownloadFailureReason.SOURCE_UNAVAILABLE, "Private video", playlistFailure = com.nkudrin713.kradnik.download.domain.PlaylistItemFailure.PRIVATE)
@@ -219,7 +220,7 @@ class PlaylistJobProcessorTest {
             job.playlistResults += secondArg<PlaylistAudioResult>()
             true
         }
-        coEvery { ytDlp.download(any(), any()) } answers {
+        coEvery { ytDlp.download(any(), any(), audioOptions) } answers {
             val spec = firstArg<com.nkudrin713.kradnik.download.source.SourceRequest>()
             assertEquals(listOf("--audio-quality", "96K"), spec.extraArgs.drop(3).take(2))
             val path = Files.write(secondArg<Path>().resolve("track.mp3"), byteArrayOf(1))
@@ -236,7 +237,7 @@ class PlaylistJobProcessorTest {
 
         processor().process(job)
 
-        coVerify(exactly = 1) { ytDlp.download(match { it.originalUrl == "https://youtu.be/two" }, any()) }
+        coVerify(exactly = 1) { ytDlp.download(match { it.originalUrl == "https://youtu.be/two" }, any(), audioOptions) }
         coVerify { fileSender.sendPlaylistAudios(DeliveryContext.fromJob(job), job.playlistEntries, match { it.map(PlaylistAudioResult::fileId) == listOf("saved-file", "new-file") }) }
         verify { jobs.markCompleted(job, "playlist:2") }
         assertFalse(root.resolve("1").exists())

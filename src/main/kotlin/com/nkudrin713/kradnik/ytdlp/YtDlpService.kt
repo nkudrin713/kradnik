@@ -27,12 +27,12 @@ private const val IGNORE_NO_FORMATS_ERROR = "--ignore-no-formats-error"
 private const val YT_DLP = "yt-dlp"
 private const val NO_PLAYLIST = "--no-playlist"
 private const val FLAT_PLAYLIST = "--flat-playlist"
-private const val NO_WARNINGS = "--no-warnings"
 private const val NO_RESTRICT_FILENAMES = "--no-restrict-filenames"
 private const val FORMAT = "-f"
 private const val OUTPUT = "-o"
 private const val MAX_FILESIZE = "--max-filesize"
 private const val PRINT = "--print"
+private const val SOURCE_FILE_SIZE_EXCEEDED = "[download] File is larger than max-filesize"
 private const val OUTPUT_NA_PLACEHOLDER = "--output-na-placeholder"
 private const val FILEPATH_MARKER = "KRADNIK_FILEPATH:"
 private const val FINAL_FILEPATH = "after_move:${FILEPATH_MARKER}%(filepath)j"
@@ -55,14 +55,16 @@ private val SINGLE_MEDIA_METADATA_TEMPLATE = listOf(
     "\"formats\":%(formats.:.{format_id,ext,height,fps,filesize,filesize_approx,vcodec,acodec,tbr,vbr,abr})j",
 ).joinToString(separator = ",", prefix = "{", postfix = "}")
 
-private data class YtDlpCommand(
-    override val args: List<String>,
+private class YtDlpCommand(
+    args: List<String>,
     override val workingDir: Path?,
     override val timeout: kotlin.time.Duration,
     override val maxWorkingDirectoryBytes: Long? = null,
     override val maxCapturedStdoutChars: Int? = null,
     override val executable: String = YT_DLP,
-) : Command
+) : Command {
+    override val args = listOf("--verbose", "--no-progress") + args
+}
 
 /**
  * Implements the yt-dlp boundary used by [DownloadEngine][com.nkudrin713.kradnik.download.DownloadEngine].
@@ -113,12 +115,11 @@ class YtDlpService(
      * Rejects failed, empty, or truncated process output before parsing the playlist metadata.
      */
     suspend fun extractPlaylistMetadata(url: String, options: List<String> = emptyList()): YtDlpMetadataDto {
-        val result = processRunner.run(
+        return readMetadata(
             YtDlpCommand(
                 args = buildList {
                     add(DUMP_SINGLE_JSON)
                     add(FLAT_PLAYLIST)
-                    add(NO_WARNINGS)
                     addAll(options)
                     add(url)
                 },
@@ -127,7 +128,6 @@ class YtDlpService(
                 maxCapturedStdoutChars = MAX_METADATA_STDOUT_CHARS,
             ),
         )
-        return parseMetadataResult(result)
     }
 
     /**
@@ -135,12 +135,11 @@ class YtDlpService(
      * Applies the metadata timeout and normal process/output checks; this does not download the images.
      */
     suspend fun extractImageMetadata(spec: SourceRequest): YtDlpMetadataDto {
-        val result = processRunner.run(
+        return readMetadata(
             YtDlpCommand(
                 args = listOf(
                     DUMP_SINGLE_JSON,
                     IGNORE_NO_FORMATS_ERROR,
-                    NO_WARNINGS,
                     spec.originalUrl,
                 ),
                 workingDir = null,
@@ -148,14 +147,13 @@ class YtDlpService(
                 maxCapturedStdoutChars = MAX_METADATA_STDOUT_CHARS,
             ),
         )
-        return parseMetadataResult(result)
     }
 
     suspend fun extractPostMetadata(spec: SourceRequest, catalog: Boolean, options: List<String> = emptyList()): YtDlpMetadataDto {
-        val result = processRunner.run(
+        return readMetadata(
             YtDlpCommand(
                 args = buildList {
-                    addAll(listOf(DUMP_SINGLE_JSON, NO_PLAYLIST, NO_WARNINGS))
+                    addAll(listOf(DUMP_SINGLE_JSON, NO_PLAYLIST))
                     addAll(options)
                     if (!catalog) addAll(listOf(FORMAT, spec.formatSelector))
                     add(spec.originalUrl)
@@ -165,7 +163,6 @@ class YtDlpService(
                 maxCapturedStdoutChars = MAX_METADATA_STDOUT_CHARS,
             ),
         )
-        return parseMetadataResult(result)
     }
 
     private suspend fun extractMetadata(
@@ -173,7 +170,7 @@ class YtDlpService(
         formatSelector: String?,
         options: List<String>,
     ): YtDlpMetadataDto {
-        val result = processRunner.run(
+        return readMetadata(
             YtDlpCommand(
                 args = buildList {
                     add(PRINT)
@@ -181,7 +178,6 @@ class YtDlpService(
                     add(OUTPUT_NA_PLACEHOLDER)
                     add("null")
                     add(NO_PLAYLIST)
-                    add(NO_WARNINGS)
                     if (formatSelector != null) {
                         add(FORMAT)
                         add(formatSelector)
@@ -194,12 +190,11 @@ class YtDlpService(
                 maxCapturedStdoutChars = MAX_METADATA_STDOUT_CHARS,
             ),
         )
-
-        return parseMetadataResult(result)
     }
 
-    private fun parseMetadataResult(result: ProcessExecutionResult): YtDlpMetadataDto {
-        handleBaseErrors(result)
+    private suspend fun readMetadata(command: YtDlpCommand): YtDlpMetadataDto {
+        val result = processRunner.run(command)
+        handleBaseErrors(result, stage = "metadata", command)
         if (result.stdoutTruncated) {
             throw YtDlpException("yt-dlp metadata extraction output exceeded capture limit")
         }
@@ -223,7 +218,6 @@ class YtDlpService(
     ): DownloadedFile {
         val args = buildList {
             add(NO_PLAYLIST)
-            add(NO_WARNINGS)
             add(NO_RESTRICT_FILENAMES)
             add(FORMAT)
             add(spec.formatSelector)
@@ -240,22 +234,23 @@ class YtDlpService(
             add(spec.originalUrl)
         }
 
-        val result = processRunner.run(
-            YtDlpCommand(
-                args = args,
-                workingDir = outputDir,
-                timeout = downloadTimeout.toKotlinDuration(),
-                maxWorkingDirectoryBytes = maxWorkspaceBytes(),
-            ),
+        val command = YtDlpCommand(
+            args = args,
+            workingDir = outputDir,
+            timeout = downloadTimeout.toKotlinDuration(),
+            maxWorkingDirectoryBytes = maxWorkspaceBytes(),
         )
+        val result = processRunner.run(command)
 
         if (result.workingDirectoryLimitExceeded) {
             throw YtDlpFileSizeLimitException()
         }
-        if (uploadLimits.localMode && result.diagnosticOutput.lowercase().contains("max-filesize")) {
+        if (uploadLimits.localMode &&
+            sequenceOf(result.stderr, result.stdout).flatMap(String::lineSequence).any { it.startsWith(SOURCE_FILE_SIZE_EXCEEDED) }
+        ) {
             throw YtDlpFileSizeLimitException()
         }
-        handleBaseErrors(result)
+        handleBaseErrors(result, stage = "download", command)
         val file = getDownloadedFile(result.stdout)
 
         return DownloadedFile(
@@ -294,25 +289,19 @@ class YtDlpService(
         }
     }
 
-    private fun handleBaseErrors(result: ProcessExecutionResult) {
+    private fun handleBaseErrors(result: ProcessExecutionResult, stage: String, command: YtDlpCommand) {
+        if (!result.timedOut && result.exitCode == 0) return
+
+        val diagnostic = YtDlpDiagnostics(result, stage, command.args)
         if (result.timedOut) {
-            throw YtDlpException("yt-dlp command timed out", DownloadFailureReason.SOURCE_TIMEOUT)
+            throw YtDlpException(diagnostic.message("yt-dlp command timed out"), DownloadFailureReason.SOURCE_TIMEOUT)
         }
 
-        if (result.exitCode != 0) {
-            val diagnosticOutput = result.diagnosticOutput
-            val reason = diagnosticOutput.failureReason()
-            if (reason == DownloadFailureReason.AUTHENTICATION_REQUIRED) {
-                throw YtDlpAuthenticationRequiredException(
-                    "yt-dlp authentication required: ${diagnosticOutput.takeLast(500)}",
-                )
-            }
-
-            throw YtDlpException(
-                "yt-dlp command failed: ${diagnosticOutput.takeLast(500)}",
-                reason,
-            )
+        val reason = diagnostic.terminalError.failureReason()
+        if (reason == DownloadFailureReason.AUTHENTICATION_REQUIRED) {
+            throw YtDlpAuthenticationRequiredException(diagnostic.message("yt-dlp authentication required"))
         }
+        throw YtDlpException(diagnostic.message("yt-dlp command failed"), reason)
     }
 
     private fun String.failureReason(): DownloadFailureReason {

@@ -66,13 +66,14 @@ class YouTubeSourceAdapter(
         )
     }
     override suspend fun prepare(request: SourceRequest, catalog: Boolean): PreparedSource {
-        val metadata = if (catalog) ytDlp.extractCatalogMetadata(request, sourceOptions()) else ytDlp.extractMetadata(request, sourceOptions())
+        val options = sourceOptions(audio = !catalog && "-x" in request.extraArgs)
+        val metadata = if (catalog) ytDlp.extractCatalogMetadata(request, options) else ytDlp.extractMetadata(request, options)
         return YtDlpPreparedSource(metadata.toMediaMetadata())
     }
 
     override suspend fun download(request: SourceRequest, type: SourceMediaType, prepared: PreparedSource, directory: Path): DownloadedFile {
         require(prepared is YtDlpPreparedSource)
-        return ytDlp.download(request, directory, sourceOptions())
+        return ytDlp.download(request, directory, sourceOptions(audio = type == SourceMediaType.AUDIO))
     }
 
     override suspend fun playlist(url: String, audioQuality: String): DownloadSpec? {
@@ -127,11 +128,17 @@ class YouTubeSourceAdapter(
             YtDlpPresets.AUDIO_FORMAT, "ba", "bestaudio" -> request.copy(formatSelector = YtDlpPresets.AUDIO_FORMAT_WITH_VIDEO_FALLBACK)
             else -> request
         }
-        return ytDlp.download(selected, directory, sourceOptions())
+        return ytDlp.download(selected, directory, sourceOptions(audio = true))
     }
 
-    private fun sourceOptions(): List<String> {
+    private fun sourceOptions(audio: Boolean = false): List<String> = buildList {
         val provider = poTokenProviderUrl.trim().trimEnd('/')
-        return if (provider.isEmpty()) emptyList() else listOf("--extractor-args", "youtube:player_client=mweb", "--extractor-args", "youtubepot-bgutilhttp:base_url=$provider")
+        if (audio || provider.isNotEmpty()) {
+            val client = if (audio) "default" else "mweb"
+            addAll(listOf("--extractor-args", "youtube:player_client=$client"))
+        }
+        if (provider.isNotEmpty()) {
+            addAll(listOf("--extractor-args", "youtubepot-bgutilhttp:base_url=$provider"))
+        }
     }
 }

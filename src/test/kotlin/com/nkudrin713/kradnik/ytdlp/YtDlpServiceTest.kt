@@ -345,7 +345,8 @@ class YtDlpServiceTest {
         assertFalse(template.contains("captions"))
         assertFalse(template.contains("subtitles"))
         assertTrue(command.args.contains("--no-playlist"))
-        assertTrue(command.args.contains("--no-warnings"))
+        assertTrue(command.args.contains("--verbose"))
+        assertFalse(command.args.contains("--no-warnings"))
         assertTrue(command.args.contains("-f"))
         assertTrue(command.args.contains("bv*+ba/b"))
         assertTrue(command.args.contains("https://example.com"))
@@ -482,6 +483,7 @@ class YtDlpServiceTest {
 
         coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
             stdout = "KRADNIK_FILEPATH:\"${file.absolutePathString()}\"",
+            stderr = "[debug] Command-line config: ['--max-filesize', '2000000000']",
             timedOut = false,
             exitCode = 0,
         )
@@ -642,6 +644,82 @@ class YtDlpServiceTest {
 
         assertTrue(exception.message!!.contains("command failed"))
         assertTrue(exception.message!!.contains("download error"))
+    }
+
+    @Test
+    fun downloadFailureKeepsSafeDetailsFromVerboseOutput(@TempDir tempDir: Path) = runTest {
+        val request = youtubeRequest().copy(formatSelector = "ba/bestaudio")
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            timedOut = false,
+            exitCode = 1,
+            stderrTruncated = true,
+            stderr = """
+                [debug] Command-line config: ['--max-filesize', '2000000000', 'https://example.com/?token=debug-secret']
+                [debug] yt-dlp version stable@2026.07.04 from yt-dlp/yt-dlp
+                [debug] [youtube] id: Retrieved a gvs PO Token for mweb client
+                [info] id: Downloading 1 format(s): 251-1
+                ERROR: unable to download video data: HTTP Error 403: Forbidden (https://media.example.com/?token=error-secret)
+            """.trimIndent(),
+            stdout = "stdout-secret",
+        )
+
+        val failure = assertFailsWith<YtDlpException> {
+            service.download(request, tempDir, listOf("--extractor-args", "youtube:player_client=mweb"))
+        }
+        val message = failure.message.orEmpty()
+        assertEquals(DownloadFailureReason.SOURCE_FAILED, failure.reason)
+        val expectedDetails = listOf(
+            "stage=download", "exit=1", "format=ba/bestaudio", "client=mweb", "selected=251-1",
+            "version=stable@2026.07.04", "stderr_truncated", "gvs_token_retrieved", "HTTP Error 403",
+        )
+        for (expected in expectedDetails) {
+            assertTrue(message.contains(expected), message)
+        }
+        assertFalse(message.contains("secret"), message)
+        assertFalse(message.contains("https://"), message)
+    }
+
+    @Test
+    fun metadataFailureKeepsWhyFormatsWereSkipped() = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            timedOut = false,
+            exitCode = 1,
+            stderr = """
+                WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: (http://internal.example.com)
+                WARNING: [youtube] id: mweb client https formats require a GVS PO Token which was not provided. They will be skipped as they may yield HTTP Error 403. Use --cookies if needed.
+                WARNING: [youtube] id: Some mweb client https formats have been skipped as they are missing a URL. YouTube may have enabled the SABR-only streaming experiment for the current session.
+                WARNING: [youtube] id: Only images are available for download.
+                ERROR: [youtube] id: Requested format is not available.
+            """.trimIndent(),
+        )
+
+        val failure = assertFailsWith<YtDlpException> { service.extractMetadata(youtubeRequest()) }
+        val message = failure.message.orEmpty()
+        assertEquals(DownloadFailureReason.FORMAT_UNAVAILABLE, failure.reason)
+        val expectedDetails = listOf(
+            "stage=metadata",
+            "gvs_token_missing",
+            "token_provider_warning",
+            "sabr_formats_skipped",
+            "images_only",
+            "Requested format is not available",
+        )
+        for (expected in expectedDetails) {
+            assertTrue(message.contains(expected), message)
+        }
+        assertFalse(message.contains("internal.example.com"), message)
+        assertFalse(message.contains("http_403"), message)
+    }
+
+    @Test
+    fun downloadRecognizesSourceSizeLimitReportedByYtDlp(@TempDir tempDir: Path) = runTest {
+        coEvery { processRunner.run(any()) } returns ProcessExecutionResult(
+            timedOut = false,
+            exitCode = 0,
+            stderr = "[download] File is larger than max-filesize (3000000000 bytes > 2000000000 bytes). Aborting.",
+        )
+
+        assertFailsWith<YtDlpFileSizeLimitException> { localService.download(testRequest(), tempDir) }
     }
 
     @Test

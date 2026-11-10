@@ -44,5 +44,5 @@ jobs:
       - name: Test Threads extractor
         run: |
           python3 -m venv "$RUNNER_TEMP/threads-tests"
-          "$RUNNER_TEMP/threads-tests/bin/python" -m pip install 'yt-dlp==2026.07.04'
+          "$RUNNER_TEMP/threads-tests/bin/python" -m pip install 'yt-dlp==2026.10.26'
           "$RUNNER_TEMP/threads-tests/bin/python" -m unittest discover -s yt-dlp-plugins/threads/tests -v

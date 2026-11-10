@@ -1,11 +1,14 @@
 package com.nkudrin713.kradnik.download
 
 import com.nkudrin713.kradnik.download.domain.DownloadRequestMapper
+import com.nkudrin713.kradnik.download.domain.PlaylistAudioEntry
+import com.nkudrin713.kradnik.download.source.SourceMediaType
 import com.nkudrin713.kradnik.download.threads.ThreadsSourceAdapter
 import com.nkudrin713.kradnik.download.youtube.YouTubeSourceAdapter
 import com.nkudrin713.kradnik.process.Command
 import com.nkudrin713.kradnik.process.ProcessExecutionResult
 import com.nkudrin713.kradnik.process.ProcessRunner
+import com.nkudrin713.kradnik.ytdlp.YtDlpException
 import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -15,6 +18,7 @@ import java.nio.file.Path
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -39,10 +43,49 @@ class SourceOptionsTest {
             commands += firstArg<Command>()
             ProcessExecutionResult(stdout = "KRADNIK_FILEPATH:\"$file\"", timedOut = false, exitCode = 0)
         }
-        adapter.download(request, com.nkudrin713.kradnik.download.source.SourceMediaType.VIDEO, prepared, directory)
+        adapter.download(request, SourceMediaType.VIDEO, prepared, directory)
         assertEquals(4, commands.size)
         assertTrue(commands.all { "youtube:player_client=mweb" in it.args && "youtubepot-bgutilhttp:base_url=http://provider:4416" in it.args })
         assertTrue(commands.none { "--plugin-dirs" in it.args })
+    }
+
+    @Test
+    fun youtubeAudioMetadataAndDownloadsUseDefaultClientsWithProvider(@TempDir directory: Path) = runTest {
+        val adapter = YouTubeSourceAdapter(service, " http://provider:4416/ ")
+        val url = "https://youtu.be/video"
+        val request = DownloadRequestMapper.source(adapter.resolve(url).audio)
+        val legacy = request.copy(presetName = "default_audio", extraArgs = listOf("-x", "--audio-format", "mp3"))
+        coEvery { runner.run(any()) } answers {
+            commands += firstArg<Command>()
+            ProcessExecutionResult(stdout = """{"id":"video","title":"Title"}""", timedOut = false, exitCode = 0)
+        }
+        val prepared = adapter.prepare(request, false)
+        adapter.prepare(legacy, false)
+        val file = directory.resolve("audio.mp3").apply { writeText("audio") }
+        coEvery { runner.run(any()) } answers {
+            commands += firstArg<Command>()
+            ProcessExecutionResult(stdout = "KRADNIK_FILEPATH:\"$file\"", timedOut = false, exitCode = 0)
+        }
+        adapter.download(request, SourceMediaType.AUDIO, prepared, directory)
+        adapter.downloadPlaylistItem(PlaylistAudioEntry(1, "video", url, "Title", 120), directory, null)
+
+        assertEquals(listOf("ba/bestaudio", "ba/bestaudio", "ba/bestaudio", "ba/bestaudio/best"), commands.map { it.args[it.args.indexOf("-f") + 1] })
+        assertTrue(commands.all { "youtube:player_client=default" in it.args && "youtubepot-bgutilhttp:base_url=http://provider:4416" in it.args })
+        assertTrue(commands.none { "youtube:player_client=mweb" in it.args })
+    }
+
+    @Test
+    fun youtubeAudioFailureReportsDefaultClientWithoutProvider() = runTest {
+        val adapter = YouTubeSourceAdapter(service)
+        val request = DownloadRequestMapper.source(adapter.resolve("https://youtu.be/video").audio)
+        coEvery { runner.run(any()) } answers {
+            commands += firstArg<Command>()
+            ProcessExecutionResult(stderr = "ERROR: Requested format is not available.", timedOut = false, exitCode = 1)
+        }
+
+        val failure = assertFailsWith<YtDlpException> { adapter.prepare(request, false) }
+        assertTrue(failure.message.orEmpty().contains("client=default"))
+        assertTrue(commands.single().args.none { it.startsWith("youtubepot-bgutilhttp:") })
     }
 
     @Test

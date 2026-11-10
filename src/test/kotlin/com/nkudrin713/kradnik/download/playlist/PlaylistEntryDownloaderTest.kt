@@ -30,11 +30,12 @@ class PlaylistEntryDownloaderTest {
     private val ytDlp = mockk<YtDlpService>()
     private val downloader = PlaylistEntryDownloader(DownloadEngine(testPlatformResolver(ytDlp)), TelegramUploadLimits(100))
     private val entry = PlaylistAudioEntry(1, "video", "https://youtu.be/video", "Recording", null)
+    private val audioOptions = listOf("--extractor-args", "youtube:player_client=default")
     private val source = SourceRequest("playlist", "playlist", DownloadPlatform.YOUTUBE, "bestaudio", YtDlpPresets.playlistAudioArgs("320K"), "youtube_playlist_audio_320")
 
     @Test
     fun usesSavedSelectionAndSeparatesNewCacheFromLegacyAudio() = runTest {
-        coEvery { ytDlp.download(any(), root) } answers {
+        coEvery { ytDlp.download(any(), root, audioOptions) } answers {
             val actual = firstArg<SourceRequest>()
             assertEquals(source.copy(originalUrl = entry.url, normalizedUrl = "https://www.youtube.com/watch?v=video", formatSelector = YtDlpPresets.AUDIO_FORMAT_WITH_VIDEO_FALLBACK), actual)
             DownloadedFile(Files.write(root.resolve("track.mp3"), ByteArray(20)), 20)
@@ -49,7 +50,7 @@ class PlaylistEntryDownloaderTest {
     @ValueSource(strings = ["ba/bestaudio", "ba", "bestaudio"])
     fun fallsBackToCombinedAudioWithoutChangingSavedEncoding(selector: String) = runTest {
         val saved = source.copy(formatSelector = selector)
-        coEvery { ytDlp.download(any(), root) } answers {
+        coEvery { ytDlp.download(any(), root, audioOptions) } answers {
             val actual = firstArg<SourceRequest>()
             assertEquals("ba/bestaudio/best", actual.formatSelector)
             assertEquals(saved.extraArgs, actual.extraArgs)
@@ -61,7 +62,7 @@ class PlaylistEntryDownloaderTest {
 
     @Test
     fun alsoUsesFallbackForLegacyRequestsWithoutSavedSource() = runTest {
-        coEvery { ytDlp.download(any(), root) } answers {
+        coEvery { ytDlp.download(any(), root, audioOptions) } answers {
             val actual = firstArg<SourceRequest>()
             assertEquals("ba/bestaudio/best", actual.formatSelector)
             assertEquals(YtDlpPresets.playlistAudioArgs("96K"), actual.extraArgs)
@@ -72,7 +73,7 @@ class PlaylistEntryDownloaderTest {
 
     @Test
     fun preservesExplicitFormatSelection() = runTest {
-        coEvery { ytDlp.download(any(), root) } answers {
+        coEvery { ytDlp.download(any(), root, audioOptions) } answers {
             assertEquals("140", firstArg<SourceRequest>().formatSelector)
             DownloadedFile(Files.write(root.resolve("track.mp3"), ByteArray(20)), 20)
         }
@@ -81,7 +82,7 @@ class PlaylistEntryDownloaderTest {
 
     @Test
     fun rejectsActualOutputEvenIfReportedSizeIsWrong() = runTest {
-        coEvery { ytDlp.download(any(), root) } answers {
+        coEvery { ytDlp.download(any(), root, audioOptions) } answers {
             DownloadedFile(Files.write(root.resolve("track.mp3"), ByteArray(101)), 1)
         }
         assertFailsWith<DownloadRejectedException> { downloader.download(entry, root, source) }
@@ -90,7 +91,7 @@ class PlaylistEntryDownloaderTest {
     @Test
     fun stopsAnUnknownSizeDownloadWhileItIsStillRunning() = runTest {
         var cancelled = false
-        coEvery { ytDlp.download(any(), root) } coAnswers {
+        coEvery { ytDlp.download(any(), root, audioOptions) } coAnswers {
             Files.write(root.resolve("source.webm.part"), ByteArray(101))
             try {
                 awaitCancellation()

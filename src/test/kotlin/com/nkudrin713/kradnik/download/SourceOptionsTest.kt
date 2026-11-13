@@ -45,7 +45,7 @@ class SourceOptionsTest {
         }
         adapter.download(request, SourceMediaType.VIDEO, prepared, directory)
         assertEquals(4, commands.size)
-        assertTrue(commands.all { "youtube:player_client=mweb" in it.args && "youtubepot-bgutilhttp:base_url=http://provider:4416" in it.args })
+        assertTrue(commands.all { "youtube:player_client=default" in it.args && "youtubepot-bgutilhttp:base_url=http://provider:4416" in it.args })
         assertTrue(commands.none { "--plugin-dirs" in it.args })
     }
 

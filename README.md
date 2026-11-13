@@ -41,7 +41,7 @@ Execution depends on contracts for storage, delivery, cache, and notifications. 
 
 Options depend on available metadata and upload limits. Audio requires a usable duration estimate; covers require a thumbnail. Posts and video albums retain up to 20 supported media items in source order, including duplicates. Full posts, video albums, and playlists require a private chat. Download selections are saved separately from temporary source preparation, so menu policy does not change an already saved selection.
 
-For YouTube audio and playlist tracks, yt-dlp selects its default player clients. A configured PO Token provider is available to those clients. YouTube video downloads and format menus use `mweb` when a provider is configured.
+For YouTube format menus, video and audio downloads, and playlists, yt-dlp selects its default player clients. A configured PO Token provider is available to those clients.
 
 ## Stack
 

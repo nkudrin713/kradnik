@@ -134,8 +134,7 @@ class YouTubeSourceAdapter(
     private fun sourceOptions(audio: Boolean = false): List<String> = buildList {
         val provider = poTokenProviderUrl.trim().trimEnd('/')
         if (audio || provider.isNotEmpty()) {
-            val client = if (audio) "default" else "mweb"
-            addAll(listOf("--extractor-args", "youtube:player_client=$client"))
+            addAll(listOf("--extractor-args", "youtube:player_client=default"))
         }
         if (provider.isNotEmpty()) {
             addAll(listOf("--extractor-args", "youtubepot-bgutilhttp:base_url=$provider"))

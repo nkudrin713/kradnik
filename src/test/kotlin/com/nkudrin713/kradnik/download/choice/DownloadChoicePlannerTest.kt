@@ -24,10 +24,14 @@ import com.nkudrin713.kradnik.download.source.SourcePostItem
 import com.nkudrin713.kradnik.download.testPlatformResolver
 import com.nkudrin713.kradnik.download.threads.ThreadsPreparedSource
 import com.nkudrin713.kradnik.download.vk.VkPreparedSource
+import com.nkudrin713.kradnik.download.youtube.YouTubeSourceAdapter
 import com.nkudrin713.kradnik.localization.BotLanguage
 import com.nkudrin713.kradnik.localization.MessageKey
+import com.nkudrin713.kradnik.process.ProcessExecutionResult
+import com.nkudrin713.kradnik.process.ProcessRunner
 import com.nkudrin713.kradnik.telegram.localization.telegramMessages
 import com.nkudrin713.kradnik.ytdlp.YtDlpPreparedSource
+import com.nkudrin713.kradnik.ytdlp.YtDlpService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -235,6 +239,36 @@ class DownloadChoicePlannerTest {
         assertEquals(actual.options.size, actual.options.map { it.spec.cacheKey }.distinct().size)
         assertEquals(DownloadChoiceMediaInfo(title = "Title", durationSeconds = 120), actual.mediaInfo)
         coVerify(exactly = 1) { downloadEngine.prepare(DownloadRequestMapper.source(video), catalog = true) }
+    }
+
+    @Test
+    fun youtubeVideoOptionsPreferOriginalAudioOverDubAndUseNewCacheKeys() = runTest {
+        val video = resolved(OutputType.VIDEO)
+        val runner = mockk<ProcessRunner>()
+        val youtube = YouTubeSourceAdapter(YtDlpService(runner))
+        every { platformResolver.resolve(URL) } returns PlatformDownloadSpecs(video, resolved(OutputType.AUDIO))
+        coEvery { runner.run(any()) } returns ProcessExecutionResult(
+            stdout = """
+                {"duration":60,"formats":[
+                  {"format_id":"399","height":1920,"ext":"mp4","filesize":10000000,"vcodec":"av01","acodec":"none"},
+                  {"format_id":"788","height":1080,"ext":"mp4","filesize":5000000,"vcodec":"av01","acodec":"none"},
+                  {"format_id":"dubbed-1080","height":1080,"ext":"mp4","filesize":6000000,"vcodec":"avc1","acodec":"mp4a","language_preference":5},
+                  {"format_id":"140-0","ext":"m4a","filesize":971533,"vcodec":"none","acodec":"mp4a","abr":129.587,"language_preference":-1},
+                  {"format_id":"140-1","ext":"m4a","filesize":969915,"vcodec":"none","acodec":"mp4a","abr":129.572,"language_preference":10},
+                  {"format_id":"251-1","ext":"webm","filesize":970000,"vcodec":"none","acodec":"opus","abr":130,"language_preference":10}
+                ]}
+            """.trimIndent(),
+            timedOut = false,
+            exitCode = 0,
+        )
+        val request = DownloadRequestMapper.source(video)
+        coEvery { downloadEngine.prepare(request, catalog = true) } coAnswers { youtube.prepare(request, catalog = true) }
+
+        val options = planner.plan(URL, BotLanguage.EN).options.filter { it.spec.outputType == OutputType.VIDEO }
+
+        assertEquals(listOf("399+140-1", "788+140-1"), options.map { it.spec.formatSelector })
+        assertEquals(5_969_915L, options.last().sizeBytes)
+        assertTrue(options.all { ":audio-language:v1:" in it.spec.cacheKey })
     }
 
     @Test

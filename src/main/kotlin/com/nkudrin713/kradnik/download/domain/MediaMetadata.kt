@@ -35,4 +35,5 @@ data class MediaFormat(
     val tbr: BigDecimal? = null,
     val vbr: BigDecimal? = null,
     val abr: BigDecimal? = null,
+    val audioLanguagePreference: Int? = null,
 )

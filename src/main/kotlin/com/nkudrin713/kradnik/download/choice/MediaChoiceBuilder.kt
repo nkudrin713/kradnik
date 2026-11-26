@@ -79,12 +79,13 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
         } else {
             videoFormats.filter { it.height == targetHeight }
         }
-        val video = matching.maxWithOrNull(videoComparator) ?: return null
-        val audio = if (video.hasAudio()) {
-            null
-        } else {
-            formats.filter { it.isAudioOnly() }.maxWithOrNull(audioComparator)
-        }
+        val bestAudio = formats.filter { it.isAudioOnly() }.maxWithOrNull(audioComparator)
+        val videoWithAudioComparator = compareBy<MediaFormat> {
+            val audioFormat = if (it.hasAudio()) it else bestAudio
+            audioFormat?.audioLanguagePreference ?: DEFAULT_AUDIO_LANGUAGE_PREFERENCE
+        }.then(videoComparator)
+        val video = matching.maxWithOrNull(videoWithAudioComparator) ?: return null
+        val audio = bestAudio.takeUnless { video.hasAudio() }
 
         val videoSize = sizeOf(video, metadata.duration) ?: return null
         val audioSize = audio?.let { sizeOf(it, metadata.duration) }
@@ -231,6 +232,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
         private const val COVER_KEY = "cover"
         private const val BITS_IN_KILOBIT = 1000L
         private const val BITS_IN_BYTE = 8L
+        private const val DEFAULT_AUDIO_LANGUAGE_PREFERENCE = -1
         private val TARGET_HEIGHTS = listOf(1080, 720, 480, 360)
         private val videoComparator = compareBy<MediaFormat>(
             { it.telegramVideoScore() },
@@ -238,6 +240,7 @@ class MediaChoiceBuilder(private val audioUploadPlanner: AudioUploadPlanner, pri
             { it.vbr ?: it.tbr ?: BigDecimal.ZERO },
         )
         private val audioComparator = compareBy<MediaFormat>(
+            { it.audioLanguagePreference ?: DEFAULT_AUDIO_LANGUAGE_PREFERENCE },
             { it.telegramAudioScore() },
             { it.abr ?: it.tbr ?: BigDecimal.ZERO },
         )

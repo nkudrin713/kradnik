@@ -340,8 +340,8 @@ class YtDlpServiceTest {
         assertFalse(command.args.contains("--dump-single-json"))
         assertTrue(command.args.containsAll(listOf("--output-na-placeholder", "null")))
         val template = command.args[command.args.indexOf("--print") + 1]
-        assertTrue(template.contains("\"formats\":%(formats.:.{format_id,ext,height,fps,filesize,filesize_approx,vcodec,acodec,tbr,vbr,abr})j"))
-        assertTrue(template.contains("\"requested_formats\":%(requested_formats.:.{format_id,ext,height,fps,filesize,filesize_approx,vcodec,acodec,tbr,vbr,abr})j"))
+        assertTrue(template.contains("\"formats\":%(formats.:.{format_id,ext,height,fps,filesize,filesize_approx,vcodec,acodec,tbr,vbr,abr,language_preference})j"))
+        assertTrue(template.contains("\"requested_formats\":%(requested_formats.:.{format_id,ext,height,fps,filesize,filesize_approx,vcodec,acodec,tbr,vbr,abr,language_preference})j"))
         assertFalse(template.contains("captions"))
         assertFalse(template.contains("subtitles"))
         assertTrue(command.args.contains("--no-playlist"))

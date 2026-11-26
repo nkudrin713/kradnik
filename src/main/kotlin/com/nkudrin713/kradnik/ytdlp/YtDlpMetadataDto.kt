@@ -53,4 +53,6 @@ data class YtDlpFormatDto(
     val tbr: BigDecimal?,
     val vbr: BigDecimal?,
     val abr: BigDecimal?,
+    @JsonProperty("language_preference")
+    val languagePreference: Int? = null,
 )

@@ -37,4 +37,5 @@ private fun YtDlpFormatDto.toMediaFormat(): MediaFormat = MediaFormat(
     tbr = tbr,
     vbr = vbr,
     abr = abr,
+    audioLanguagePreference = languagePreference,
 )

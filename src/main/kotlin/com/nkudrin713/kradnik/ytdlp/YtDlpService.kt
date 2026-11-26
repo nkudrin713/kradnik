@@ -51,8 +51,8 @@ private val SINGLE_MEDIA_METADATA_TEMPLATE = listOf(
     "\"artist\":%(artist)j",
     "\"uploader\":%(uploader)j",
     "\"channel\":%(channel)j",
-    "\"requested_formats\":%(requested_formats.:.{format_id,ext,height,fps,filesize,filesize_approx,vcodec,acodec,tbr,vbr,abr})j",
-    "\"formats\":%(formats.:.{format_id,ext,height,fps,filesize,filesize_approx,vcodec,acodec,tbr,vbr,abr})j",
+    "\"requested_formats\":%(requested_formats.:.{format_id,ext,height,fps,filesize,filesize_approx,vcodec,acodec,tbr,vbr,abr,language_preference})j",
+    "\"formats\":%(formats.:.{format_id,ext,height,fps,filesize,filesize_approx,vcodec,acodec,tbr,vbr,abr,language_preference})j",
 ).joinToString(separator = ",", prefix = "{", postfix = "}")
 
 private class YtDlpCommand(

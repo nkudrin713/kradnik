@@ -35,7 +35,15 @@ class YouTubeSourceAdapter(
 ) : PlaylistSourceAdapter {
     override val platform = DownloadPlatform.YOUTUBE
     override fun supports(url: String): Boolean = isYouTubeHost(url)
-    override fun select(spec: DownloadSpec, selection: MediaSelection): DownloadSpec = YtDlpSelections.select(spec, selection)
+    override fun select(spec: DownloadSpec, selection: MediaSelection): DownloadSpec {
+        val selected = YtDlpSelections.select(spec, selection)
+        return when (selection) {
+            MediaSelection.OriginalVideo, is MediaSelection.Video ->
+                selected.copy(cacheKey = ResultKeyFactory.choice(selected.cacheKey, "audio-language:v1"))
+
+            else -> selected
+        }
+    }
     override fun resolve(url: String): PlatformDownloadSpecs {
         val media = parseYouTubeMediaUrl(url)
 
